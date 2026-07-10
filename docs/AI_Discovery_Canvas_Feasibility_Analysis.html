@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AI Discovery Canvas — Feasibility &amp; Reuse Analysis (on NaviCORE)</title>
+<style>
+:root{
+  --ink:#1f2733; --muted:#6b7280; --accent:#2f6fb3; --accent-weak:#eaf2fb;
+  --teal:#1b9384; --line:#e4e8ee; --line2:#cfd6df; --bg:#fbfcfd; --alt:#f5f7fa;
+  --green:#2f8f5b; --amber:#c9881f; --red:#c0463b; --indigo:#3f4d8c;
+}
+*{box-sizing:border-box}
+body{
+  font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink); background:var(--bg); margin:0; line-height:1.6;
+}
+.wrap{max-width:960px; margin:0 auto; padding:0 24px 80px;}
+.cover{
+  min-height:62vh; display:flex; flex-direction:column; justify-content:center;
+  align-items:center; text-align:center; border-bottom:1px solid var(--line);
+  margin-bottom:48px; padding:60px 20px;
+}
+.cover .eyebrow{color:var(--muted); font-size:13px; letter-spacing:.06em; text-transform:uppercase; margin-bottom:18px;}
+.cover h1{ font-size:40px; color:var(--accent); margin:0 0 10px; letter-spacing:-0.02em; }
+.cover .subtitle{font-size:19px; color:var(--ink); margin:0 0 8px; font-weight:500;}
+.cover .tagline{font-size:15.5px; color:var(--muted); font-style:italic; max-width:640px; margin:0 0 34px;}
+.cover .meta{font-size:13.5px; color:var(--muted);}
+.cover .meta b{color:var(--ink)}
+.cover .sources{margin-top:26px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;}
+.cover .src{font-size:11.5px; color:var(--teal); background:#e9f6f3; border-radius:12px; padding:4px 12px; font-weight:600;}
+
+nav.toc{
+  background:#fff; border:1px solid var(--line); border-radius:12px;
+  padding:22px 26px; margin-bottom:46px; box-shadow:0 2px 10px rgba(24,39,64,.05);
+}
+nav.toc h2{font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 12px;}
+nav.toc ol{margin:0; padding-left:20px; columns:2; column-gap:28px;}
+nav.toc li{margin-bottom:7px; font-size:14.5px;}
+nav.toc a{color:var(--accent); text-decoration:none;}
+nav.toc a:hover{text-decoration:underline;}
+
+section{margin-bottom:44px; scroll-margin-top:20px;}
+h1.sec{
+  font-size:24px; color:var(--accent); border-bottom:2px solid var(--accent-weak);
+  padding-bottom:10px; margin:0 0 18px;
+}
+h2.sub{font-size:18.5px; color:var(--ink); margin:28px 0 10px;}
+h3.subsub{font-size:15.5px; color:#3a4350; margin:20px 0 8px;}
+p{margin:0 0 14px; font-size:15px;}
+ul{margin:0 0 14px; padding-left:22px;}
+ol.steps{margin:0 0 14px; padding-left:22px;}
+li{margin-bottom:6px; font-size:15px;}
+strong{color:var(--ink)}
+code{background:#eef1f5; border-radius:4px; padding:1px 6px; font-size:13px;}
+
+table{width:100%; border-collapse:collapse; margin:14px 0 6px; font-size:13.8px;}
+th{
+  background:var(--accent); color:#fff; text-align:left; padding:9px 12px;
+  font-weight:600; font-size:12.8px;
+}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+tr:nth-child(even) td{background:var(--alt);}
+.caption{font-size:12.5px; color:var(--muted); font-style:italic; margin:0 0 22px;}
+
+.callout{
+  background:var(--accent-weak); border-left:3px solid var(--accent);
+  border-radius:6px; padding:14px 18px; font-size:14px; margin:14px 0 20px;
+}
+.callout.warn{ background:#fbecea; border-left-color:var(--red); }
+.callout.good{ background:#eaf6f0; border-left-color:var(--green); }
+.badge{
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--teal); background:#e9f6f3;
+  border-radius:12px; padding:3px 10px; margin-bottom:10px;
+}
+.badge.blue{color:var(--accent); background:var(--accent-weak);}
+.badge.amber{color:var(--amber); background:#faf1e1;}
+.badge.red{color:var(--red); background:#fbecea;}
+.badge.green{color:var(--green); background:#eaf6f0;}
+
+.tag{display:inline-block; font-size:11px; font-weight:700; border-radius:10px; padding:2px 9px; white-space:nowrap;}
+.tag.reuse{color:var(--green); background:#eaf6f0;}
+.tag.adapt{color:var(--amber); background:#faf1e1;}
+.tag.build{color:var(--red); background:#fbecea;}
+
+.card{
+  border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:14px 0 22px;
+  background:#fff; box-shadow:0 2px 8px rgba(24,39,64,.04);
+}
+.card h3{margin-top:0}
+.card .kv{display:grid; grid-template-columns:170px 1fr; gap:6px 14px; font-size:14px; margin:10px 0;}
+.card .kv .k{color:var(--muted); font-weight:600;}
+.card .bottomline{margin-top:10px; font-size:13.5px; color:#3a4350; background:var(--alt); border-radius:8px; padding:10px 14px;}
+
+.feature-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0 20px;}
+.feature{border:1px solid var(--line); border-radius:10px; padding:14px 16px; background:#fff;}
+.feature .ftitle{font-weight:700; font-size:14px; color:var(--ink); margin-bottom:5px;}
+.feature .fdesc{font-size:13px; color:var(--muted);}
+@media (max-width:640px){ .feature-grid{grid-template-columns:1fr} nav.toc ol{columns:1} }
+
+.tree{
+  background:#0f1720; color:#c9d4e0; font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:12.6px; border-radius:10px; padding:16px 20px; overflow-x:auto; line-height:1.55;
+}
+.tree .new{color:#7fdca6; font-weight:700;}
+.tree .copy{color:#8ec7ff;}
+.tree .dim{color:#7a8896;}
+
+footer{
+  text-align:center; color:var(--muted); font-size:12.5px; margin-top:60px;
+  padding-top:18px; border-top:1px solid var(--line);
+}
+.top-link{position:fixed; bottom:22px; right:22px; background:var(--accent); color:#fff;
+  border-radius:50%; width:42px; height:42px; display:flex; align-items:center; justify-content:center;
+  text-decoration:none; box-shadow:0 4px 14px rgba(47,111,179,.35); font-size:18px;}
+@media print{ .top-link{display:none} nav.toc{break-inside:avoid} }
+</style>
+</head>
+<body>
+
+<div class="cover" id="top">
+  <div class="eyebrow">Internal Feasibility Study — Not a Client Deliverable</div>
+  <h1>AI Discovery Canvas</h1>
+  <div class="subtitle">Feasibility &amp; Reuse Analysis on the NaviCORE (frd-generator) Codebase</div>
+  <div class="tagline">How much of the target product can be built on top of what already exists in frd-generator, what has to be built new, and how the two projects should be organised relative to each other</div>
+  <div class="meta">v1.0 &nbsp;·&nbsp; <b>July 2026</b> &nbsp;·&nbsp; Prepared for internal planning</div>
+  <div class="sources">
+    <span class="src">AI Discovery Canvas — Master Documentation</span>
+    <span class="src">Interactive Prototype v0.5 (HTML)</span>
+    <span class="src">Direct codebase exploration of frd-generator</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s1">1. Executive Summary</a></li>
+    <li><a href="#s2">2. What We're Building — Target Product Recap</a></li>
+    <li><a href="#s3">3. What We Already Have — NaviCORE Snapshot</a></li>
+    <li><a href="#s4">4. Component-Level Reuse Map</a></li>
+    <li><a href="#s5">5. Agent Catalogue Feasibility Matrix</a></li>
+    <li><a href="#s6">6. Integrations Feasibility (draw.io, Teams, Granola)</a></li>
+    <li><a href="#s7">7. Gap Analysis — Net-New Work Required</a></li>
+    <li><a href="#s8">8. Standalone Project vs. New Module — the Decision</a></li>
+    <li><a href="#s9">9. Recommended Canvas Engine</a></li>
+    <li><a href="#s10">10. Proposed Project Structure</a></li>
+    <li><a href="#s11">11. Data Model Extensions (Neo4j)</a></li>
+    <li><a href="#s12">12. Phased Build Roadmap</a></li>
+    <li><a href="#s13">13. Risks &amp; Open Questions</a></li>
+    <li><a href="#s14">14. Appendix — File &amp; Route Inventory</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h1 class="sec">1. Executive Summary</h1>
+  <p><strong>Bottom line: NaviCORE is a strong backbone for AI Discovery Canvas — for the AI/data layer, not for the canvas UI itself.</strong> The backend already has almost everything a BA-facing agent catalogue needs (Azure OpenAI calling convention, a RAG ingestion/retrieval pipeline, a structured "draft JSON → human review" generation pattern, a Neo4j graph capable of modeling provenance, an OAuth connector pattern, guardrails for regulated data). The existing frontend shell (auth, routing, design tokens, icon system, a lens/segmented-control pattern, an OAuth "Connect" component, SSE-driven live status, a chat-to-fill panel) is also directly reusable scaffolding.</p>
+  <p>What does <em>not</em> exist anywhere in the codebase is an actual infinite-canvas whiteboard engine — pan/zoom via transform, a minimap, freeform stickies/shapes/frames, multi-object drag, presentation mode, or a draft-card Approve/Edit/Reject lifecycle. The closest analog, <code>backend/static/legacy_atlas.html</code> (the Workflow Builder), is a 14,656-line, framework-free, single-purpose pipeline editor that the codebase's own migration notes are actively trying to retire — extending it further would fight the direction the codebase is already moving in, not help it.</p>
+  <p>Also entirely absent: Microsoft Teams / Graph API code, draw.io code, Granola code, and any speech-to-text/transcription code. These are genuine net-new integrations, though the existing OAuth connector pattern (<code>source_oauth.py</code> + <code>ConnectProvider.jsx</code>) is a clean template to build them on.</p>
+  <p><strong>Recommendation in one line:</strong> stand up AI Discovery Canvas as its own project folder next to <code>frd-generator</code> (per the plan already in mind), copy over the reusable backend services and frontend shell pieces named in Section 10, build the canvas itself fresh in React on top of a library like React Flow, and treat Teams/Granola/draw.io as Phase 2 integrations gated by real client demand (see Section 12).</p>
+  <table>
+    <tr><th>Layer</th><th>Reuse level</th><th>Detail</th></tr>
+    <tr><td>LLM calling &amp; draft-generation pattern</td><td><span class="tag reuse">High reuse</span></td><td><code>llm_service.py</code>, <code>agentic_analyzer.py</code>, <code>impact_generator.py</code> patterns port almost directly</td></tr>
+    <tr><td>Document ingestion / RAG</td><td><span class="tag reuse">High reuse</span></td><td><code>rag/</code> package — chunk→embed→FAISS→retrieve, PDF/DOCX/XLSX extraction</td></tr>
+    <tr><td>Graph / provenance storage</td><td><span class="tag adapt">Adapt</span></td><td>Neo4j model exists; needs new labels for Zone/Artifact/DraftCard/Engagement</td></tr>
+    <tr><td>Auth &amp; OAuth connector pattern</td><td><span class="tag adapt">Adapt</span></td><td>Mock/Entra ID auth reusable; per-engagement scoping and Teams/Granola providers are new</td></tr>
+    <tr><td>Frontend shell / design system / icons</td><td><span class="tag reuse">High reuse</span></td><td>App shell, <code>Icon.jsx</code>, CSS tokens, lens-switcher pattern, chat-to-fill UI</td></tr>
+    <tr><td>Infinite-canvas engine (pan/zoom/minimap/nodes)</td><td><span class="tag build">Build new</span></td><td>Nothing in the codebase does this; recommend React Flow (Section 9)</td></tr>
+    <tr><td>Draft card Approve/Edit/Reject lifecycle</td><td><span class="tag build">Build new</span></td><td>Closest analog is the chat-to-fill panel in Disrupt — concept only, not code</td></tr>
+    <tr><td>Teams / Granola / draw.io / transcription</td><td><span class="tag build">Build new</span></td><td>Zero existing code; OAuth pattern + packages need adding</td></tr>
+  </table>
+</section>
+
+<section id="s2">
+  <h1 class="sec">2. What We're Building — Target Product Recap</h1>
+  <p>Per the Master Documentation and the interactive prototype you shared, AI Discovery Canvas is a single infinite whiteboard for Business Analysts, organised into four zones — <strong>Prepare, Run, Synthesize, Project</strong> — with a context-aware AI assistant that performs the BA's recurring tasks and files every output into a structured, provenance-tagged artifact library. Rather than repeat the full spec here, this section only lists the concrete UI/technical surface the reuse analysis in Sections 4–9 is measured against:</p>
+  <div class="feature-grid">
+    <div class="feature"><div class="ftitle">Canvas mechanics</div><div class="fdesc">True infinite pan/zoom (transform-based, not scrollbars), a minimap with click-to-fly, "fit everything," region/zone dashed borders, Focus (dim other zones) toggle.</div></div>
+    <div class="feature"><div class="ftitle">Node types</div><div class="fdesc">Sticky notes, rectangles/ellipses, free text, connectors, frames, and structured "card" nodes (AI-generated artifacts) — each independently draggable/resizable/colorable via a node context toolbar.</div></div>
+    <div class="feature"><div class="ftitle">Assistant panel</div><div class="fdesc">Chat thread, slash-command agent catalogue, "Suggested next" contextual actions, zone-aware context chip, file attach, web-research toggle.</div></div>
+    <div class="feature"><div class="ftitle">Draft lifecycle</div><div class="fdesc">Every agent output renders as a draft card with Approve / Edit / Reject; only Approve places a canvas node and files the artifact.</div></div>
+    <div class="feature"><div class="ftitle">Artifact library</div><div class="fdesc">Left drawer, 6 auto-organising folders (Background, How it works, Requirements, Issues &amp; decisions, Meeting notes, Proposal), each item carrying a provenance tag (zone, source, approver, timestamp).</div></div>
+    <div class="feature"><div class="ftitle">Live capture</div><div class="fdesc">Floating transcript dock with live pulse indicator, one-click Summarize; optional Microsoft Teams meeting link; optional Granola pre-workshop notes.</div></div>
+    <div class="feature"><div class="ftitle">Facilitation chips</div><div class="fdesc">Timer, Vote, Record, Present (a chrome-free stakeholder walkthrough stepping through the four zones).</div></div>
+    <div class="feature"><div class="ftitle">Search &amp; traceability</div><div class="fdesc">Full-text search across all canvas nodes with match-count and auto-pan/zoom to the first hit.</div></div>
+    <div class="feature"><div class="ftitle">Diagramming</div><div class="fdesc">"Draw process flow" agent round-trips a native <code>.drawio</code> file via the free embeddable draw.io editor.</div></div>
+    <div class="feature"><div class="ftitle">Export</div><div class="fdesc">Handoff modal assembling process flows, stories, acceptance criteria, docs, MoM, and proposal into one DOCX package (PDF/Markdown planned).</div></div>
+  </div>
+  <p>19 agents across the four zones (Ingest client docs, Research company, Context brief, Questions to ask, Draft agenda — Prepare; Transcribe, Summarize, Draw process flow, Find gaps, Capture decisions — Run; User stories, Acceptance criteria, Documentation, Find opportunities, Minutes of Meeting — Synthesize; Draft SOW, Calculate ROI, Benefit-vs-risk, Suggest team — Project) are the unit this analysis maps against NaviCORE's existing capabilities in Section 5.</p>
+</section>
+
+<section id="s3">
+  <h1 class="sec">3. What We Already Have — NaviCORE Snapshot</h1>
+  <p><code>frd-generator</code> is a mature, split frontend/backend enterprise platform, not a prototype. Confirmed by direct exploration:</p>
+  <table>
+    <tr><th>Layer</th><th>Stack</th><th>Notes</th></tr>
+    <tr><td>Backend</td><td>Flask (Python), ~34 top-level modules under <code>backend/app/</code></td><td>Routes, services, database, auth, people, postgres layers; Azure OpenAI GPT-4.1 as the model layer</td></tr>
+    <tr><td>Frontend</td><td>React 18.3 + Vite 5 + react-router-dom v6</td><td>No Redux — local state + two small Contexts (Auth, Lens); plain CSS with a dark design-token system</td></tr>
+    <tr><td>Graph store</td><td>Neo4j 5 (community + APOC)</td><td>Atlas entities, workflows, sources, runs, lineage</td></tr>
+    <tr><td>Relational store</td><td>Postgres (SQLAlchemy + Alembic)</td><td>Operational ledgers / analytics mirrors, never on the hot path</td></tr>
+    <tr><td>Vector store</td><td>FAISS + <code>text-embedding-3-large</code></td><td>RAG retrieval, content-fingerprint caching</td></tr>
+    <tr><td>Object storage</td><td>Local content-addressed blob store (<code>object_store.py</code>)</td><td>Abstracted for a future remote backend swap</td></tr>
+  </table>
+  <p>Four "products" already live in this one app, all behind the same auth/shell:</p>
+  <ul>
+    <li><strong>Skills landing (<code>/skills</code>)</strong> — a card-grid picking one of the app's workflows.</li>
+    <li><strong>Atlas / Workflow Builder (<code>/atlas</code>)</strong> — a legacy, iframed, 14.6k-line monolith: a source→agent→output pipeline canvas, plus a separate vis-network "Knowledge Atlas" graph explorer with its own chat assistant.</li>
+    <li><strong>Modernize (<code>/modernize</code>)</strong> — a multi-step wizard producing framework/agentic transformation impact reports with 3-lens (Business/Tech/Execution) output and PDF export.</li>
+    <li><strong>Disrupt (<code>/disrupt</code>)</strong> — technology-shift disruption simulation: estate dashboard, impact analysis, a chat-to-fill intent parser, deep-dive reports.</li>
+  </ul>
+  <div class="callout">The codebase's own <code>CLAUDE.md</code> describes the Atlas iframe as a deliberate <strong>strangler-fig seam</strong> — the explicit direction is to keep extracting panels into real React components over time, not to keep adding to the monolith. That direction matters directly for the canvas-engine decision in Section 9.</div>
+</section>
+
+<section id="s4">
+  <h1 class="sec">4. Component-Level Reuse Map</h1>
+
+  <h2 class="sub">4.1 Canvas / Workflow Builder engine (<code>backend/static/legacy_atlas.html</code>)</h2>
+  <div class="card">
+    <span class="badge blue">14,656 lines · no framework · global-scope JS</span>
+    <div class="kv">
+      <div class="k">Directly reusable</div><div>Node/edge JSON model (<code>{id,type,kind,x,y,status,connected,config}</code> / <code>{id,from,to}</code>); collision-proof id generation; SVG cubic-bezier connector math with 1→many fan-out; whole-node-box drop targets; debounced autosave-to-backend; a generic <code>streamSSE()</code> consumer; toast/modal chrome; a scope-aware chat dock shell.</div>
+      <div class="k">Needs rework</div><div>Node kinds are hardcoded to source/agent/output/orchestration (a domain-specific pipeline, not a general whiteboard); the canvas viewport is native <code>overflow:auto</code> scrolling, not a real transform-based zoom/pan — there is no infinite-canvas primitive here at all, even in the separate vis-network "galaxy" pane, which has its own bolted-on zoom widget but is a different library entirely.</div>
+      <div class="k">Missing entirely</div><div>Minimap, frames/regions/grouping, sticky notes/shapes as first-class objects, slash-commands, Approve/Edit/Reject draft-card lifecycle, live transcript dock, presentation mode, artifact-library drawer, search-and-fly-to-node, per-node color swatches.</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> mine it for interaction ideas and the connector/autosave/SSE patterns; do not extend it in place. Roughly a quarter of the canvas-engine effort (data-model shape, connector geometry, save/run plumbing) is reusable as design reference — the majority of the surface (zoom/pan, minimap, stickies, frames, presentation mode, draft cards, artifact drawer) is net-new regardless of starting point, and building it inside a 14k-line unframeworked file is strictly more expensive than building it fresh in React.</div>
+  </div>
+
+  <h2 class="sub">4.2 Agent / LLM generation pattern</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">LLM calling</div><div><code>backend/app/services/llm_service.py::complete()</code> — a single Azure OpenAI GPT-4.1 entry point: rate-limited, retried, vision-capable, context-truncating. Generic enough to back every new agent unchanged.</div>
+      <div class="k">Draft→approve template</div><div><code>agentic_analyzer.py</code> and <code>impact_generator.py</code> both follow: prompt → strict JSON schema → <code>_coerce()</code> validation/clamping → deterministic no-LLM fallback. This is exactly the "produce a structured draft, let a human approve" shape the Discovery Canvas needs for every agent output.</div>
+      <div class="k">Multi-perspective generation</div><div><code>impact_generator.py</code>'s 3-lens (Business/Tech/Execution) KPI+narrative pattern is close to a 1:1 template for "Benefit vs. risk," and <code>disrupt.py</code>'s quantified-KPI lens generation is a strong template for "Calculate ROI."</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> this is the single most reusable layer in the whole codebase for this project — it is effectively a JSON-draft generation SDK already, just not packaged as one.</div>
+  </div>
+
+  <h2 class="sub">4.3 Ingestion &amp; RAG</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">Pipeline</div><div><code>backend/app/services/rag/</code> — chunking (<code>chunking.py</code>), embedding via <code>text-embedding-3-large</code> (<code>embedder.py</code>), FAISS storage (<code>store.py</code>), scoped retrieval (<code>service.py</code>), per-source content-fingerprint caching and incremental re-index (<code>workflow_sources.py</code>, 871 lines).</div>
+      <div class="k">File types</div><div><code>file_extractor.py</code> already handles PDF, DOCX, XLSX, CSV, HTML, ZIP — directly covers the "Ingest client docs" requirement (PDF/DOCX/XLSX).</div>
+      <div class="k">Summarization</div><div><code>code_summarizer.py</code>'s chunk→rollup→cache pattern generalizes cleanly to "Context brief" and "Summarize."</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> high reuse. "Research company" (public web info) is the one gap here — no web-search connector exists anywhere in the backend; it needs a new fetcher, though it slots into the same RAG retrieval/LLM pipeline once fetched.</div>
+  </div>
+
+  <h2 class="sub">4.4 Neo4j graph &amp; artifact/provenance modeling</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">Existing model</div><div><code>database/schema.py</code>, <code>knowledge_graph.py</code>, <code>workflow_assets.py</code> already model <code>Source → Summary → GeneratedDoc</code> lineage via relationships like <code>CONTRIBUTED_BY</code>, <code>PRODUCED_BY</code>, <code>RUN_FOR_PROJECT</code>, plus a "latest version" pattern for capability maps. <code>schema.py</code> even reserves an unpopulated <code>:UserStory</code> label already.</div>
+      <div class="k">What's needed</div><div>A provenance property set <code>{source, zone, approver, timestamp}</code> is additive to this model, not a redesign. New labels for <code>Zone</code>, <code>Artifact</code>, <code>DraftCard</code>, and <code>Engagement</code> (see Section 11) layer on top of the existing lineage pattern.</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> adapt, don't replace — the graph's existing lineage-modeling philosophy is exactly what "traceability" (FR-09 in the target spec) needs.</div>
+  </div>
+
+  <h2 class="sub">4.5 Auth, multi-tenancy &amp; OAuth connectors</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">Auth</div><div><code>backend/app/auth/</code> — mock provider and Azure/Entra ID (validated JWT via JWKS) both exist and work today. Everything currently scopes by <code>project_id</code>/<code>kg_id</code>, not by organisation/engagement — usable as an engagement-scoping seam with moderate adaptation, not a new subsystem.</div>
+      <div class="k">OAuth connector pattern (backend)</div><div><code>source_oauth.py</code> — GitHub + Azure DevOps via Authorization Code + PKCE, tokens referenced through Key Vault. Clean template for adding Microsoft Graph (Teams) as a third provider.</div>
+      <div class="k">OAuth connector pattern (frontend)</div><div><code>frontend/src/shared/ConnectProvider.jsx</code> is a fully generic, already-built "Connect X" component: <code>POST /connections/&lt;provider&gt;/start</code> → popup → <code>postMessage</code> callback → caller stores only a <code>connection_id</code>, never a raw token. <code>sources.js</code> re-exports a shared source catalog (<code>CATALOG_SOURCES</code>, <code>PROVIDER_DISPLAY</code>, etc.) used by both the legacy Workflow Builder and the React shell.</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> this is the strongest existing foundation for the Teams/Granola/draw.io "Connect" UI in Section 6 — add new provider entries to one catalog file and reuse the existing popup-OAuth component as-is.</div>
+  </div>
+
+  <h2 class="sub">4.6 Guardrails &amp; compliance</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">Existing</div><div><code>backend/app/services/guardrails/</code> — PII/secret masking before embedding (masker, NER detector, regex detectors), mode-based policy, an audit trail, and a vault. Directly relevant to the target's NFR around regulated-industry (pharma/healthcare) data handling.</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> reusable as-is for masking transcripts/documents before they hit embeddings or third-party integrations — a real asset given the target document's own "Before You Build Anything" consent/compliance warning.</div>
+  </div>
+
+  <h2 class="sub">4.7 Frontend shell, design system &amp; interaction patterns</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">App shell</div><div><code>App.jsx</code> — React Router v6, everything wrapped in <code>&lt;RequireAuth&gt;</code>; adding a new top-level route (e.g. <code>/canvas</code>) is a same-pattern addition.</div>
+      <div class="k">Icon system</div><div><code>components/Icon.jsx</code> — one <code>GLYPHS</code> map of inline-SVG stroke paths keyed by name, paint via <code>currentColor</code> — architecturally identical to the icon dictionary the prototype itself uses.</div>
+      <div class="k">Zone/lens pattern</div><div><code>shared/LensContext.jsx</code> + <code>LensSwitcher.jsx</code> — a Context + segmented-control + persisted-to-localStorage pattern, currently projecting one analysis onto Business/Tech/Execution personas. The mechanism (not the specific lenses) maps directly onto Prepare/Run/Synthesize/Project — recommend a sibling <code>ZoneContext</code> rather than repurposing the persona lens itself, since zones need independent per-zone canvas state, not just a content projection.</div>
+      <div class="k">Card-grid pattern</div><div><code>SkillsPage.jsx</code>'s data-array → clickable card (icon/title/desc/CTA/disabled-state) reuses directly for an agent catalogue or engagement picker.</div>
+      <div class="k">SSE live-status</div><div><code>readSSE()</code> in <code>ModernizePage.jsx</code>/<code>DisruptPage.jsx</code> — an async-generator SSE consumer used for Analyze/Impact/Pipeline/Deep-Dive — reusable for streaming draft-card generation.</div>
+      <div class="k">Chat-to-fill panel</div><div>Disrupt's chat intent-parser panel (greeting, bubbles, typing indicator, POST-to-parse-intent) is the closest existing analog to the Assistant chat drawer's composer.</div>
+      <div class="k">Design tokens</div><div>Dark theme via CSS custom properties in <code>global.css</code> (<code>--bg/--panel/--accent/--cyan</code>…) plus consistent card/chip/segmented-control/drawer conventions across feature CSS files — a solid visual-consistency base, though the prototype you shared is a <em>light</em> theme, so tokens would need a light variant or the two would need reconciling.</div>
+    </div>
+    <div class="bottomline"><strong>Verdict:</strong> very high reuse for the application shell; only the canvas stage itself falls outside this system.</div>
+  </div>
+
+  <h2 class="sub">4.8 Export</h2>
+  <div class="card">
+    <div class="kv">
+      <div class="k">Existing</div><div><code>impact_generator.export_html()</code> — server renders HTML, frontend opens it and calls <code>window.print()</code>. This is HTML-to-PDF via the browser print dialog, not a server-side generator.</div>
+      <div class="k">Gap</div><div>No DOCX-generation library is installed (only <code>python-docx</code> for reading), no PDF library (reportlab/weasyprint) is installed. FR-11 requires a real DOCX export of the consolidated package — this needs a new dependency and a new export module.</div>
+    </div>
+  </div>
+</section>
+
+<section id="s5">
+  <h1 class="sec">5. Agent Catalogue Feasibility Matrix</h1>
+  <p>Each of the 19 target agents, mapped against what exists today:</p>
+  <table>
+    <tr><th>Zone</th><th>Agent</th><th>Verdict</th><th>Basis</th></tr>
+    <tr><td>Prepare</td><td>Ingest client docs</td><td><span class="tag reuse">Reuse</span></td><td><code>rag/file_extractor.py</code> (PDF/DOCX/XLSX) + <code>rag/service.py</code></td></tr>
+    <tr><td>Prepare</td><td>Research company</td><td><span class="tag adapt">Adapt</span></td><td>No web-search connector exists; new fetcher + existing RAG/LLM pipeline</td></tr>
+    <tr><td>Prepare</td><td>Context brief</td><td><span class="tag reuse">Reuse</span></td><td><code>code_summarizer.py</code> rolling-summary pattern + <code>agentic_analyzer.py</code> JSON-draft scaffold</td></tr>
+    <tr><td>Prepare</td><td>Questions to ask</td><td><span class="tag build">Build</span></td><td>Prompt-only; same draft-JSON scaffold, no existing question-generation logic</td></tr>
+    <tr><td>Prepare</td><td>Draft agenda</td><td><span class="tag build">Build</span></td><td>Prompt-only; same scaffold</td></tr>
+    <tr><td>Run</td><td>Transcribe</td><td><span class="tag build">Build</span></td><td>No STT/Whisper code anywhere in the backend</td></tr>
+    <tr><td>Run</td><td>Summarize</td><td><span class="tag reuse">Reuse</span></td><td><code>code_summarizer.py</code> chunk→rollup→cache is a direct template</td></tr>
+    <tr><td>Run</td><td>Draw process flow</td><td><span class="tag build">Build</span></td><td>No draw.io/diagram-generation code; diagrams today are only vision <em>input</em></td></tr>
+    <tr><td>Run</td><td>Find gaps</td><td><span class="tag adapt">Adapt</span></td><td><code>agentic_analyzer._pim_recommend</code> (rule-based finding generator) is a close structural analog</td></tr>
+    <tr><td>Run</td><td>Capture decisions</td><td><span class="tag build">Build</span></td><td>Prompt-only; same draft-JSON→approve scaffold</td></tr>
+    <tr><td>Synthesize</td><td>User stories</td><td><span class="tag adapt">Adapt</span></td><td>Neo4j <code>:UserStory</code> label already reserved (schema-only, unpopulated)</td></tr>
+    <tr><td>Synthesize</td><td>Acceptance criteria (GWT)</td><td><span class="tag build">Build</span></td><td>Prompt-only; same scaffold</td></tr>
+    <tr><td>Synthesize</td><td>Documentation</td><td><span class="tag reuse">Reuse</span></td><td><code>impact_generator.py</code>'s render_html/export_html (structured report → HTML) pattern</td></tr>
+    <tr><td>Synthesize</td><td>Find opportunities</td><td><span class="tag reuse">Reuse</span></td><td><code>agentic_analyzer.generate_agent_recommendations</code> is essentially this agent already</td></tr>
+    <tr><td>Synthesize</td><td>Minutes of Meeting</td><td><span class="tag adapt">Adapt</span></td><td>Needs transcript input (new); output drafting reuses the <code>impact_generator</code> doc pattern</td></tr>
+    <tr><td>Project</td><td>Draft SOW</td><td><span class="tag adapt">Adapt</span></td><td>Doc-gen + <code>impact_generator</code> export pattern; no SOW template exists yet</td></tr>
+    <tr><td>Project</td><td>Calculate ROI</td><td><span class="tag adapt">Adapt</span></td><td><code>disrupt.py</code>'s quantified KPI/lens generation is a strong template</td></tr>
+    <tr><td>Project</td><td>Benefit vs. risk</td><td><span class="tag reuse">Reuse</span></td><td><code>impact_generator.py</code>'s 3-lens KPI+narrative pattern is almost exactly this</td></tr>
+    <tr><td>Project</td><td>Suggest team</td><td><span class="tag build">Build</span></td><td>No skills/staffing data model exists anywhere</td></tr>
+  </table>
+  <div class="caption">Table 1: Reuse verdict per target agent. "Reuse" = an existing service is a near-direct fit; "Adapt" = existing pattern + moderate new logic/data; "Build" = prompt-and-schema only, no existing analog.</div>
+  <div class="callout good">Net read: <strong>6 of 19 agents reuse an existing service almost directly, 6 adapt an existing pattern, and 7 are prompt-only builds</strong> — but even the "build" agents inherit the LLM-calling, JSON-coercion, and draft-approval scaffolding for free, so none of the 19 start from zero infrastructure.</div>
+</section>
+
+<section id="s6">
+  <h1 class="sec">6. Integrations Feasibility (draw.io, Microsoft Teams, Granola)</h1>
+  <p>Confirmed by direct search across <code>backend/</code>: <strong>zero existing code</strong> for Microsoft Graph API/Teams, draw.io, Granola, or any speech-to-text/transcription library. All three (four, counting transcription) are genuine net-new work — but the effort differs a lot per integration:</p>
+  <div class="card">
+    <span class="badge green">Lowest effort</span>
+    <h3>draw.io</h3>
+    <p>No subscription, no OAuth. Needs: a small library to read/write <code>.drawio</code> XML, and the free embeddable draw.io editor dropped into the "edit this properly" flow. Nothing in NaviCORE helps or hinders this — it's a self-contained, low-risk first integration, exactly as the target doc's own suggested build order says.</p>
+  </div>
+  <div class="card">
+    <span class="badge blue">Moderate effort, reusable OAuth shape</span>
+    <h3>Microsoft Teams (Graph API)</h3>
+    <p>No Graph SDK (<code>msal</code>/<code>msgraph-sdk</code>) is installed and no Teams code exists — but <code>source_oauth.py</code>'s Authorization Code + PKCE + Key Vault-referenced token pattern is a proven template already exercised for GitHub/Azure DevOps, and the frontend <code>ConnectProvider.jsx</code> popup-OAuth flow needs zero new frontend code beyond a new catalog entry. The org almost certainly already has Microsoft 365, so this is a one-time technical setup (app registration + client IT approval), not new ongoing cost — matching the target document's own assessment.</p>
+  </div>
+  <div class="card">
+    <span class="badge amber">Same OAuth shape, ongoing cost</span>
+    <h3>Granola</h3>
+    <p>Same reusable OAuth-connector shape as Teams (personal API or MCP, both need the Business plan). No transcription-quality gain over building your own — Granola is valuable specifically for its casual pre-workshop meeting-notes UX, not a capability gap NaviCORE fills elsewhere. Confirms the target document's own guidance: build this last, only if the pre-workshop-call use case justifies the ~$14/seat/month.</p>
+  </div>
+  <div class="card">
+    <span class="badge red">Genuinely new capability</span>
+    <h3>Transcription (in-app microphone)</h3>
+    <p>Not an "integration" in the OAuth sense — needs a speech-to-text engine (e.g. Azure Speech, Whisper) wired into a new live-audio pipeline feeding the same transcript store the Teams Graph API path would also feed. No existing NaviCORE code touches audio at all; budget this as the single largest net-new backend subsystem in the whole project.</p>
+  </div>
+  <div class="caption">Table/Section 2: The existing <code>source_oauth.py</code> + <code>ConnectProvider.jsx</code> pair should be treated as the one integration foundation worth generalizing early — every third-party connector (Teams, Granola, and eventually anything else) rides the same rails.</div>
+</section>
+
+<section id="s7">
+  <h1 class="sec">7. Gap Analysis — Net-New Work Required</h1>
+  <p>Consolidating Sections 4–6, the concrete list of things that must be built with no meaningful existing analog:</p>
+  <ul>
+    <li><strong>Infinite-canvas engine</strong> — real transform-based pan/zoom, minimap, "fit everything," dashed-border zone regions, Focus dim-toggle. (See Section 9 for the recommended approach.)</li>
+    <li><strong>Freeform node types</strong> — sticky notes, rectangles/ellipses, free text, frames, each draggable/resizable/colorable via a node context toolbar.</li>
+    <li><strong>Draft-card Approve/Edit/Reject lifecycle</strong> — a first-class object type distinct from a chat message, with three explicit terminal actions and only Approve committing to canvas + artifact library.</li>
+    <li><strong>Artifact library drawer</strong> — persistent, cross-session, six-folder structure with provenance tags, distinct from the Atlas's project-scoped "doc bar."</li>
+    <li><strong>Slash-command agent catalogue in chat</strong>, plus a "Suggested next" contextual action list keyed to the active zone.</li>
+    <li><strong>Full-text search across canvas nodes</strong> with match count and auto-pan/zoom-to-hit.</li>
+    <li><strong>Live transcript dock</strong> + underlying speech-to-text pipeline (in-app mic) and/or Teams Graph API live-transcript streaming.</li>
+    <li><strong>Presentation Mode</strong> — chrome-free, steps through the four zones with Previous/Next/Exit.</li>
+    <li><strong>Server-side DOCX export</strong> of the consolidated handoff package (current export is HTML→browser-print only).</li>
+    <li><strong>draw.io round-trip</strong>, Teams Graph API connector, Granola connector — all zero-code today (Section 6).</li>
+    <li><strong>Engagement-level multi-tenant scoping</strong> — current scoping is per-project/per-kg, not per-client-organisation with its own access control.</li>
+    <li><strong>Suggest team / staffing agent</strong> — no skills or staffing data model exists to ground this against.</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <h1 class="sec">8. Standalone Project vs. New Module — the Decision</h1>
+  <p>You proposed creating a new folder next to <code>frd-generator</code> and copying the reusable pieces across, rather than adding AI Discovery Canvas as a fifth product inside the existing app. Both are legitimate; here's the actual trade-off, grounded in what Section 4 found:</p>
+  <table>
+    <tr><th></th><th>New standalone folder (your plan)</th><th>New route inside frd-generator</th></tr>
+    <tr><td>Product separation</td><td>Clean — ships/sells/versions independently of Modernize/Disrupt/Atlas</td><td>Coupled — one deploy, one release train, harder to spin off later</td></tr>
+    <tr><td>Shared auth/org data</td><td>Duplicated unless you factor out a shared auth service</td><td>Free — same Entra ID tenant, same session, same org model</td></tr>
+    <tr><td>Reuse mechanism</td><td>Copy-and-diverge (Section 10) — reused code can drift out of sync with upstream fixes</td><td>Reuse-in-place — bug fixes to <code>llm_service.py</code>/RAG benefit both products automatically</td></tr>
+    <tr><td>Design system</td><td>Copy CSS tokens/Icon.jsx once, then free to diverge into the prototype's light theme</td><td>Must reconcile the existing dark theme with the target's light-themed prototype</td></tr>
+    <tr><td>Migration-path fit</td><td>Matches "canvas needs a real framework, stop extending the monolith" finding in 4.1</td><td>Also fits — a new route doesn't touch the monolith either</td></tr>
+  </table>
+  <div class="callout"><strong>Recommendation:</strong> your instinct to create a separate project is reasonable given how different a whiteboard product is from Modernize/Disrupt/Atlas, and it avoids reconciling two visual design languages. The one thing worth deciding explicitly up front (not by default) is <strong>auth</strong>: if AI Discovery Canvas will ever need to share users/organisations with NaviCORE, factor <code>backend/app/auth/</code> out as a shared service now rather than forking it — forking auth is the one copy that's expensive to un-fork later. Everything else in Section 10's copy list is safe to fork-and-diverge.</div>
+</section>
+
+<section id="s9">
+  <h1 class="sec">9. Recommended Canvas Engine</h1>
+  <p>No canvas library exists in the codebase today (the closest analog, <code>vis-network</code>, is a graph-layout library, not a whiteboard). Three off-the-shelf options were weighed against the target feature list:</p>
+  <table>
+    <tr><th>Library</th><th>Fit</th><th>Trade-off</th></tr>
+    <tr><td>React Flow</td><td><strong>Recommended</strong></td><td>Native pan/zoom/minimap/node-and-edge model out of the box — closest match to the target's node/connector/region needs; less native support for true freeform sticky-note drawing, but that's a thin layer on top of its custom-node API</td></tr>
+    <tr><td>tldraw</td><td>Strong alternative</td><td>Best-in-class freeform whiteboard (stickies, shapes, frames, presentation-style camera moves) out of the box; weaker for the structured "card with Approve/Edit/Reject + provenance" object model, which would need to be built as a custom shape type</td></tr>
+    <tr><td>Konva / custom SVG</td><td>Not recommended</td><td>Maximum control, but re-implements minimap/pan-zoom/hit-testing from scratch — closer in cost to extending <code>legacy_atlas.html</code>'s approach than to using a library</td></tr>
+  </table>
+  <p>Given the target UI mixes <strong>structured pipeline-like zones</strong> (Prepare→Run→Synthesize→Project, agent-produced cards) with <strong>freeform annotation</strong> (stickies/shapes/frames), a pragmatic path is React Flow as the base (regions, cards, connectors, minimap, zoom) with a small custom "annotation" node type layer for stickies/shapes/text — rather than adopting a pure whiteboard library and fighting it to express structured zones and provenance-tagged cards.</p>
+</section>
+
+<section id="s10">
+  <h1 class="sec">10. Proposed Project Structure</h1>
+  <p>What to copy from <code>frd-generator</code> into a new sibling folder (e.g. <code>discovery-canvas/</code>), what to build fresh, and what to leave behind:</p>
+  <div class="tree">discovery-canvas/                              <span class="dim">(new, sibling of frd-generator)</span>
+├── backend/
+│   ├── app/
+│   │   ├── core/                             <span class="copy">← copy verbatim (config, logging)</span>
+│   │   ├── auth/                              <span class="copy">← copy (mock + Entra ID); adapt scoping to "engagement"</span>
+│   │   ├── database/
+│   │   │   ├── neo4j_client.py                <span class="copy">← copy verbatim</span>
+│   │   │   └── schema.py                      <span class="copy">← copy + extend (Zone/Artifact/DraftCard/Engagement labels)</span>
+│   │   ├── services/
+│   │   │   ├── llm_service.py                 <span class="copy">← copy verbatim — the LLM calling core</span>
+│   │   │   ├── rag/                           <span class="copy">← copy verbatim — ingestion/retrieval engine</span>
+│   │   │   ├── code_summarizer.py             <span class="copy">← copy, generalize beyond "code"</span>
+│   │   │   ├── guardrails/                    <span class="copy">← copy verbatim — PII/compliance masking</span>
+│   │   │   ├── source_oauth.py                <span class="copy">← copy, add Teams/Granola providers</span>
+│   │   │   ├── object_store.py                <span class="copy">← copy verbatim</span>
+│   │   │   └── agents/                        <span class="new">← NEW: 19 agent modules, built on the</span>
+│   │   │                                         <span class="dim">agentic_analyzer.py / impact_generator.py draft→approve pattern</span>
+│   │   └── routes/
+│   │       ├── canvas.py                      <span class="new">← NEW: nodes/edges/zones CRUD + SSE run</span>
+│   │       ├── artifacts.py                   <span class="new">← NEW: 6-folder library + provenance</span>
+│   │       ├── transcribe.py                  <span class="new">← NEW: STT + Teams Graph live-transcript</span>
+│   │       ├── integrations_drawio.py         <span class="new">← NEW</span>
+│   │       └── export.py                      <span class="new">← NEW: server-side DOCX package export</span>
+│   └── requirements.txt                       <span class="dim">+ msal/msgraph-sdk, python-docx (write), a TTS/STT SDK</span>
+└── frontend/
+    ├── src/
+    │   ├── components/
+    │   │   ├── Icon.jsx                       <span class="copy">← copy, extend GLYPHS with canvas icons</span>
+    │   │   ├── BrandLogo.jsx / BrandMark.jsx   <span class="copy">← copy verbatim or rebrand</span>
+    │   │   └── RequireAuth.jsx                <span class="copy">← copy verbatim</span>
+    │   ├── shared/
+    │   │   ├── ConnectProvider.jsx            <span class="copy">← copy verbatim — OAuth popup flow</span>
+    │   │   ├── sources.js                     <span class="copy">← copy, add drawio/teams/granola entries</span>
+    │   │   └── ZoneContext.jsx                <span class="new">← NEW: sibling of LensContext, same mechanism</span>
+    │   ├── pages/
+    │   │   └── canvas/
+    │   │       ├── CanvasPage.jsx             <span class="new">← NEW: React Flow-based stage</span>
+    │   │       ├── AssistantDrawer.jsx        <span class="new">← NEW: chat + slash-agents + draft cards</span>
+    │   │       └── ArtifactsDrawer.jsx        <span class="new">← NEW: 6-folder library</span>
+    │   └── styles/
+    │       └── tokens.css                     <span class="copy">← copy global.css token structure, re-theme light</span>
+    └── package.json                           <span class="dim">+ reactflow, MSAL packages (carried over)</span>
+</div>
+  <div class="caption">Tree 1: <span class="copy">blue</span> = copy from frd-generator with light/no modification, <span class="new">green</span> = net-new, <span class="dim">grey</span> = notes.</div>
+</section>
+
+<section id="s11">
+  <h1 class="sec">11. Data Model Extensions (Neo4j)</h1>
+  <p>Additive to the existing <code>Source → Summary → GeneratedDoc</code> lineage model — no changes to what's already there:</p>
+  <table>
+    <tr><th>New label / relationship</th><th>Purpose</th></tr>
+    <tr><td><code>:Engagement</code></td><td>Top-level scope replacing/wrapping <code>project_id</code> for a client engagement; carries org/compliance metadata</td></tr>
+    <tr><td><code>:Zone</code></td><td>Prepare/Run/Synthesize/Project — attached to every node placed on the canvas</td></tr>
+    <tr><td><code>:CanvasNode</code></td><td>Sticky/shape/text/frame/card — position, size, color, zone reference</td></tr>
+    <tr><td><code>:DraftCard</code> + state property</td><td>pending / approved / edited / rejected — the human-in-the-loop record</td></tr>
+    <tr><td><code>:Artifact</code></td><td>An approved output filed into one of the 6 library folders</td></tr>
+    <tr><td><code>(:Artifact)-[:GENERATED_BY]->(:Agent)</code></td><td>Which of the 19 agents produced it</td></tr>
+    <tr><td><code>(:Artifact)-[:APPROVED_BY]->(:User)</code></td><td>Audit trail — who approved (NFR: Auditability)</td></tr>
+    <tr><td><code>(:Artifact)-[:SOURCED_FROM]->(:Source|:TranscriptSegment)</code></td><td>Provenance back to the exact document/transcript moment</td></tr>
+  </table>
+  <div class="caption">Table 3: This mirrors the existing lineage philosophy (<code>CONTRIBUTED_BY</code>/<code>PRODUCED_BY</code>) closely enough that the same query patterns used for capability-map history can be reused for artifact version history.</div>
+</section>
+
+<section id="s12">
+  <h1 class="sec">12. Phased Build Roadmap</h1>
+  <h2 class="sub">Phase 0 — Fork the foundation (days, not weeks)</h2>
+  <ul><li>Create the sibling project; copy the modules marked <span class="tag reuse">Reuse</span>/copy in Sections 4 &amp; 10; stand up Neo4j schema extensions from Section 11.</li></ul>
+  <h2 class="sub">Phase 1 — Canvas skeleton</h2>
+  <ul><li>React Flow-based Prepare/Run/Synthesize/Project regions, pan/zoom/minimap, sticky/shape/frame node types, node context toolbar, Focus toggle.</li></ul>
+  <h2 class="sub">Phase 2 — Assistant &amp; agents</h2>
+  <ul><li>Chat drawer + slash-commands + Suggested Next; wire the 6 "Reuse" and 6 "Adapt" agents first (fastest path to a convincing demo); draft-card Approve/Edit/Reject; artifact library drawer with provenance.</li></ul>
+  <h2 class="sub">Phase 3 — Live capture</h2>
+  <ul><li>In-app mic transcription (new STT subsystem), live transcript dock, remaining "Build" agents (Questions, Agenda, Acceptance Criteria, Capture decisions, Suggest team).</li></ul>
+  <h2 class="sub">Phase 4 — Integrations &amp; handoff</h2>
+  <ul><li>draw.io round-trip (lowest effort) → Microsoft Teams Graph API (reuses OAuth pattern) → Granola (only if pre-workshop-call use case justifies cost) → server-side DOCX export → Presentation Mode → search-and-fly-to-node.</li></ul>
+  <div class="callout">This order matches the target document's own "suggested build order" for integrations (draw.io → Teams → Granola) and additionally sequences the agent catalogue by reuse level so early milestones lean hardest on what Section 5 shows is already 60%+ built.</div>
+</section>
+
+<section id="s13">
+  <h1 class="sec">13. Risks &amp; Open Questions</h1>
+  <table>
+    <tr><th>Risk / question</th><th>Why it matters</th></tr>
+    <tr><td>Auth ownership not decided (Section 8)</td><td>Forking <code>backend/app/auth/</code> now is cheap; un-forking it later, if the two products need shared users, is not</td></tr>
+    <tr><td>No transcription engine chosen</td><td>The single largest net-new backend subsystem (Section 7) — Azure Speech vs. Whisper has cost, latency, and data-residency trade-offs, especially for pharma/healthcare clients</td></tr>
+    <tr><td>Design system mismatch</td><td>NaviCORE's shell is dark-themed; the target prototype is light-themed — reconcile before copying <code>global.css</code> wholesale</td></tr>
+    <tr><td>Engagement-level multi-tenancy is new</td><td>Current scoping is per-project — regulated clients (NFR: Data privacy) need real per-engagement access control, not just naming discipline</td></tr>
+    <tr><td>Granola compliance posture</td><td>Per the target document's own decision guide, Granola is "weaker for regulated clients" — confirm this is genuinely deferred to Phase 4 for a pharma-style first client</td></tr>
+    <tr><td>DOCX export library choice</td><td>No DOCX-generation library is installed anywhere in the codebase (only read support) — pick and prove one early since it's the FR-11 deliverable format</td></tr>
+  </table>
+</section>
+
+<section id="s14">
+  <h1 class="sec">14. Appendix — File &amp; Route Inventory</h1>
+  <h2 class="sub">14.1 Backend routes powering the existing Workflow Builder canvas (for reference/design-mining only)</h2>
+  <table>
+    <tr><th>Route</th><th>Purpose</th></tr>
+    <tr><td><code>GET/POST /workflows</code>, <code>GET/PUT/DELETE /workflows/&lt;id&gt;</code></td><td>Save/load/update/delete a canvas workflow (nodes/edges JSON)</td></tr>
+    <tr><td><code>POST /run</code></td><td>Graph-driven SSE pipeline execution (per-node start/progress/done events)</td></tr>
+    <tr><td><code>GET /pipeline/status</code>, <code>POST /pipeline/reset</code></td><td>Per-ticket run-queue status + cooperative cancellation</td></tr>
+    <tr><td><code>GET/POST /projects</code>, <code>GET/PATCH/DELETE /projects/&lt;id&gt;</code></td><td>Project CRUD — workflows scope to a project</td></tr>
+    <tr><td><code>GET/POST /agents</code>, <code>GET/PUT/DELETE /agents/&lt;id&gt;</code>, <code>POST /agents/&lt;id&gt;/run-standalone</code></td><td>User-defined agent node catalog + standalone execution</td></tr>
+    <tr><td><code>GET/POST /outputs</code>, <code>GET/PUT/DELETE /outputs/&lt;id&gt;</code></td><td>User-defined output node catalog</td></tr>
+    <tr><td><code>GET /agent-outputs</code>, <code>GET /generated-docs</code></td><td>Per-run agent output / generated document artifacts</td></tr>
+    <tr><td><code>GET /graph</code>, <code>/graph/stats</code>, <code>/graph/view</code>, <code>POST /graph/dedup</code></td><td>Knowledge-graph data + maintenance for the vis-network galaxy</td></tr>
+    <tr><td><code>GET /rag/stats</code>, <code>POST /rag/search</code>, <code>POST /rag/reindex</code></td><td>RAG index inspection/search/rebuild</td></tr>
+    <tr><td><code>POST /chat</code></td><td>Scope-aware Q&amp;A assistant endpoint</td></tr>
+    <tr><td><code>POST /salesforce/*</code></td><td>Existing OAuth + query pattern for a third-party source (design reference for Teams/Granola)</td></tr>
+  </table>
+  <h2 class="sub">14.2 Confirmed absent (verified by direct search of <code>backend/</code>)</h2>
+  <ul>
+    <li>Microsoft Teams / Graph API — no code, no <code>msal</code>/<code>msgraph-sdk</code> package</li>
+    <li>draw.io — no code (diagrams only consumed as vision input today)</li>
+    <li>Granola — no code</li>
+    <li>Speech-to-text / transcription — no code, no Whisper/Speech SDK package</li>
+    <li>Server-side PDF or DOCX <em>generation</em> — <code>python-docx</code> present but read-only usage; no reportlab/weasyprint</li>
+  </ul>
+  <h2 class="sub">14.3 Key packages already installed and relevant</h2>
+  <ul>
+    <li><strong>Document extraction:</strong> PyMuPDF (PDF), python-docx (DOCX read), openpyxl (XLSX), Pillow/imagehash</li>
+    <li><strong>RAG:</strong> faiss-cpu, numpy, openai (embeddings), tiktoken</li>
+    <li><strong>Auth:</strong> MSAL packages already present on the frontend (<code>@azure/msal-browser</code>, <code>@azure/msal-react</code>) for Entra ID — directly reusable, and a useful stepping stone toward Graph API scopes for Teams</li>
+  </ul>
+</section>
+
+<footer>AI Discovery Canvas — Feasibility &amp; Reuse Analysis &nbsp;·&nbsp; Prepared from direct exploration of frd-generator (backend/frontend/CLAUDE.md) plus the Master Documentation and Interactive Prototype v0.5 &nbsp;·&nbsp; Internal — not for external distribution</footer>
+
+</div>
+<a href="#top" class="top-link" title="Back to top">↑</a>
+</body>
+</html>

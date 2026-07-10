@@ -1,0 +1,43 @@
+# AI Discovery Canvas backend — TRIMMED requirements.
+#
+# This is a subset of frd-generator's backend/requirements.txt: only
+# packages actually imported by the files copied into this project (auth,
+# Neo4j client, LLM service, RAG/ingestion, guardrails, source-OAuth,
+# object store, health/connections/guardrails routes). Dropped entirely
+# relative to the upstream file: gunicorn (no gunicorn.conf.py was
+# carried over), networkx/pandas (only used by knowledge_graph.py, not
+# copied), Pillow/imagehash (only used by video-frame/diagram code, not
+# copied), SQLAlchemy/psycopg2-binary/alembic (Postgres subsystem, not
+# copied).
+
+flask
+flask-cors
+
+# Neo4j driver — app/database/neo4j_client.py
+neo4j>=5.20
+
+# LLM provider — Azure OpenAI, app/services/llm_service.py
+openai>=1.40
+tiktoken>=0.7
+python-dotenv>=1.0
+
+# Retrieval-augmented layer (app/services/rag) — FAISS vector store +
+# Azure OpenAI text-embedding-3-large. The whole subsystem degrades to a
+# no-op when these aren't installed.
+faiss-cpu>=1.8
+numpy>=1.24
+
+# File extraction for RAG ingestion (app/services/rag/file_extractor.py)
+PyMuPDF
+python-docx
+openpyxl>=3.1
+
+# Azure Key Vault — centralised secret manager (app/services/secret_manager.py).
+# DefaultAzureCredential resolves Managed Identity / az-cli session / Service
+# Principal env vars transparently.
+azure-identity>=1.15
+azure-keyvault-secrets>=4.7
+
+# id_token (JWKS / RS256) signature verification for Microsoft Entra login
+# (app/auth/token_validation.py, used by app/auth/providers/azure_ad.py).
+PyJWT[crypto]>=2.8

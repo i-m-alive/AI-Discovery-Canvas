@@ -1,0 +1,9 @@
+**/__pycache__/
+*.pyc
+.venv/
+node_modules/
+frontend/.next/
+.env
+backend/data/
+neo4j_data/
+.DS_Store
