@@ -35,13 +35,12 @@ from app.auth.config import settings
 from app.auth.providers import get_provider
 from app.auth.providers.azure_ad import AzureNotConfigured
 
-# NOTE (ai-discovery-canvas scaffold): upstream frd-generator had a Postgres
-# user-sync hook here (`app.postgres.services.user_sync.handle_login`) that
-# persisted + counted each login in a `users` table. This project does not
-# carry the Postgres subsystem (out of scope for the lean backbone — see
-# root README's "what was copied vs built fresh"), so that hook and its three
-# best-effort call sites were removed rather than left as a dangling import.
-# Session minting/validation behaviour is otherwise identical.
+# Postgres user-sync hook (app/postgres/services/user_sync.py): best-effort,
+# upserts a `users` row (login_count/last_login) after every successful
+# login so Projects have a stable owner id to resolve later — see the three
+# call sites below. Silent no-op if Postgres isn't configured/reachable;
+# the login itself has already succeeded by the time this runs.
+from app.postgres.services import user_sync
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -169,6 +168,8 @@ def login_mock():
     if 'error' in result:
         return jsonify(result), 400
 
+    user_sync.handle_login(result['user'], auth_provider='mock')
+
     session_rec = result['session']
     resp = make_response(jsonify({
         'user':    result['user'],
@@ -213,6 +214,7 @@ def login_azure():
             )
             if 'error' in result:
                 return jsonify(result), 400
+            user_sync.handle_login(result['user'], auth_provider='azure')
             session_rec = result['session']
             resp = make_response(jsonify({
                 'user':    result['user'],
@@ -248,6 +250,8 @@ def callback_azure():
     session_rec = result.get('session') or {}
     if not session_rec.get('token'):
         return redirect('/login?error=azure_callback_failed')
+    if result.get('user'):
+        user_sync.handle_login(result['user'], auth_provider='azure')
     resp = make_response(redirect('/'))
     _set_session_cookie(resp, session_rec['token'], session_rec['exp'])
     return resp

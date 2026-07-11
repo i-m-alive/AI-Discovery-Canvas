@@ -19,11 +19,12 @@ ADAPTATION NOTE (ai-discovery-canvas scaffold): frd-generator's main.py
 `app.routes.legacy_routes` (a git-clone / GPT-4.1 / Postgres preflight
 tied to the legacy monolith). That module doesn't exist in this project,
 so `_check_dependencies()` below is a NEW, much smaller check: it verifies
-Azure OpenAI env is present (warns, doesn't abort — LLM calls will just
-fail with a precise error until configured) and reports whatever
-`create_app()` already discovered about Neo4j reachability during
-`bootstrap_neo4j()` (via `neo4j_store.is_ready()`), rather than re-cloning
-a repo to prove git works.
+AWS Bedrock config (region + model id + resolvable AWS credentials) is
+present (warns, doesn't abort — LLM calls will just fail with a precise
+error until configured) and reports whatever `create_app()` already
+discovered about Neo4j reachability during `bootstrap_neo4j()` (via
+`neo4j_store.is_ready()`), rather than re-cloning a repo to prove git
+works.
 """
 
 from __future__ import annotations
@@ -49,16 +50,11 @@ def _check_dependencies() -> list[str]:
     """Minimal boot-time sanity check. Returns a list of human-readable
     problems; an empty list means "looks fine, try to run anyway". Unlike
     frd-generator's legacy check, this never aborts the process — Neo4j
-    and Azure OpenAI both degrade gracefully at the route level (health
+    and AWS Bedrock both degrade gracefully at the route level (health
     checks / precise per-call errors), so a warning here is enough."""
     warnings: list[str] = []
 
     from app.core import config as app_config
-    if not app_config.AZURE_OPENAI_ENDPOINT:
-        warnings.append(
-            'AZURE_OPENAI_ENDPOINT is not set — LLM-backed features '
-            '(RAG summarization, chat, etc.) will fail until configured.'
-        )
     from app.services.llm_service import check_configured
     llm_errors = check_configured()
     warnings.extend(llm_errors)
@@ -90,7 +86,7 @@ def _print_banner() -> None:
         for w in warnings:
             print(f'  [!!] {w}', flush=True)
     else:
-        print('  [ok] Azure OpenAI configured', flush=True)
+        print('  [ok] AWS Bedrock configured', flush=True)
         print('  [ok] Neo4j reachable', flush=True)
 
     print('')

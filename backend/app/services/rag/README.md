@@ -1,4 +1,11 @@
-# RAG subsystem — FAISS + Azure OpenAI `text-embedding-3-large`
+# RAG subsystem — FAISS + AWS Bedrock embeddings
+
+> **ai-discovery-canvas note:** this package originally called Azure
+> OpenAI's `text-embedding-3-large`. It has been rewritten to call **AWS
+> Bedrock** (Titan Embed or Cohere Embed, picked via
+> `BEDROCK_EMBEDDING_MODEL_ID`) — no Azure OpenAI dependency remains. The
+> rest of this file (chunking, caching, FAISS store, service facade) is
+> unchanged from the original design.
 
 Scalable, token-efficient retrieval so growth in projects/documents
 doesn't translate into ever-larger LLM prompts. Embed once, store in
@@ -9,7 +16,7 @@ FAISS, retrieve only the most relevant chunks before calling the model.
 | File | Responsibility |
 |---|---|
 | `config.py` | Env-driven settings: endpoint, deployment, api_version, dim, quotas, chunk sizes, paths. |
-| `embedder.py` | Azure OpenAI embeddings — batched, parallel (bounded pool), rate-limited (250k TPM / 1500 RPM), retried, L2-normalised. Key from Key Vault. |
+| `embedder.py` | AWS Bedrock embeddings (Titan/Cohere) — one `invoke_model` call per text, parallel (bounded pool), rate-limited, retried, L2-normalised. Credentials via boto3's default chain. |
 | `cache.py` | Content-hash embedding cache (`sha256(model|text)`), disk-backed `.npz`. Skips re-embedding identical text across runs. |
 | `chunking.py` | Structure-aware, token-bounded semantic chunking with overlap. HTML→text for generated docs. |
 | `store.py` | FAISS namespaces (`IndexIDMap2(IndexFlatIP)`), incremental upsert/delete **by document**, atomic persistence, scoped metadata filtering. |
@@ -21,30 +28,25 @@ FAISS, retrieve only the most relevant chunks before calling the model.
 Non-secret values are env vars (defaults shown):
 
 ```
-AZURE_EMBEDDING_ENDPOINT     = https://navicoreinst.openai.azure.com/
-AZURE_EMBEDDING_DEPLOYMENT   = text-embedding-3-large
-AZURE_EMBEDDING_API_VERSION  = 2024-02-01
-AZURE_EMBEDDING_DIM          = 3072
-AZURE_EMBEDDING_MAX_TPM      = 250000
-AZURE_EMBEDDING_MAX_RPM      = 1500
-AZURE_EMBEDDING_BATCH_SIZE   = 128
-AZURE_EMBEDDING_MAX_WORKERS  = min(8, cpu_count)
+BEDROCK_EMBEDDING_MODEL_ID   = amazon.titan-embed-text-v2:0
+BEDROCK_EMBEDDING_DIM        = 1024
+BEDROCK_EMBED_MAX_TPM        = 100000
+BEDROCK_EMBED_MAX_RPM        = 60
+BEDROCK_EMBED_MAX_WORKERS    = min(8, cpu_count)
+BEDROCK_EMBED_MAX_INPUT_TOKENS = 8000
+BEDROCK_EMBED_MAX_RETRIES    = 6
 RAG_CHUNK_TOKENS             = 512
 RAG_CHUNK_OVERLAP            = 64
 RAG_TOP_K                    = 8
 RAG_DATA_DIR                 = backend/data/rag   (override for a volume)
 ```
 
-**Secret** — the API key is **never** in code or env-committed. It is
-read from Azure Key Vault, secret name **`embedding-api-key`**
-(`https://navicore.vault.azure.net/`), via `secret_manager.get_secret`.
-Local-dev fallback only: `EMBEDDING_API_KEY` env var.
-
-> Note on the requested client snippet: `AzureKeyCredential` belongs to
-> the `azure-ai-*` SDKs, not the `openai` SDK this repo uses. The embedder
-> constructs `openai.AzureOpenAI(azure_endpoint=…, api_key=…,
-> api_version=…)` — the working, repo-consistent form — with the key
-> sourced from Key Vault.
+**Credentials** — the same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+`AWS_SESSION_TOKEN` / `AWS_REGION` used by `llm_service.py` for chat are
+reused here; boto3 resolves them via its own default credential chain
+(env vars → `~/.aws/credentials` → IAM role). Nothing embedding-specific
+to configure beyond the model id/dimension above — there is no separate
+API key to manage.
 
 ## Already wired
 
@@ -89,11 +91,11 @@ queries; use vectors only for "find the relevant text".
 
 - **Incremental by design** — re-indexing a `doc_id` replaces its prior
   chunk vectors, so edits/renames/regenerations never leave stale data.
-- **Best-effort everywhere** — if FAISS/numpy/openai/the key are missing,
-  `is_enabled()` is False and every call no-ops; the graph-context paths
-  keep working unchanged.
+- **Best-effort everywhere** — if FAISS/numpy/boto3/AWS credentials are
+  missing, `is_enabled()` is False and every call no-ops; the graph-context
+  paths keep working unchanged.
 - **Cold start** — `POST /rag/reindex` (no body) builds the whole index;
-  run once after deploying with the key in place.
-- **Model/dim change** — changing `AZURE_EMBEDDING_DIM` or the model means
-  a full reindex (vector widths must match). Delete `data/rag/*` and
-  reindex.
+  run once after deploying with credentials in place.
+- **Model/dim change** — changing `BEDROCK_EMBEDDING_DIM` or
+  `BEDROCK_EMBEDDING_MODEL_ID` means a full reindex (vector widths must
+  match). Delete `data/rag/*` and reindex.

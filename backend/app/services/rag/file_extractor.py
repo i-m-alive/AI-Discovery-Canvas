@@ -2,9 +2,9 @@
 Text extraction from workflow output files.
 
 Supports .pdf (PyMuPDF), .docx (python-docx), .xlsx (openpyxl),
-.csv (csv stdlib), .html (existing html_to_text), .zip (recursive).
-All imports are guarded so a missing library degrades to '' rather than
-raising, consistent with the rest of the RAG subsystem.
+.pptx (python-pptx), .csv (csv stdlib), .html (existing html_to_text),
+.zip (recursive). All imports are guarded so a missing library degrades
+to '' rather than raising, consistent with the rest of the RAG subsystem.
 """
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ def extract_text_from_bytes(data: bytes,
         return _docx(data)
     if ext == 'xlsx' or ('openxmlformats' in mime and 'sheet' in mime):
         return _xlsx(data)
+    if ext == 'pptx' or ('openxmlformats' in mime and 'presentation' in mime):
+        return _pptx(data)
     if ext == 'csv' or mime == 'text/csv':
         return _csv(data)
     if ext in ('html', 'htm') or 'html' in mime:
@@ -105,6 +107,33 @@ def _xlsx(data: bytes) -> str:
         return '\n\n'.join(parts)
     except ImportError:
         log.warning('[EXTRACTOR] XLSX extraction requires openpyxl')
+        return ''
+
+
+def _pptx(data: bytes) -> str:
+    try:
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(data))
+        slides = []
+        for i, slide in enumerate(prs.slides, 1):
+            lines = []
+            for shape in slide.shapes:
+                if getattr(shape, 'has_text_frame', False) and shape.text_frame.text.strip():
+                    lines.append(shape.text_frame.text.strip())
+                if getattr(shape, 'has_table', False):
+                    for row in shape.table.rows:
+                        row_text = '\t'.join(c.text for c in row.cells)
+                        if row_text.strip():
+                            lines.append(row_text)
+            if getattr(slide, 'has_notes_slide', False) and slide.notes_slide:
+                notes = (slide.notes_slide.notes_text_frame.text or '').strip()
+                if notes:
+                    lines.append(f'Notes: {notes}')
+            if lines:
+                slides.append(f'Slide {i}\n' + '\n'.join(lines))
+        return '\n\n'.join(slides)
+    except ImportError:
+        log.warning('[EXTRACTOR] PPTX extraction requires python-pptx')
         return ''
 
 

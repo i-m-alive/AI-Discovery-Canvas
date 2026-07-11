@@ -45,7 +45,19 @@ def _jwks_client(key_tenant: str):
     with _JWKS_LOCK:
         c = _JWKS_CLIENTS.get(key_tenant)
         if c is None:
-            c = jwt.PyJWKClient(uri)
+            # ai-discovery-canvas ADAPTATION: macOS python.org builds ship
+            # without the system CA bundle wired into the ssl module, so
+            # PyJWKClient's fetch of Microsoft's JWKS fails with
+            # CERTIFICATE_VERIFY_FAILED unless it's told to use certifi's
+            # bundle explicitly (same root cause/fix as graph_teams.py and
+            # agent_catalog.py's URL fetcher).
+            import ssl
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ctx = ssl.create_default_context()
+            c = jwt.PyJWKClient(uri, ssl_context=ctx)
             _JWKS_CLIENTS[key_tenant] = c
         return c
 

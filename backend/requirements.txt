@@ -7,29 +7,38 @@
 # relative to the upstream file: gunicorn (no gunicorn.conf.py was
 # carried over), networkx/pandas (only used by knowledge_graph.py, not
 # copied), Pillow/imagehash (only used by video-frame/diagram code, not
-# copied), SQLAlchemy/psycopg2-binary/alembic (Postgres subsystem, not
-# copied).
+# copied), alembic (app/postgres/ here uses a simple create_all() bootstrap,
+# not versioned migrations — see app/postgres/__init__.py).
 
 flask
 flask-cors
 
+# Application database — BA -> Projects -> Workshops (app/postgres/).
+# Separate from Neo4j (graph_rag entities) and FAISS (rag/ vector index).
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+
 # Neo4j driver — app/database/neo4j_client.py
 neo4j>=5.20
 
-# LLM provider — Azure OpenAI, app/services/llm_service.py
-openai>=1.40
+# LLM provider — AWS Bedrock for BOTH chat/completion
+# (app/services/llm_service.py) AND RAG embeddings (app/services/rag/
+# embedder.py). No Azure OpenAI dependency remains anywhere in this
+# project; boto3 resolves AWS credentials via its own default chain.
+boto3>=1.34
 tiktoken>=0.7
 python-dotenv>=1.0
 
 # Retrieval-augmented layer (app/services/rag) — FAISS vector store +
-# Azure OpenAI text-embedding-3-large. The whole subsystem degrades to a
-# no-op when these aren't installed.
+# Bedrock embeddings (Titan Embed / Cohere Embed, see rag/config.py). The
+# whole subsystem degrades to a no-op when these aren't installed/configured.
 faiss-cpu>=1.8
 numpy>=1.24
 
 # File extraction for RAG ingestion (app/services/rag/file_extractor.py)
 PyMuPDF
 python-docx
+python-pptx>=0.6.23
 openpyxl>=3.1
 
 # Azure Key Vault — centralised secret manager (app/services/secret_manager.py).
@@ -41,3 +50,4 @@ azure-keyvault-secrets>=4.7
 # id_token (JWKS / RS256) signature verification for Microsoft Entra login
 # (app/auth/token_validation.py, used by app/auth/providers/azure_ad.py).
 PyJWT[crypto]>=2.8
+certifi>=2024.0

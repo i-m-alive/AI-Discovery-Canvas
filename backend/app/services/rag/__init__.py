@@ -1,10 +1,10 @@
 """
 Retrieval-Augmented (RAG) subsystem.
 
-A FAISS + Azure OpenAI ``text-embedding-3-large`` pipeline that lets every
-consumer retrieve only the most relevant chunks/entities instead of
-stuffing whole corpora into the LLM context — the scalability + token-
-optimisation goal as NaviCORE's project count grows.
+A FAISS + AWS Bedrock embeddings pipeline (Titan/Cohere Embed — see
+``config.py``) that lets every consumer retrieve only the most relevant
+chunks/entities instead of stuffing whole corpora into the LLM context —
+the scalability + token-optimisation goal as the project count grows.
 
 Layers
 ------
@@ -25,9 +25,9 @@ Public surface (import from ``app.services.rag``):
     delete_document(...)
     stats()                               diagnostics for /rag/stats
 
-Everything is best-effort: when FAISS / numpy / openai / the Key Vault
-secret aren't available, ``is_enabled()`` is False and all calls no-op,
-so the existing graph-context code paths keep working unchanged.
+Everything is best-effort: when FAISS / numpy / boto3 / resolvable AWS
+credentials aren't available, ``is_enabled()`` is False and all calls
+no-op, so the existing graph-context code paths keep working unchanged.
 """
 
 from __future__ import annotations

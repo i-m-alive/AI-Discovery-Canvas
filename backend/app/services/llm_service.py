@@ -1,10 +1,17 @@
 """
-Centralized LLM service — Azure OpenAI GPT-4.1.
+Centralized LLM service — AWS Bedrock.
 
-This is the single entry point for every LLM call in the backend. All
-features (knowledge graph extraction, agent execution, workflow
-orchestration, NaviCORE Assistant chat, capability map generation,
-document structuring, video frame analysis, …) go through `complete()`.
+This is the single entry point for every LLM call in the backend. Every
+agent (and the `/api/agents/ping` backbone-proof route) goes through
+`complete()`.
+
+ADAPTATION NOTE (ai-discovery-canvas): this file originally called Azure
+OpenAI (ported from frd-generator). It has been REWRITTEN to call AWS
+Bedrock via `boto3`'s `converse` API instead — per explicit request, the
+backend now uses AWS Bedrock, not Azure OpenAI. The public `complete()`
+signature is unchanged (same params, same return type) so every caller
+(`app/routes/agents.py`, and anything built on top of it later) keeps
+working without modification — only this file's internals changed.
 
 Configuration is read from environment variables (see `.env.example`).
 Secrets MUST NOT be hard-coded in this file or in any committed source.
@@ -12,41 +19,55 @@ Secrets MUST NOT be hard-coded in this file or in any committed source.
 Design notes
 ------------
 * **Stable signature** — `complete(prompt, image_path=None, timeout=None,
-  *, tag=..., system=None, max_output_tokens=None)`. The 40+ callers in
-  `legacy_routes.py` all funnel through the module-level `run_llm`
-  helper which delegates here, so a future provider swap only needs to
-  touch this file.
+  *, tag=..., system=None, max_output_tokens=None, model=None)`. `model`,
+  if given, overrides the Bedrock model id/ARN for that one call;
+  otherwise `BEDROCK_MODEL_ID` from the environment is used — the exact
+  model is intentionally NOT hard-coded here, the operator sets it via env.
 
-* **Rate limiting** — Azure deployment quotas for gpt-4.1 are 250
-  requests / 250k tokens per minute. A process-wide sliding-window
-  limiter (`_RateLimiter`) blocks each call until both the RPM and TPM
-  budgets allow it through, so parallel callers (ThreadPoolExecutor in
-  video frame analysis, concurrent SSE pipelines, etc.) never blow the
-  quota.
+* **Converse API** — uses Bedrock Runtime's `converse()` operation, which
+  normalises the request/response shape across model providers
+  (Anthropic, Meta, Amazon, Mistral, …) so this file doesn't need to know
+  which model family is configured.
 
-* **Retry-with-backoff** — `RateLimitError` honours `Retry-After`;
-  transient connect/timeout errors and 5xx get exponential backoff up
-  to 5 attempts. Non-retryable errors (`BadRequestError`, 4xx other than
-  429) surface immediately.
+* **Rate limiting** — a process-wide sliding-window limiter (`_RateLimiter`)
+  blocks each call until both an RPM and a TPM budget allow it through, so
+  parallel callers never blow a Bedrock account/model quota. Defaults are
+  conservative (`BEDROCK_MAX_RPM`/`BEDROCK_MAX_TPM`) — raise them via env
+  once you know your account's real Bedrock quota for the chosen model.
 
-* **Context-window safety** — gpt-4.1 advertises ~1M input tokens but
-  practical deployments are often configured lower. If a prompt would
-  blow the budget we head-and-tail truncate via tiktoken and log a
-  warning rather than failing the request.
+* **Retry-with-backoff** — Bedrock throttling (`ThrottlingException`) and
+  transient/server errors get exponential backoff up to `BEDROCK_MAX_RETRIES`
+  attempts. Non-retryable errors (`ValidationException`,
+  `AccessDeniedException`, `ResourceNotFoundException`, bad request shape)
+  surface immediately — retrying them would never succeed.
 
-* **Vision** — `image_path` reads the file from disk, base64-encodes it,
-  and embeds it as an `image_url` content part alongside the text. PNG,
-  JPEG, WEBP, and GIF are supported by GPT-4.1.
+* **Context-window safety** — head-and-tail truncation via tiktoken
+  (`cl100k_base` — a close-enough estimator for budgeting purposes across
+  model families; Bedrock doesn't publish a universal tokenizer) if a
+  prompt would blow `BEDROCK_MAX_CONTEXT`.
+
+* **Vision** — `image_path` reads the file from disk and attaches it as an
+  `image` content block (raw bytes, not a data-URL — Bedrock's Converse
+  API takes bytes directly). PNG, JPEG, WEBP, and GIF are supported by
+  Bedrock's multimodal models (e.g. Claude on Bedrock); a model that
+  doesn't support vision will reject the image block with a
+  `ValidationException`, surfaced as a `RuntimeError`.
 
 * **Logging** — every call gets a sequential `call_id`, the prompt tag
-  (`[ENTITY-EXTRACT]`, `[CHAT/CAPEX]`, etc.), input / output sizes, and
-  wall-clock duration so the existing operator playbook for tracing
-  pipeline slowness still works.
+  (`[ENTITY-EXTRACT]`, `[AGENTS/PING]`, etc.), input/output sizes, and
+  wall-clock duration so pipeline slowness stays traceable.
+
+* **Credentials** — this file does NOT resolve AWS credentials itself; it
+  hands region/model config to `boto3`, which resolves credentials via its
+  own standard chain (in priority order: explicit env vars
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` → shared
+  `~/.aws/credentials` profile → an attached IAM role). For local dev, just
+  paste your access key / secret key / region into `backend/.env` — see
+  `.env.example`.
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import mimetypes
 import os
@@ -56,20 +77,22 @@ from collections import deque
 from pathlib import Path
 from typing import Optional
 
-from openai import (
-    AzureOpenAI,
-    APIConnectionError,
-    APIStatusError,
-    APITimeoutError,
-    BadRequestError,
-    RateLimitError,
+import boto3
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    ReadTimeoutError,
 )
 
 try:
     import tiktoken
-    # gpt-4.1 isn't in the tiktoken model registry yet; cl100k_base is the
-    # encoder used by the rest of the GPT-4 family and gives a close enough
-    # token estimate for budgeting purposes.
+    # No Bedrock model publishes an official tokenizer via tiktoken;
+    # cl100k_base gives a close-enough estimate for rate-limit/context
+    # budgeting purposes regardless of which model is actually configured.
     _ENC = tiktoken.get_encoding("cl100k_base")
 except Exception:  # pragma: no cover — best-effort fallback
     _ENC = None
@@ -79,68 +102,40 @@ log = logging.getLogger("app.llm")
 
 
 # ── Configuration (env-driven) ───────────────────────────────────────
-# Non-secret values are read at import time. The API KEY is fetched
-# lazily on first client init via the centralised secret manager so it
-# always reflects the freshest Key Vault state and never lands in a
-# module-level constant that could leak via repr.
-AZURE_OPENAI_ENDPOINT    = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
-AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-12-01-preview").strip()
-AZURE_OPENAI_DEPLOYMENT  = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1").strip()
+AWS_REGION       = os.environ.get("AWS_REGION", "").strip() or os.environ.get("AWS_DEFAULT_REGION", "us-east-1").strip()
+BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "").strip()
 
+# Conservative defaults — Bedrock quotas are per-account/per-model and vary
+# a lot, so these are deliberately small. Raise via env once you know your
+# real on-demand (or provisioned-throughput) quota for the chosen model.
+MAX_RPM = int(os.environ.get("BEDROCK_MAX_RPM", "50"))
+MAX_TPM = int(os.environ.get("BEDROCK_MAX_TPM", "100000"))
 
-def _get_api_key() -> str:
-    """Resolve AZURE_OPENAI_API_KEY via Azure Key Vault, falling back to
-    the env var for local dev. The value is cached inside the secret
-    manager, so subsequent calls are free."""
-    from app.services.secret_manager import get_secret
-    return (get_secret(
-        'AZURE_OPENAI_API_KEY',
-        env_fallback='AZURE_OPENAI_API_KEY',
-    ) or '').strip()
+# Context-window budget. 200k is Claude-3-family's published input window;
+# override via env if the configured model has a different limit.
+MAX_CONTEXT_TOKENS = int(os.environ.get("BEDROCK_MAX_CONTEXT", "200000"))
+MAX_OUTPUT_TOKENS  = int(os.environ.get("BEDROCK_MAX_OUTPUT",  "4096"))
 
-# Deployment quotas. Defaults match the gpt-4.1 quota the user
-# provisioned (250 RPM / 250k TPM); override via env if Azure resizes
-# the deployment.
-MAX_RPM       = int(os.environ.get("AZURE_OPENAI_MAX_RPM", "250"))
-MAX_TPM       = int(os.environ.get("AZURE_OPENAI_MAX_TPM", "250000"))
+# Default per-request timeout (seconds).
+DEFAULT_TIMEOUT = int(os.environ.get("BEDROCK_TIMEOUT", "300"))
 
-# Context-window budget. gpt-4.1's published max is ~1M tokens; keep a
-# generous headroom for the response so we don't get cut off mid-answer.
-MAX_CONTEXT_TOKENS = int(os.environ.get("AZURE_OPENAI_MAX_CONTEXT", "1000000"))
-MAX_OUTPUT_TOKENS  = int(os.environ.get("AZURE_OPENAI_MAX_OUTPUT",  "16384"))
-
-# Default per-request timeout (seconds). Long-form structuring prompts
-# (FRD / Technical / SOP document generation) can take several minutes
-# end-to-end, so the default is generous.
-DEFAULT_TIMEOUT = int(os.environ.get("AZURE_OPENAI_TIMEOUT", "300"))
-
-# Retry budget. 429s usually clear within a minute; we cap total wall
+# Retry budget. Throttling usually clears within seconds; we cap total wall
 # time so a stuck quota doesn't pin a request forever.
-MAX_RETRIES = int(os.environ.get("AZURE_OPENAI_MAX_RETRIES", "5"))
+MAX_RETRIES = int(os.environ.get("BEDROCK_MAX_RETRIES", "5"))
 
-
-# ── GPT-5.1 configuration ────────────────────────────────────────────
-# Second Azure OpenAI deployment on a separate resource. The API key is
-# fetched via the secret manager under 'AZURE_OPENAI_GPT51_KEY' /
-# 'azure-openapi-gpt5-1-key' in Key Vault. All other config is
-# env-overridable; defaults point at the navicoreinst resource.
-AZURE_OPENAI_GPT51_ENDPOINT    = os.environ.get("AZURE_OPENAI_GPT51_ENDPOINT",    "https://navicoreinst.openai.azure.com/").strip()
-AZURE_OPENAI_GPT51_API_VERSION = os.environ.get("AZURE_OPENAI_GPT51_API_VERSION", "2024-12-01-preview").strip()
-GPT51_DEPLOYMENT               = os.environ.get("AZURE_OPENAI_GPT51_DEPLOYMENT",  "gpt-5.1").strip()
-GPT51_TARGET_URI               = "https://navicoreinst.openai.azure.com/openai/responses?api-version=2025-04-01-preview"
-
-MAX_RPM_GPT51 = int(os.environ.get("AZURE_OPENAI_GPT51_MAX_RPM", str(MAX_RPM)))
-MAX_TPM_GPT51 = int(os.environ.get("AZURE_OPENAI_GPT51_MAX_TPM", str(MAX_TPM)))
+_IMAGE_FORMATS = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp", ".gif": "gif"}
 
 
 # ── Client (lazy, thread-safe singleton) ─────────────────────────────
-_client: Optional[AzureOpenAI] = None
+_client = None
 _client_lock = threading.Lock()
 
 
-def _get_client() -> AzureOpenAI:
-    """Lazy double-checked-locking singleton. The AzureOpenAI client is
-    thread-safe per the SDK docs, so one shared instance is fine."""
+def _get_client():
+    """Lazy double-checked-locking singleton. A `boto3` bedrock-runtime
+    client is thread-safe, so one shared instance is fine. Credentials are
+    resolved by boto3's own default chain (env vars first — see module
+    docstring); we never read/store the secret values ourselves."""
     global _client
     if _client is not None:
         return _client
@@ -149,56 +144,17 @@ def _get_client() -> AzureOpenAI:
             return _client
         errors = check_configured()
         if errors:
-            raise RuntimeError(
-                "Azure OpenAI is not configured: " + "; ".join(errors)
-            )
-        _client = AzureOpenAI(
-            api_version=AZURE_OPENAI_API_VERSION,
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
-            api_key=_get_api_key(),
+            raise RuntimeError("AWS Bedrock is not configured: " + "; ".join(errors))
+        boto_cfg = BotoConfig(
+            region_name=AWS_REGION,
+            connect_timeout=10,
+            read_timeout=DEFAULT_TIMEOUT,
+            retries={"max_attempts": 0},  # we do our own retry/backoff below
         )
-        log.info("[LLM] AzureOpenAI client initialised — endpoint=%s deployment=%s api_version=%s",
-                 AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT, AZURE_OPENAI_API_VERSION)
+        _client = boto3.client("bedrock-runtime", config=boto_cfg)
+        log.info("[LLM] Bedrock client initialised — region=%s model=%s",
+                 AWS_REGION, BEDROCK_MODEL_ID)
         return _client
-
-
-# ── GPT-5.1 client (lazy, thread-safe singleton) ─────────────────────
-def _get_gpt51_api_key() -> str:
-    """Resolve AZURE_OPENAI_GPT51_KEY via Azure Key Vault, falling back to
-    the env var. Cached inside the secret manager after first fetch."""
-    from app.services.secret_manager import get_secret
-    return (get_secret(
-        'AZURE_OPENAI_GPT51_KEY',
-        env_fallback='AZURE_OPENAI_GPT51_KEY',
-    ) or '').strip()
-
-
-_gpt51_client: Optional[AzureOpenAI] = None
-_gpt51_client_lock = threading.Lock()
-
-
-def _get_gpt51_client() -> AzureOpenAI:
-    """Lazy double-checked-locking singleton for GPT-5.1."""
-    global _gpt51_client
-    if _gpt51_client is not None:
-        return _gpt51_client
-    with _gpt51_client_lock:
-        if _gpt51_client is not None:
-            return _gpt51_client
-        api_key = _get_gpt51_api_key()
-        if not AZURE_OPENAI_GPT51_ENDPOINT or not api_key:
-            raise RuntimeError(
-                "GPT-5.1 is not configured: AZURE_OPENAI_GPT51_ENDPOINT or "
-                "AZURE_OPENAI_GPT51_KEY is missing (checked Key Vault + env)"
-            )
-        _gpt51_client = AzureOpenAI(
-            api_version=AZURE_OPENAI_GPT51_API_VERSION,
-            azure_endpoint=AZURE_OPENAI_GPT51_ENDPOINT,
-            api_key=api_key,
-        )
-        log.info("[LLM] AzureOpenAI GPT-5.1 client initialised — endpoint=%s deployment=%s api_version=%s",
-                 AZURE_OPENAI_GPT51_ENDPOINT, GPT51_DEPLOYMENT, AZURE_OPENAI_GPT51_API_VERSION)
-        return _gpt51_client
 
 
 # ── Sliding-window rate limiter ──────────────────────────────────────
@@ -218,8 +174,6 @@ class _RateLimiter:
         self._tok_events: deque[tuple[float, int]] = deque()
 
     def acquire(self, tokens: int) -> None:
-        # Cap one-shot reservations to the per-minute budget so a single
-        # giant prompt isn't unsatisfiable.
         tokens = min(max(1, tokens), self.max_tpm)
         while True:
             with self._lock:
@@ -236,7 +190,6 @@ class _RateLimiter:
                     self._req_times.append(now)
                     self._tok_events.append((now, tokens))
                     return
-                # Compute how long to wait until at least one budget frees up.
                 waits = []
                 if not rpm_ok:
                     waits.append(60.0 - (now - self._req_times[0]))
@@ -246,8 +199,7 @@ class _RateLimiter:
             time.sleep(min(wait, 5.0))
 
 
-_limiter       = _RateLimiter(MAX_RPM,       MAX_TPM)
-_gpt51_limiter = _RateLimiter(MAX_RPM_GPT51, MAX_TPM_GPT51)
+_limiter = _RateLimiter(MAX_RPM, MAX_TPM)
 
 
 # ── Token / image helpers ────────────────────────────────────────────
@@ -280,13 +232,19 @@ def _truncate_for_context(prompt: str, max_input_tokens: int) -> tuple[str, int,
     return head + notice + tail, max_input_tokens, True
 
 
-def _encode_image_data_url(image_path: str) -> str:
+def _read_image_bytes(image_path: str) -> tuple[bytes, str]:
+    """Return (raw_bytes, bedrock_format) for a local image file. Bedrock's
+    Converse API wants raw bytes plus an explicit format string — no
+    base64/data-URL wrapping (that was an Azure OpenAI-specific need)."""
     p = Path(image_path).resolve()
     if not p.is_file():
         raise FileNotFoundError(f"Image not found: {p}")
-    mime = mimetypes.guess_type(p.name)[0] or "image/png"
-    data = base64.b64encode(p.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{data}"
+    ext = p.suffix.lower()
+    fmt = _IMAGE_FORMATS.get(ext)
+    if not fmt:
+        guessed = (mimetypes.guess_type(p.name)[0] or "").split("/")[-1]
+        fmt = _IMAGE_FORMATS.get(f".{guessed}", "png")
+    return p.read_bytes(), fmt
 
 
 # ── Public API ───────────────────────────────────────────────────────
@@ -302,40 +260,43 @@ def complete(
     tag: str = "[LLM]",
     system: Optional[str] = None,
     max_output_tokens: Optional[int] = None,
-    model: str = "gpt-4.1",
+    model: Optional[str] = None,
 ) -> str:
-    """Send a single user prompt to Azure OpenAI GPT-4.1 and return the
-    response text.
-
-    Used everywhere via the module-level `run_llm` shim in
-    `legacy_routes.py`. The positional argument order is stable so
-    callers can pass `(prompt, image_path, timeout)` without keyword
-    plumbing.
+    """Send a single user prompt to AWS Bedrock and return the response
+    text.
 
     Parameters
     ----------
     prompt : str
-        The user prompt. If it exceeds the configured context window,
-        it is head-and-tail truncated with a visible notice in the middle.
+        The user prompt. If it exceeds the configured context window, it
+        is head-and-tail truncated with a visible notice in the middle.
     image_path : str, optional
-        Absolute path to an image to attach (vision). PNG/JPEG/WEBP/GIF.
+        Absolute path to an image to attach (vision). PNG/JPEG/WEBP/GIF —
+        only meaningful if the configured model supports multimodal input.
     timeout : int, optional
-        Per-request timeout in seconds. Defaults to AZURE_OPENAI_TIMEOUT.
+        Per-request read timeout in seconds. NOTE: boto3 sets this at
+        client-construction time, not per-call — the shared client uses
+        BEDROCK_TIMEOUT; passing a different value here is accepted for
+        signature compatibility but only takes effect on the very first
+        call (which builds the shared client). Change BEDROCK_TIMEOUT in
+        `.env` if you need a different default.
     tag : str
         Short label used in log lines so an operator can trace which
-        pipeline stage the call belongs to. Examples: `[ENTITY-EXTRACT]`,
-        `[CHAT/CAPEX]`, `[STRUCTURING]`.
+        pipeline stage the call belongs to.
     system : str, optional
-        Optional system message. Most legacy prompts already include
-        their role/instruction header inline; this is for new code.
+        Optional system message.
     max_output_tokens : int, optional
         Override the default output budget for this call.
+    model : str, optional
+        Override which Bedrock model id/ARN to invoke for this call.
+        Defaults to `BEDROCK_MODEL_ID` from the environment — the model is
+        intentionally not hard-coded in this file.
 
     Returns
     -------
     str
         The assistant's reply, stripped of trailing whitespace. Empty
-        string is possible if the model returned no content.
+        string is possible if the model returned no text content.
     """
     global _CALL_COUNT
     with _CALL_LOCK:
@@ -345,124 +306,116 @@ def complete(
     req_timeout = timeout or DEFAULT_TIMEOUT
     max_out = max_output_tokens or MAX_OUTPUT_TOKENS
     max_in = max(1024, MAX_CONTEXT_TOKENS - max_out)
+    model_id = (model or BEDROCK_MODEL_ID or "").strip()
 
     prompt_text, prompt_tokens, was_truncated = _truncate_for_context(prompt or "", max_in)
     if was_truncated:
         log.warning("%s call #%d prompt truncated to ~%d tokens (original exceeded the input budget)",
                     tag, call_id, max_in)
 
-    # Build the chat message payload. For text-only calls we send the
-    # prompt as a plain string (lighter wire format); only when an
-    # image is attached do we switch to the multi-part content array.
+    content_blocks: list[dict] = []
     if image_path:
         try:
-            data_url = _encode_image_data_url(image_path)
-            user_content = [
-                {"type": "image_url", "image_url": {"url": data_url}},
-                {"type": "text", "text": prompt_text},
-            ]
+            data, fmt = _read_image_bytes(image_path)
+            content_blocks.append({"image": {"format": fmt, "source": {"bytes": data}}})
         except Exception as e:
             log.error("%s call #%d image attach failed (%s) — sending text only",
                       tag, call_id, e)
-            user_content = prompt_text
-    else:
-        user_content = prompt_text
+    content_blocks.append({"text": prompt_text})
 
-    messages: list[dict] = []
+    messages = [{"role": "user", "content": content_blocks}]
+
+    log.info("%s call #%d → %d input chars (~%d tokens), timeout=%ds%s model=%s",
+              tag, call_id, len(prompt_text), prompt_tokens, req_timeout,
+              f", image={Path(image_path).name}" if image_path else "", model_id or "<unset>")
+
+    if not model_id:
+        raise RuntimeError(
+            "BEDROCK_MODEL_ID is not set — pick a Bedrock model id/ARN "
+            "(e.g. an Anthropic/Meta/Amazon model on Bedrock) and set it "
+            "in backend/.env, or pass model= explicitly."
+        )
+
+    client = _get_client()
+    _limiter.acquire(prompt_tokens + max_out)
+
+    kwargs: dict = {
+        "modelId": model_id,
+        "messages": messages,
+        "inferenceConfig": {"maxTokens": max_out},
+    }
     if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": user_content})
-
-    log.info("%s call #%d → %d input chars (~%d tokens), timeout=%ds%s",
-             tag, call_id, len(prompt_text), prompt_tokens, req_timeout,
-             f", image={Path(image_path).name}" if image_path else "")
-
-    # Select client, deployment, and rate limiter based on the requested model.
-    if model == "gpt-5.1":
-        active_client     = _get_gpt51_client()
-        active_deployment = GPT51_DEPLOYMENT
-        active_limiter    = _gpt51_limiter
-    else:
-        active_client     = _get_client()
-        active_deployment = AZURE_OPENAI_DEPLOYMENT
-        active_limiter    = _limiter
-
-    # Reserve quota for input + reserved output BEFORE the network call
-    # so concurrent callers serialise cleanly against TPM/RPM limits.
-    active_limiter.acquire(prompt_tokens + max_out)
+        kwargs["system"] = [{"text": system}]
 
     t0 = time.time()
     last_exc: Optional[Exception] = None
     backoff = 1.0
 
+    _RETRYABLE_CODES = {
+        "ThrottlingException", "ServiceUnavailableException",
+        "InternalServerException", "ModelTimeoutException",
+        "ModelNotReadyException",
+    }
+    _NON_RETRYABLE_CODES = {
+        "ValidationException", "AccessDeniedException",
+        "ResourceNotFoundException", "ModelErrorException",
+    }
+
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = active_client.chat.completions.create(
-                model=active_deployment,
-                messages=messages,
-                max_tokens=max_out,
-                timeout=req_timeout,
-            )
+            resp = client.converse(**kwargs)
             dur = time.time() - t0
-            choice = resp.choices[0] if resp.choices else None
-            content = (choice.message.content if choice and choice.message else "") or ""
-            content = content.strip()
-            usage = getattr(resp, "usage", None)
-            in_tok  = getattr(usage, "prompt_tokens", None) if usage else None
-            out_tok = getattr(usage, "completion_tokens", None) if usage else None
+            blocks = resp.get("output", {}).get("message", {}).get("content", [])
+            content = "".join(b.get("text", "") for b in blocks if "text" in b).strip()
+            usage = resp.get("usage") or {}
             log.info("%s call #%d done in %.1fs → %d chars out (in_tok=%s out_tok=%s)",
-                     tag, call_id, dur, len(content),
-                     in_tok if in_tok is not None else "?",
-                     out_tok if out_tok is not None else "?")
+                      tag, call_id, dur, len(content),
+                      usage.get("inputTokens", "?"), usage.get("outputTokens", "?"))
             return content
 
-        except RateLimitError as e:
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in _NON_RETRYABLE_CODES:
+                log.error("%s call #%d non-retryable Bedrock error %s: %s", tag, call_id, code, e)
+                raise RuntimeError(f"AWS Bedrock error ({code}): {e}") from e
             last_exc = e
             retry_after = _retry_after_seconds(e) or backoff
-            log.warning("%s call #%d rate-limited (attempt %d/%d) — sleeping %.1fs",
-                        tag, call_id, attempt, MAX_RETRIES, retry_after)
+            log.warning("%s call #%d Bedrock error %s (attempt %d/%d) — retrying in %.1fs",
+                        tag, call_id, code or "unknown", attempt, MAX_RETRIES, retry_after)
             time.sleep(retry_after)
             backoff = min(backoff * 2, 30.0)
 
-        except (APITimeoutError, APIConnectionError) as e:
+        except (ConnectTimeoutError, ReadTimeoutError, EndpointConnectionError) as e:
             last_exc = e
             log.warning("%s call #%d network error (attempt %d/%d): %s — retrying in %.1fs",
                         tag, call_id, attempt, MAX_RETRIES, e, backoff)
             time.sleep(backoff)
             backoff = min(backoff * 2, 30.0)
 
-        except BadRequestError as e:
-            # 400-class errors (bad payload, content filter, oversized
-            # image, etc.) don't get better on retry.
-            log.error("%s call #%d bad request (no retry): %s", tag, call_id, e)
-            raise RuntimeError(f"Azure OpenAI bad request: {e}") from e
+        except NoCredentialsError as e:
+            log.error("%s call #%d no AWS credentials found: %s", tag, call_id, e)
+            raise RuntimeError(
+                "No AWS credentials found — set AWS_ACCESS_KEY_ID / "
+                "AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN if using "
+                "temporary credentials) in backend/.env"
+            ) from e
 
-        except APIStatusError as e:
+        except BotoCoreError as e:
             last_exc = e
-            status = getattr(e, "status_code", None)
-            if status and 500 <= status < 600:
-                log.warning("%s call #%d server error %s (attempt %d/%d) — retrying in %.1fs",
-                            tag, call_id, status, attempt, MAX_RETRIES, backoff)
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 30.0)
-                continue
-            log.error("%s call #%d non-retryable status %s: %s",
-                      tag, call_id, status, e)
-            raise RuntimeError(f"Azure OpenAI error: {e}") from e
+            log.warning("%s call #%d boto core error (attempt %d/%d): %s — retrying in %.1fs",
+                        tag, call_id, attempt, MAX_RETRIES, e, backoff)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 30.0)
 
-    log.error("%s call #%d gave up after %d retries: %s",
-              tag, call_id, MAX_RETRIES, last_exc)
-    raise RuntimeError(f"Azure OpenAI request failed after {MAX_RETRIES} retries: {last_exc}")
+    log.error("%s call #%d gave up after %d retries: %s", tag, call_id, MAX_RETRIES, last_exc)
+    raise RuntimeError(f"AWS Bedrock request failed after {MAX_RETRIES} retries: {last_exc}")
 
 
-def _retry_after_seconds(exc: Exception) -> Optional[float]:
-    """Pull `Retry-After` off a 429 response if Azure provided one."""
+def _retry_after_seconds(exc: ClientError) -> Optional[float]:
+    """Pull a Retry-After-style hint off a throttling response, if present."""
     try:
-        resp = getattr(exc, "response", None)
-        if resp is None:
-            return None
-        headers = getattr(resp, "headers", None) or {}
-        ra = headers.get("Retry-After") or headers.get("retry-after")
+        headers = exc.response.get("ResponseMetadata", {}).get("HTTPHeaders", {}) or {}
+        ra = headers.get("retry-after") or headers.get("Retry-After")
         return float(ra) if ra else None
     except Exception:
         return None
@@ -470,15 +423,19 @@ def _retry_after_seconds(exc: Exception) -> Optional[float]:
 
 def check_configured() -> list[str]:
     """Return a list of human-readable configuration errors. Empty list
-    means the service is ready to serve requests. The API key is looked
-    up via the secret manager (Key Vault first, env fallback) so an
-    operator who has only configured one of the two sees the missing
-    one named precisely."""
+    means the service is ready to serve requests."""
     errors: list[str] = []
-    if not AZURE_OPENAI_ENDPOINT:
-        errors.append("AZURE_OPENAI_ENDPOINT is not set")
-    if not _get_api_key():
-        errors.append("AZURE_OPENAI_API_KEY is not available (checked Key Vault + env)")
-    if not AZURE_OPENAI_DEPLOYMENT:
-        errors.append("AZURE_OPENAI_DEPLOYMENT is not set")
+    if not AWS_REGION:
+        errors.append("AWS_REGION is not set")
+    if not BEDROCK_MODEL_ID:
+        errors.append("BEDROCK_MODEL_ID is not set (pick a model id/ARN in AWS Bedrock)")
+    try:
+        creds = boto3.Session().get_credentials()
+        if creds is None:
+            errors.append(
+                "No AWS credentials found (checked AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY "
+                "env vars, ~/.aws/credentials, and IAM role)"
+            )
+    except Exception as e:  # pragma: no cover — defensive, boto3 session init rarely fails
+        errors.append(f"Could not resolve AWS credentials: {e}")
     return errors

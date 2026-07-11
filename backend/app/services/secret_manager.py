@@ -1,13 +1,14 @@
 """
 Centralised secret management.
 
-Single source of truth for every credential the backend touches. Today
-that means three secrets:
+Single source of truth for every Key-Vault-backed credential the backend
+touches. ADAPTATION NOTE (ai-discovery-canvas): AWS Bedrock credentials
+(chat via llm_service.py, embeddings via rag/embedder.py) are NOT resolved
+here — boto3 reads AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN
+directly via its own default credential chain. What's left in this map:
 
     Logical name (env var name)   Key Vault secret name
     ───────────────────────────   ───────────────────────────
-    AZURE_OPENAI_API_KEY          azure-openai-api-key
-    POSTGRES_PASSWORD             postgres-password
     NEO4J_PASSWORD                neo4j-password
 
 Resolution order (per `get(logical_name)`):
@@ -80,20 +81,20 @@ def _resolve_vault_url() -> str:
 # already uses) to the SECRET NAME stored in Key Vault. Adding a new
 # secret = one line here + one `get_secret(...)` call at the consumer.
 SECRET_NAME_MAP: Dict[str, str] = {
-    'AZURE_OPENAI_API_KEY':  'azure-openai-api-key',
-    # GPT-5.1 deployment key — separate resource from GPT-4.1.
-    # KV identifier: https://navicore.vault.azure.net/secrets/azure-openapi-gpt5-1-key/03591dcc140b42ffb430f6ad03666176
-    'AZURE_OPENAI_GPT51_KEY': 'azure-openapi-gpt5-1-key',
     'POSTGRES_PASSWORD':     'postgres-password',
     'NEO4J_PASSWORD':        'neo4j-password',
     # OAuth client secrets for per-user source connections (one per provider).
     # client_id is NON-secret config (env); only the secret lives in KV.
     'GITHUB_OAUTH_CLIENT_SECRET': 'oauth-client-github-secret',
     'AZURE_DEVOPS_OAUTH_CLIENT_SECRET': 'oauth-client-azure-devops-secret',
-    # Azure OpenAI embedding deployment (text-embedding-3-large). Lives on
-    # its own resource/key so the embedding pipeline (app/services/rag)
-    # never reuses or hard-codes the chat key.
-    'EMBEDDING_API_KEY':     'embedding-api-key',
+    # App-only (client credentials) auth for the SAME NaviCORE app
+    # registration used for delegated sign-in — lets graph_teams.py look
+    # up a meeting under its ORGANIZER's identity when the signed-in
+    # user was only invited (delegated /me/onlineMeetings can never do
+    # this). Requires the app OWNER to add a client secret AND an
+    # Application-permission admin consent grant; see graph_teams.py's
+    # module docstring for the exact Azure Portal steps.
+    'TEAMS_CLIENT_SECRET': 'teams-client-secret',
 }
 
 
@@ -394,7 +395,7 @@ def preload(logical_names: Optional[list] = None) -> Dict[str, str]:
 
 def source_of(logical_name: str) -> str:
     """Return where a previously-resolved secret came from. Useful for
-    `/health` style endpoints to show 'AZURE_OPENAI_API_KEY: keyvault'
+    `/health` style endpoints to show 'NEO4J_PASSWORD: keyvault'
     without ever exposing the value."""
     return _source.get(logical_name, 'unresolved')
 

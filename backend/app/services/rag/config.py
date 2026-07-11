@@ -1,24 +1,19 @@
 """
 Configuration for the retrieval-augmented (RAG) subsystem.
 
-Everything here is env-driven so the same code runs in App Service /
-Container Apps / a dev box without edits. The embedding API KEY is the
-one value that is NEVER read here — it is fetched lazily from Azure Key
-Vault (secret name ``embedding-api-key``) by ``embedder.py`` via the
-centralised secret manager, so it can't land in a module constant.
+ADAPTATION NOTE (ai-discovery-canvas): originally Azure OpenAI
+``text-embedding-3-large``; REWRITTEN to use AWS Bedrock embeddings — no
+Azure dependency remains anywhere in this project (chat/completion via
+``llm_service.py`` and embeddings via this package both call Bedrock now).
+Credentials are resolved by boto3's standard chain — the SAME
+``AWS_ACCESS_KEY_ID`` / ``AWS_SECRET_ACCESS_KEY`` / ``AWS_SESSION_TOKEN`` /
+``AWS_REGION`` env vars used by ``llm_service.py`` for chat — nothing
+embedding-specific to configure beyond the model id/dimension below.
 
-Azure OpenAI embedding deployment (defaults match the provisioned
-resource):
-
-    endpoint    https://navicoreinst.openai.azure.com/
-    deployment  text-embedding-3-large
-    api_version 2024-02-01
-    dimensions  3072  (text-embedding-3-large native size)
-
-Rate limits (the deployment quota the pipeline must respect):
-
-    tokens / minute   250,000
-    requests / minute 1,500
+Bedrock embedding model families ``embedder.py`` knows how to call today:
+Amazon Titan Embed Text (v1 & v2) and Cohere Embed (English/Multilingual
+v3), picked by model-id prefix. See ``embedder.py``'s ``_build_request()``
+if you need to add another provider's request/response shape.
 """
 
 from __future__ import annotations
@@ -34,41 +29,41 @@ def _int(name: str, default: int) -> int:
         return default
 
 
-# ── Azure OpenAI embedding deployment ────────────────────────────────
-EMBED_ENDPOINT    = os.environ.get('AZURE_EMBEDDING_ENDPOINT',
-                                   'https://navicoreinst.openai.azure.com/').strip()
-EMBED_DEPLOYMENT  = os.environ.get('AZURE_EMBEDDING_DEPLOYMENT', 'text-embedding-3-large').strip()
-EMBED_MODEL       = os.environ.get('AZURE_EMBEDDING_MODEL', 'text-embedding-3-large').strip()
-EMBED_API_VERSION = os.environ.get('AZURE_EMBEDDING_API_VERSION', '2024-02-01').strip()
+# ── AWS Bedrock embedding model ───────────────────────────────────────
+# EMBED_MODEL doubles as (a) the Bedrock model id passed to invoke_model
+# and (b) the cache namespace key read by cache.py/service.py/store.py —
+# kept as one name so the rest of the RAG package needed zero changes
+# beyond this file + embedder.py.
+EMBED_MODEL = os.environ.get('BEDROCK_EMBEDDING_MODEL_ID', 'amazon.titan-embed-text-v2:0').strip()
 
-# Native embedding width for text-embedding-3-large. The model also
-# supports the `dimensions` parameter for shortened vectors; keep the
-# native size unless an operator deliberately reduces it (the FAISS index
-# width must match, so changing this means a full reindex).
-EMBED_DIM = _int('AZURE_EMBEDDING_DIM', 3072)
+# Native output width for the default model (Titan Embed Text v2 supports
+# 256/512/1024, default 1024; Titan v1 is fixed at 1536; Cohere Embed v3 is
+# fixed at 1024). The FAISS index width must match whichever model you
+# configure exactly — changing this means a full reindex (delete
+# data/rag/*).
+EMBED_DIM = _int('BEDROCK_EMBEDDING_DIM', 1024)
 
-# ── Deployment quota (the pipeline throttles to stay under these) ─────
-EMBED_MAX_TPM = _int('AZURE_EMBEDDING_MAX_TPM', 250_000)
-EMBED_MAX_RPM = _int('AZURE_EMBEDDING_MAX_RPM', 1_500)
+# ── Quota the pipeline throttles to ──────────────────────────────────
+# Bedrock embedding quotas are per-account/per-model and vary a lot;
+# these are conservative defaults — raise via env once you know your real
+# on-demand throughput for the chosen model.
+EMBED_MAX_TPM = _int('BEDROCK_EMBED_MAX_TPM', 100_000)
+EMBED_MAX_RPM = _int('BEDROCK_EMBED_MAX_RPM', 60)
 
-# ── Batching / parallelism ───────────────────────────────────────────
-# Inputs packed into a single embeddings request. Azure accepts up to
-# 2048 inputs per call; 128 keeps each request well under the per-request
-# token ceiling while amortising HTTP overhead.
-EMBED_BATCH_SIZE = _int('AZURE_EMBEDDING_BATCH_SIZE', 128)
+# ── Parallelism ───────────────────────────────────────────────────────
+# NOTE: unlike Azure's embeddings.create (which accepts a list of inputs
+# per call), Bedrock's invoke_model embeds exactly ONE text per call for
+# every model family embedder.py supports today — there is no multi-input
+# batch request. So there's no batch-size knob here anymore; embed_texts()
+# parallelizes across individual texts (bounded by EMBED_MAX_WORKERS)
+# instead of grouping them into request batches.
+EMBED_MAX_WORKERS = _int('BEDROCK_EMBED_MAX_WORKERS', min(8, (os.cpu_count() or 4)))
 
-# Concurrent in-flight requests. Defaults to the CPU count (capped) so
-# the local embedding/normalisation work parallelises without starving
-# the box; the sliding-window limiter still enforces the RPM/TPM quota
-# regardless of how many workers push at once.
-EMBED_MAX_WORKERS = _int('AZURE_EMBEDDING_MAX_WORKERS', min(8, (os.cpu_count() or 4)))
+# Hard per-input token cap — conservative default; Titan Embed v2 accepts
+# up to 8192 tokens.
+EMBED_MAX_INPUT_TOKENS = _int('BEDROCK_EMBED_MAX_INPUT_TOKENS', 8000)
 
-# Hard per-input token cap. text-embedding-3-large accepts 8192 tokens;
-# we trim a touch below to leave headroom for the tokenizer estimate
-# being slightly off.
-EMBED_MAX_INPUT_TOKENS = _int('AZURE_EMBEDDING_MAX_INPUT_TOKENS', 8000)
-
-EMBED_MAX_RETRIES = _int('AZURE_EMBEDDING_MAX_RETRIES', 6)
+EMBED_MAX_RETRIES = _int('BEDROCK_EMBED_MAX_RETRIES', 6)
 
 # ── Semantic chunking ────────────────────────────────────────────────
 CHUNK_TARGET_TOKENS  = _int('RAG_CHUNK_TOKENS', 512)
@@ -83,8 +78,8 @@ RETRIEVE_MIN_SCORE = float(os.environ.get('RAG_MIN_SCORE', '0.18') or 0.18)
 
 
 def data_dir() -> Path:
-    """`backend/data/rag/` by default — sibling of the existing Neo4j JSON
-    backups. Override with RAG_DATA_DIR for a mounted volume in prod."""
+    """`backend/data/rag/` by default. Override with RAG_DATA_DIR for a
+    mounted volume in prod."""
     override = os.environ.get('RAG_DATA_DIR', '').strip()
     if override:
         return Path(override)
@@ -93,7 +88,8 @@ def data_dir() -> Path:
 
 
 def is_configured() -> bool:
-    """Non-secret readiness: an endpoint + deployment are set. The key
-    itself is probed separately by the embedder so a missing key surfaces
-    a precise error rather than silently disabling retrieval."""
-    return bool(EMBED_ENDPOINT and EMBED_DEPLOYMENT)
+    """Non-secret readiness: a Bedrock embedding model id is set. AWS
+    credentials themselves are probed separately by
+    embedder.is_available() so a missing/invalid credential surfaces a
+    precise error rather than silently disabling retrieval."""
+    return bool(EMBED_MODEL)

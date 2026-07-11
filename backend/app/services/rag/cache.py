@@ -92,7 +92,13 @@ class EmbeddingCache:
                 vecs = (np.vstack([v for _, v in items])
                         if items else np.zeros((0, config.EMBED_DIM), dtype='float32'))
                 tmp = self._path.with_suffix('.npz.tmp')
-                np.savez(tmp, keys=keys, vecs=vecs.astype('float32'))
+                # np.savez appends '.npz' to a bare path/string that doesn't
+                # already end with it, so passing `tmp` (ending in '.tmp')
+                # silently writes to 'tmp.npz' instead — os.replace then
+                # can't find `tmp` and this whole flush becomes a no-op.
+                # Passing an open file object bypasses that auto-suffixing.
+                with open(tmp, 'wb') as fh:
+                    np.savez(fh, keys=keys, vecs=vecs.astype('float32'))
                 os.replace(tmp, self._path)
                 self._dirty = False
                 log.info('[RAG/CACHE] persisted %d embeddings → %s',

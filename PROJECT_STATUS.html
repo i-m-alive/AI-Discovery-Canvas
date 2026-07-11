@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AI Discovery Canvas — Project Status &amp; Build Plan</title>
+<style>
+:root{
+  --ink:#1f2733; --muted:#6b7280; --accent:#2f6fb3; --accent-weak:#eaf2fb;
+  --teal:#1b9384; --line:#e4e8ee; --line2:#cfd6df; --bg:#fbfcfd; --alt:#f5f7fa;
+  --green:#2f8f5b; --amber:#c9881f; --red:#c0463b; --indigo:#3f4d8c;
+}
+*{box-sizing:border-box}
+body{
+  font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink); background:var(--bg); margin:0; line-height:1.6;
+}
+.wrap{max-width:980px; margin:0 auto; padding:0 24px 80px;}
+.cover{
+  min-height:52vh; display:flex; flex-direction:column; justify-content:center;
+  align-items:center; text-align:center; border-bottom:1px solid var(--line);
+  margin-bottom:44px; padding:52px 20px;
+}
+.cover .eyebrow{color:var(--muted); font-size:13px; letter-spacing:.06em; text-transform:uppercase; margin-bottom:16px;}
+.cover h1{ font-size:38px; color:var(--accent); margin:0 0 10px; letter-spacing:-0.02em; }
+.cover .subtitle{font-size:18px; color:var(--ink); margin:0 0 8px; font-weight:500;}
+.cover .meta{font-size:13.5px; color:var(--muted); margin-top:18px;}
+.cover .meta b{color:var(--ink)}
+
+.headline-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:0 0 40px;}
+.hstat{background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 14px; text-align:center; box-shadow:0 2px 8px rgba(24,39,64,.04);}
+.hstat .num{font-size:26px; font-weight:800; color:var(--accent);}
+.hstat .lbl{font-size:12px; color:var(--muted); margin-top:4px;}
+@media (max-width:760px){ .headline-stats{grid-template-columns:1fr 1fr} }
+
+nav.toc{
+  background:#fff; border:1px solid var(--line); border-radius:12px;
+  padding:22px 26px; margin-bottom:44px; box-shadow:0 2px 10px rgba(24,39,64,.05);
+}
+nav.toc h2{font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 12px;}
+nav.toc ol{margin:0; padding-left:20px; columns:2; column-gap:28px;}
+nav.toc li{margin-bottom:7px; font-size:14.5px;}
+nav.toc a{color:var(--accent); text-decoration:none;}
+nav.toc a:hover{text-decoration:underline;}
+
+section{margin-bottom:44px; scroll-margin-top:20px;}
+h1.sec{
+  font-size:23px; color:var(--accent); border-bottom:2px solid var(--accent-weak);
+  padding-bottom:10px; margin:0 0 18px;
+}
+h2.sub{font-size:17.5px; color:var(--ink); margin:26px 0 10px;}
+p{margin:0 0 14px; font-size:15px;}
+ul{margin:0 0 14px; padding-left:22px;}
+li{margin-bottom:6px; font-size:15px;}
+strong{color:var(--ink)}
+code{background:#eef1f5; border-radius:4px; padding:1px 6px; font-size:13px;}
+
+table{width:100%; border-collapse:collapse; margin:14px 0 6px; font-size:13.8px;}
+th{background:var(--accent); color:#fff; text-align:left; padding:9px 12px; font-weight:600; font-size:12.8px;}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+tr:nth-child(even) td{background:var(--alt);}
+.caption{font-size:12.5px; color:var(--muted); font-style:italic; margin:0 0 22px;}
+
+.callout{background:var(--accent-weak); border-left:3px solid var(--accent); border-radius:6px; padding:14px 18px; font-size:14px; margin:14px 0 20px;}
+.callout.warn{ background:#fbecea; border-left-color:var(--red); }
+.callout.good{ background:#eaf6f0; border-left-color:var(--green); }
+.callout.amber{ background:#faf1e1; border-left-color:var(--amber); }
+
+.tag{display:inline-block; font-size:11px; font-weight:700; border-radius:10px; padding:2px 9px; white-space:nowrap;}
+.tag.done{color:var(--green); background:#eaf6f0;}
+.tag.partial{color:var(--amber); background:#faf1e1;}
+.tag.todo{color:var(--red); background:#fbecea;}
+.tag.excluded{color:var(--muted); background:#eef1f5;}
+
+.pbar-row{display:flex; align-items:center; gap:12px; margin:10px 0 18px;}
+.pbar-label{width:250px; font-size:13.5px; color:#3a4350; flex:none;}
+.pbar-track{flex:1; height:10px; background:#eceff3; border-radius:6px; overflow:hidden;}
+.pbar-fill{height:100%; border-radius:6px; background:linear-gradient(90deg,var(--accent),var(--teal));}
+.pbar-fill.risk{background:linear-gradient(90deg,var(--amber),var(--red));}
+.pbar-pct{width:44px; text-align:right; font-size:13px; font-weight:700; color:var(--ink); flex:none;}
+
+.phase{border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:12px 0 18px; background:#fff;}
+.phase .ph{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+.phase h3{margin:0; font-size:16px; color:var(--ink);}
+.phase .est{font-size:12.5px; font-weight:700; color:var(--accent); background:var(--accent-weak); border-radius:10px; padding:3px 10px;}
+.phase .est.risk{color:var(--red); background:#fbecea;}
+
+footer{text-align:center; color:var(--muted); font-size:12.5px; margin-top:56px; padding-top:18px; border-top:1px solid var(--line);}
+.top-link{position:fixed; bottom:22px; right:22px; background:var(--accent); color:#fff; border-radius:50%; width:42px; height:42px; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 14px rgba(47,111,179,.35); font-size:18px;}
+@media print{ .top-link{display:none} nav.toc{break-inside:avoid} }
+</style>
+</head>
+<body>
+
+<div class="cover" id="top">
+  <div class="eyebrow">Living Status Document — Audited Against the Running Code, Not Memory</div>
+  <h1>AI Discovery Canvas</h1>
+  <div class="subtitle">Where We Actually Stand After Phases 1–4</div>
+  <div class="meta">Snapshot as of <b>10 Jul 2026</b> &nbsp;·&nbsp; 1 commit on <code>main</code> + 25 uncommitted files &nbsp;·&nbsp; verified live against both running servers</div>
+</div>
+
+<div class="wrap">
+
+<div class="headline-stats">
+  <div class="hstat"><div class="num">~70%</div><div class="lbl">of the 12 functional requirements structurally built</div></div>
+  <div class="hstat"><div class="num">~30%</div><div class="lbl">production-readiness (tests, deploy, multi-tenancy, security hardening)</div></div>
+  <div class="hstat"><div class="num">0</div><div class="lbl">automated tests committed to the repo (all verification so far was ad-hoc)</div></div>
+  <div class="hstat"><div class="num">1</div><div class="lbl">git commit — everything since Phase 1 is uncommitted</div></div>
+</div>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s1">1. Where we actually are, honestly</a></li>
+    <li><a href="#s2">2. What's built and verified, phase by phase</a></li>
+    <li><a href="#s3">3. Functional requirement scorecard (FR-01…FR-12)</a></li>
+    <li><a href="#s4">4. What's missing that I haven't flagged clearly before</a></li>
+    <li><a href="#s5">5. Things claimed "done" that need one more real-world check</a></li>
+    <li><a href="#s6">6. Recommended next steps, in order</a></li>
+    <li><a href="#s7">7. Ideas worth considering (not requested, not started)</a></li>
+    <li><a href="#s8">8. Housekeeping — commit, ports, config drift</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h1 class="sec">1. Where we actually are, honestly</h1>
+  <p>The product loop works end to end: a Business Analyst can open the canvas, move between Prepare/Run/Synthesize/Project, run any of 18 real AI agents against real board content, transcript, and uploaded documents, approve/edit/reject the draft, watch it file into the artifact library with provenance, and export a real DOCX or Markdown handoff package. Deep research, draw.io workflow diagrams, live microphone transcription, and a Teams transcript pull (on NaviCore's real Entra app registration) are all wired and passed their tests. That is genuinely most of the product surface from the Master Documentation.</p>
+  <p>But "the code path exists and passes mocked tests" is a different claim from "this is production-ready," and I want to be precise about which one is true where. Nothing has been tested against a <em>live</em> Bedrock model yet (no credentials are configured) — every agent, the copilot's intent router, and deep research all currently return the same one error path (<code>BEDROCK_MODEL_ID is not set</code>), which is correct behaviour but means the actual <em>quality</em> of model output is completely unverified. There is also no automated test suite living in the repository — every check I've described across four phases was a script I ran once in this session, not a pytest file you or a CI system can re-run. And several structural gaps (single shared board, no real-time collaboration, guardrails copied but never invoked) are the kind of thing that's fine for a demo and a real problem for a second user or a regulated client. Section 4 is the honest list.</p>
+</section>
+
+<section id="s2">
+  <h1 class="sec">2. What's built and verified, phase by phase</h1>
+  <table>
+    <tr><th>Phase</th><th>What exists</th><th>How it was verified</th></tr>
+    <tr><td><b>1</b> — Canvas skeleton</td><td>Full prototype UI ported pixel-for-pixel into Next.js (zones, nodes, connectors, minimap, drawers, presentation mode); board persistence to a JSON file via Flask</td><td>Live HTTP roundtrip through the actual Next.js rewrite; <code>next build</code>; manual visual check by you</td></tr>
+    <tr><td><b>2</b> — Real agents</td><td>18 agents (all but Transcribe) on AWS Bedrock; strict-JSON parsing; server-side HTML sanitisation; real file upload/extraction (PDF/DOCX/XLSX/CSV/HTML/TXT/ZIP); Edit/Reject now functional; provenance-tagged artifacts</td><td>8 mocked-LLM pipeline tests via Flask's test client (auth gates, XSS-in-model-output stripped, fenced-JSON parsing, upload roundtrip) — run once in-session, not committed</td></tr>
+    <tr><td><b>3</b> — Live capture</td><td>Real browser speech-to-text into the transcript dock; Microsoft Teams device-code sign-in on NaviCore's actual Entra tenant/client id + VTT transcript fetch/parse; Granola flow stubbed pending an API key</td><td>VTT parser unit-tested; <b>live device-code call against real Microsoft endpoints succeeded</b> (returned a genuine sign-in code) after fixing a macOS SSL-certificate gap; the transcript-download path itself has NOT been exercised against a real meeting</td></tr>
+    <tr><td><b>4</b> — Integrations &amp; handoff</td><td>draw.io: deterministic step-list → valid <code>.drawio</code> XML, embedded editor, download/import; Deep research agent (multi-call: per-doc summarise → per-URL fetch+summarise → synthesis); copilot intent router (chat → dispatches an agent when the message is really a work request); uploads indexed into RAG (FAISS + Bedrock embeddings) so every agent/chat call retrieves from the whole corpus; real DOCX/Markdown handoff export</td><td>XML round-trip + escaping test; DOCX generated and re-opened with python-docx; dispatch-vs-reply routing tested with mocked responses; export downloads verified through the live rewrite</td></tr>
+  </table>
+  <div class="callout amber"><b>Every test above ran once, manually, in this conversation.</b> None of it is a <code>pytest</code> file in the repo. If you (or anyone else) change a prompt or a route next week, nothing will automatically catch a regression — Section 6 makes writing that suite the first recommended step.</div>
+</section>
+
+<section id="s3">
+  <h1 class="sec">3. Functional requirement scorecard (FR-01…FR-12)</h1>
+  <p>Same 12 requirements as the Master Documentation. Numbers moved a lot since Phase 1 — this is the honest current read, including the two that are lower than you might expect.</p>
+  <div class="pbar-row"><div class="pbar-label">FR-01 Four zones, pan/zoom/minimap</div><div class="pbar-track"><div class="pbar-fill" style="width:95%"></div></div><div class="pbar-pct">95%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-02 Zone-aware assistant</div><div class="pbar-track"><div class="pbar-fill" style="width:90%"></div></div><div class="pbar-pct">90%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-03 Approve/Edit/Reject drafts</div><div class="pbar-track"><div class="pbar-fill" style="width:95%"></div></div><div class="pbar-pct">95%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-04 Artifact library + provenance</div><div class="pbar-track"><div class="pbar-fill" style="width:90%"></div></div><div class="pbar-pct">90%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-05 Live transcription</div><div class="pbar-track"><div class="pbar-fill" style="width:70%"></div></div><div class="pbar-pct">70%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-06 File ingestion (PDF/DOCX/XLSX)</div><div class="pbar-track"><div class="pbar-fill" style="width:90%"></div></div><div class="pbar-pct">90%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-07 draw.io round-trip</div><div class="pbar-track"><div class="pbar-fill" style="width:85%"></div></div><div class="pbar-pct">85%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-08 Granola integration</div><div class="pbar-track"><div class="pbar-fill" style="width:15%"></div></div><div class="pbar-pct">15%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-09 Full-text canvas search</div><div class="pbar-track"><div class="pbar-fill" style="width:70%"></div></div><div class="pbar-pct">70%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-10 Presentation Mode</div><div class="pbar-track"><div class="pbar-fill" style="width:75%"></div></div><div class="pbar-pct">75%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-11 DOCX export package</div><div class="pbar-track"><div class="pbar-fill" style="width:85%"></div></div><div class="pbar-pct">85%</div></div>
+  <div class="pbar-row"><div class="pbar-label">FR-12 Multi-user concurrent board</div><div class="pbar-track"><div class="pbar-fill risk" style="width:5%"></div></div><div class="pbar-pct">5%</div></div>
+  <div class="callout amber"><b>Why FR-09 and FR-10 dropped from "inherited, so basically done" to 70–75%:</b> the search/fly-to-node and Presentation Mode code is still the original prototype logic, untouched since Phase 1 — but a lot of surrounding code has changed (real node types now carry <code>diagram</code>/<code>prov</code> fields, artifacts are objects not strings, the board now round-trips through the backend). Nobody has re-clicked through search or Present-mode since those changes landed. Likely still fine; not re-verified, so scored down until it is.</div>
+  <div class="callout warn"><b>FR-12 is real and low (5%).</b> There is exactly one board (<code>'default'</code>) in a single JSON file, shared by whoever is logged in — no per-engagement boards, no per-user isolation, no live multi-cursor, no conflict resolution. Two people editing at once will silently overwrite each other on the next autosave (last write wins). This was never actually started; the "multiple concurrent facilitators" spec item is still just the avatar icons in the toolbar from the prototype, which are decorative.</div>
+</section>
+
+<section id="s4">
+  <h1 class="sec">4. What's missing that I haven't flagged clearly before</h1>
+  <p>Some of these were mentioned in passing during earlier phases; collected here because they compound into a real "not production ready" picture that's easy to miss when each phase report says "smoke tests passed."</p>
+  <h2 class="sub">Testing &amp; safety net</h2>
+  <ul>
+    <li><b>Zero committed automated tests.</b> Every "8 tests passed" report in this conversation was a script typed into a Python heredoc and thrown away. Nothing stops a future prompt/route change from silently breaking auth, the sanitizer, or the export pipeline.</li>
+    <li><b>No CI.</b> No GitHub Actions/equivalent — nothing runs even the manual tests automatically on push.</li>
+    <li><b>The sanitizer's threat model is model output only.</b> It correctly strips script/attributes from what Bedrock returns, but there's no adversarial testing against a genuinely hostile uploaded document trying to jailbreak the "treat as data not instructions" framing.</li>
+  </ul>
+  <h2 class="sub">Data &amp; multi-tenancy</h2>
+  <ul>
+    <li><b>One board for the whole app</b> (Section 3, FR-12) — no concept of "engagement" or "client" yet, despite the NFR requiring per-engagement data scoping.</li>
+    <li><b>Neo4j is wired but unused.</b> The auth/RAG/graph client code all still points at Neo4j, but it isn't even running right now (verified: port 7688 refuses connections) and the canvas board lives in a flat file instead. Fine for one demo board; not a real data model.</li>
+    <li><b>Guardrails package (PII/secret masking) is copied but never called.</b> Every uploaded document goes straight into prompts and the RAG index unmasked. This matters a lot the moment a regulated client's real document touches this system.</li>
+  </ul>
+  <h2 class="sub">Security &amp; ops hardening</h2>
+  <ul>
+    <li><b><code>AUTH_JWT_SECRET</code> is empty</b> → a random secret is generated per process, so every backend restart invalidates every session. Fine for dev, breaks any real deployment.</li>
+    <li><b>No per-user rate limiting or cost controls</b> on Bedrock calls — the existing limiter is a process-wide RPM/TPM safety valve, not a per-user quota or spend cap. Nothing stops one user (or a bug in a retry loop) from running up a real AWS bill.</li>
+    <li><b>No Dockerfile for this backend, no chosen hosting target, no deployment story at all.</b> Everything runs on your laptop.</li>
+    <li><code>CORS_ORIGINS</code> in <code>.env</code> still says <code>:3000</code> but the frontend has been running on <code>:3002</code> this whole time (port 3000 is taken by your other project). Harmless today because the Next.js rewrite keeps everything same-origin from the browser's perspective, but it's config drift that will bite if anything ever calls Flask directly.</li>
+  </ul>
+  <h2 class="sub">Product surface</h2>
+  <ul>
+    <li><b>PDF export</b> is a UI placeholder ("coming later") — only DOCX and Markdown actually download.</li>
+    <li><b>Granola</b> is intentionally a stub (your call) — flow exists, no live account.</li>
+    <li><b>No mobile/responsive layout</b> — desktop-only, same as the prototype, but worth naming since nobody has asked "should a BA be able to open this on a tablet in the room."</li>
+    <li><b>No accessibility pass</b> — no ARIA labelling, no full keyboard navigation beyond Delete/Cmd+D, no screen-reader consideration.</li>
+    <li><b>No React error boundary</b> — an unexpected JS exception inside the ported canvas engine would currently blank the page rather than show a recoverable error.</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h1 class="sec">5. Things claimed "done" that need one more real-world check</h1>
+  <table>
+    <tr><th>Claim</th><th>What's actually verified</th><th>What isn't</th></tr>
+    <tr><td>Agents produce good BA output</td><td>The pipeline is wired correctly and fails gracefully</td><td><b>Zero live model calls have happened.</b> No Bedrock credentials are configured. Prompt quality, hallucination rate, and output usefulness are completely unknown until you paste real credentials and try it.</td></tr>
+    <tr><td>Teams integration works</td><td>Real device-code sign-in against Microsoft succeeded</td><td>The transcript-fetch path (resolve meeting → list transcripts → download VTT) has never run against a real meeting — it depends on admin-consented Graph permissions that may not be granted yet, surfaced as a precise error if not</td></tr>
+    <tr><td>Search &amp; Presentation Mode work (FR-09/10)</td><td>Unchanged prototype code, worked at the end of Phase 1</td><td>Not re-clicked since node shape changed (diagrams, provenance objects) across Phases 2-4</td></tr>
+    <tr><td>Pixel-identical UI to the prototype</td><td>You confirmed this once, right after Phase 1</td><td>Not re-confirmed after the transcript dock gained a Teams button, draft cards gained diagram/edit affordances, etc. — all additive, but worth another look</td></tr>
+  </table>
+</section>
+
+<section id="s6">
+  <h1 class="sec">6. Recommended next steps, in order</h1>
+  <div class="phase">
+    <div class="ph"><h3>Right now — unblock real verification</h3><span class="est">~30 min of your time</span></div>
+    <ul>
+      <li>Paste real AWS credentials + a <code>BEDROCK_MODEL_ID</code> into <code>backend/.env</code>, restart the backend, and actually run a few agents — this is the single highest-value next step since nothing about output quality is known yet.</li>
+      <li>Do one real Teams test: connect, paste a join URL from a meeting that had transcription on, confirm lines import.</li>
+      <li>Re-click Search and Presentation Mode once, just to close Section 5's open item.</li>
+    </ul>
+  </div>
+  <div class="phase">
+    <div class="ph"><h3>Near-term — make the safety net real</h3><span class="est">3-5 days</span></div>
+    <ul>
+      <li>Turn this session's ad-hoc test scripts into a committed <code>backend/tests/</code> pytest suite (they already exist in spirit — 20+ assertions across four phases) plus a minimal GitHub Actions workflow.</li>
+      <li>Wire the guardrails package into the upload path (mask PII/secrets before anything reaches a prompt or the RAG index) — this is a small integration, not new capability, since the package is already copied and working.</li>
+      <li>Fix the <code>CORS_ORIGINS</code>/port drift; set a real <code>AUTH_JWT_SECRET</code>.</li>
+    </ul>
+  </div>
+  <div class="phase">
+    <div class="ph"><h3>Medium-term — the two real architectural gaps</h3><span class="est">2-3 weeks</span></div>
+    <ul>
+      <li><b>Multi-engagement data model:</b> move off the single <code>'default'</code> board to per-engagement boards (this is exactly what the already-wired-but-unused Neo4j layer is for — get it running and give each board a real identity).</li>
+      <li><b>Real-time multi-user (FR-12):</b> today it's decorative avatars; making it real needs a WebSocket/SSE layer and a conflict-resolution strategy (even a simple "last-write-wins per node" would beat today's "last-write-wins per whole board").</li>
+      <li>Pick and stand up a real deployment target (Dockerfile + hosting decision) once the above two are underway, so you're not hardening a design that's about to change.</li>
+    </ul>
+  </div>
+  <div class="phase">
+    <div class="ph"><h3>Whenever it's warranted</h3><span class="est">on demand</span></div>
+    <ul>
+      <li>PDF export, once DOCX/Markdown have been used for real and you know if PDF is actually needed.</li>
+      <li>Granola, only once the subscription decision is made (per your instruction).</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s7">
+  <h1 class="sec">7. Ideas worth considering (not requested, not started)</h1>
+  <p>None of these are asked-for — flagging them because they came up naturally while building the parts that were requested. Worth a quick "yes/no/later" rather than being silently assumed.</p>
+  <ul>
+    <li><b>A visible Bedrock cost/usage counter</b> in the assistant panel — every agent call has a real per-token AWS cost, and right now the facilitator has no visibility into it at all.</li>
+    <li><b>Undo/version history for the canvas</b> — right now Reject discards a draft, but there's no way to undo an accidental Approve or a deleted node short of not having saved yet.</li>
+    <li><b>A lightweight admin/engagement picker</b> — becomes necessary the moment multi-board support exists (Section 6); worth designing at the same time rather than bolting on after.</li>
+    <li><b>Template pre-seeds per industry</b> (pharmacovigilance, banking, retail...) for the Prepare zone — this was already a "Phase 3 candidate" in the original Master Documentation roadmap and fits naturally once a few real engagements have run through the system.</li>
+    <li><b>ADO-importable JSON export for stories/acceptance criteria</b> — named explicitly in the original spec as a Phase 2 integration item; not started, would slot in next to the DOCX/Markdown export.</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <h1 class="sec">8. Housekeeping — commit, ports, config drift</h1>
+  <ul>
+    <li><b>25 files are uncommitted</b> — everything since the Phase 1 scaffold commit. Worth a checkpoint commit soon so this much work isn't sitting only in a running dev server.</li>
+    <li>Both servers are currently running on this machine: backend on <code>:5101</code>, frontend on <code>:3002</code> (not <code>:3000</code> — that port is held by your other project).</li>
+    <li><code>backend/data/canvas_boards.json</code> is the entire current board state — small today (1.4KB), but it's a single-file, no-backup, no-history data store; worth keeping in mind before treating any demo content as durable.</li>
+  </ul>
+</section>
+
+<footer>AI Discovery Canvas — Project Status &amp; Build Plan &nbsp;·&nbsp; Audited against the live repo and both running servers, not recalled from memory &nbsp;·&nbsp; Regenerate this file as gaps close</footer>
+
+</div>
+<a href="#top" class="top-link" title="Back to top">↑</a>
+</body>
+</html>

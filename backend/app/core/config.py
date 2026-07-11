@@ -10,16 +10,23 @@ in one place.
 Loading is at import time. If python-dotenv is installed and `.env` is
 present, it is loaded BEFORE we read os.environ.
 
-ADAPTATION NOTE (ai-discovery-canvas scaffold): this is a TRIMMED copy of
-frd-generator's `backend/app/core/config.py`. Dropped entirely: every
-POSTGRES_* var/helper and the PIM_* feature flags — this project does not
-carry the Postgres or Project-Intelligence-Model subsystems (out of scope
-for the lean backbone; see the root README). Everything else (server,
-CORS, Neo4j, Azure OpenAI comments, object storage) is unchanged in shape.
+ADAPTATION NOTE (ai-discovery-canvas scaffold): this was originally a
+TRIMMED copy of frd-generator's `backend/app/core/config.py` with every
+POSTGRES_* var/helper dropped (Postgres was out of scope for the initial
+lean backbone). POSTGRES_* is now back — see the "Postgres" section below
+— to back the BA -> Projects -> Workshops hierarchy with a real local
+database (app/postgres/), same shape as frd-generator's vars but defaulted
+for THIS project's own local instance (db `ai_discovery_canvas`, peer auth,
+sslmode disable) rather than an Azure-hosted one. The PIM_* feature flags
+remain dropped (still out of scope). Everything else (server, CORS, Neo4j,
+AWS Bedrock comments, object storage) is unchanged in shape.
 Two defaults were changed for this project: PORT 5004 -> 5101 (frd-generator
-uses 5004) and CORS_ORIGINS now defaults to Next.js's dev port :3000 (the
-frontend here is a fresh Next.js app, not frd-generator's Vite/React-Router
-shell).
+uses 5004) and CORS_ORIGINS now defaults to :5173. That's deliberately the
+SAME port frd-generator's own Vite frontend uses — this project's Next.js
+dev server is pinned to it too (see frontend/package.json) so the browser
+sign-in flow can reuse NaviCore's already-registered Entra redirect URI
+(http://localhost:5173) with zero Azure Portal changes (see
+frontend/app/lib/msalConfig.js).
 """
 
 from __future__ import annotations
@@ -96,15 +103,15 @@ PORT: int  = _env_int('PORT', 5101)
 DEBUG: bool = (_env('DEBUG', 'false').lower() in ('1', 'true', 'yes')) and not is_production()
 
 # ── CORS -------------------------------------------------------------
-# The frontend is a Next.js app (default dev port :3000). List explicit
-# origins so cookies can travel across the frontend/backend split during
-# dev. In practice next.config.js rewrites proxy the API through :3000
-# itself (same-origin from the browser's point of view), so CORS mostly
-# matters for direct API calls made without the rewrite. Production
+# The frontend is a Next.js app pinned to :5173 (see the module docstring
+# for why — it's the port registered for Microsoft sign-in, not a Next.js
+# default). In practice next.config.mjs rewrites proxy the API through
+# :5173 itself (same-origin from the browser's point of view), so CORS
+# mostly matters for direct API calls made without the rewrite. Production
 # deploys override via env (comma-separated list).
 CORS_ORIGINS: list[str] = _env_list('CORS_ORIGINS', [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ])
 
 # ── Neo4j ------------------------------------------------------------
@@ -122,18 +129,49 @@ NEO4J_URI:      str = _env('NEO4J_URI',      'bolt://localhost:7687')
 NEO4J_USER:     str = _env('NEO4J_USER',     'neo4j')
 NEO4J_DATABASE: str = _env('NEO4J_DATABASE', 'neo4j')
 
-# ── Azure OpenAI (LLM) ----------------------------------------------
+# ── AWS Bedrock (LLM) -------------------------------------------------
 # Surfaced here for visibility only; the actual values are consumed by
-# `app.services.llm_service` at import time. Listing them in this
-# canonical config module preserves the "one place to audit env reads"
-# invariant — even though they aren't re-read here, an operator can see
-# them alongside the other backend env vars.
-AZURE_OPENAI_ENDPOINT:    str = _env('AZURE_OPENAI_ENDPOINT',    '')
-AZURE_OPENAI_API_VERSION: str = _env('AZURE_OPENAI_API_VERSION', '2024-12-01-preview')
-AZURE_OPENAI_DEPLOYMENT:  str = _env('AZURE_OPENAI_DEPLOYMENT',  'gpt-4.1')
-# AZURE_OPENAI_API_KEY is intentionally not surfaced here — it's a
-# secret resolved on demand via `app.services.secret_manager` (Key
-# Vault primary, env fallback). Never holds the value at module scope.
+# `app.services.llm_service` at import time. Swapped from Azure OpenAI to
+# AWS Bedrock per project decision — llm_service.py now calls Bedrock's
+# `converse` API via boto3.
+AWS_REGION:       str = _env('AWS_REGION', 'us-east-1')
+BEDROCK_MODEL_ID: str = _env('BEDROCK_MODEL_ID', '')
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN are
+# intentionally NOT surfaced here — they're standard boto3 env-var names
+# that the AWS SDK's own credential chain resolves directly from
+# os.environ (or ~/.aws/credentials, or an IAM role). Paste real values
+# into backend/.env; never hold them at module scope here.
+
+# `app/services/rag/config.py` + `rag/embedder.py` also call AWS Bedrock
+# now (Titan/Cohere embedding models, picked via BEDROCK_EMBEDDING_MODEL_ID)
+# — no Azure OpenAI dependency remains anywhere in this project.
+
+# ── Postgres (app/postgres/ — Projects/Workshops application database) ──
+# Defaulted for THIS project's own local instance (created via `createdb
+# ai_discovery_canvas`; peer auth under the current OS user, no password).
+# POSTGRES_PASSWORD is intentionally NOT surfaced here — resolved on demand
+# by `app.services.secret_manager` (env fallback only; there's no Key Vault
+# secret expected for a purely local dev database).
+POSTGRES_HOST: str = _env('POSTGRES_HOST', 'localhost')
+POSTGRES_PORT: int = _env_int('POSTGRES_PORT', 5432)
+POSTGRES_DB:   str = _env('POSTGRES_DB',   'ai_discovery_canvas')
+POSTGRES_USER: str = _env('POSTGRES_USER', '')
+# 'disable' by default — this is a local peer-auth Postgres, not a TLS-only
+# hosted one. connection.py forces 'require' regardless for an Azure host.
+POSTGRES_SSLMODE: str = _env('POSTGRES_SSLMODE', 'disable')
+
+POSTGRES_POOL_SIZE:         int = _env_int('POSTGRES_POOL_SIZE', 5)
+POSTGRES_POOL_MAX_OVERFLOW: int = _env_int('POSTGRES_POOL_MAX_OVERFLOW', 5)
+POSTGRES_POOL_RECYCLE_S:    int = _env_int('POSTGRES_POOL_RECYCLE_S', 1800)
+POSTGRES_POOL_TIMEOUT_S:    int = _env_int('POSTGRES_POOL_TIMEOUT_S', 10)
+POSTGRES_STATEMENT_TIMEOUT_MS: int = _env_int('POSTGRES_STATEMENT_TIMEOUT_MS', 5000)
+
+
+def postgres_configured() -> bool:
+    """True iff POSTGRES_HOST + POSTGRES_USER are set. POSTGRES_PASSWORD
+    is allowed to be empty (local peer auth)."""
+    return bool(POSTGRES_HOST and POSTGRES_USER)
+
 
 # ── Object storage -----------------------------------------------------
 # Durable BYTES store for raw repo snapshots, documents/images, and generated
