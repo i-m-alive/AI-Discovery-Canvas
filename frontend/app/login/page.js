@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiGet, apiPost } from '../lib/api';
+import { useObTheme } from '../lib/useObTheme';
 import { getMsalInstance, loginRequest, isAzureConfigured } from '../lib/msalConfig';
 import '../shared.css';
 
@@ -29,6 +30,7 @@ import '../shared.css';
 // a bootstrap form bolted onto a different-looking product.
 export default function LoginPage() {
   const router = useRouter();
+  const [theme, flipTheme] = useObTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState(null);
@@ -92,15 +94,40 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="app-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div
+      className="app-shell"
+      data-obtheme={theme}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backgroundImage: 'radial-gradient(circle at 50% 0%, var(--accent-weak), var(--bg) 60%)',
+      }}
+    >
+      <button
+        className="themebtn"
+        onClick={flipTheme}
+        title="Toggle theme"
+        style={{ position: 'fixed', top: 16, right: 16 }}
+      >{theme === 'dark' ? '☀' : '☾'}</button>
       <div style={{
-        width: 'min(380px, 92vw)', background: '#fff', border: '1px solid var(--line2)',
-        borderRadius: 14, boxShadow: 'var(--shadow)', padding: '28px 26px',
+        width: 'min(400px, 92vw)', background: 'var(--surface)', border: '1px solid var(--line)',
+        borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)', padding: '36px 32px',
+        animation: 'app-fadeUp 260ms var(--ease) both',
       }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 22 }}>
-          <span style={{ width: 16, height: 16, borderRadius: 5, background: 'var(--accent)' }} />
-          <h1 style={{ fontSize: 17, fontWeight: 700 }}>AI Discovery Canvas</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
+          <span className="ob-mark" style={{
+            width: 36, height: 36, borderRadius: 12, display: 'grid', placeItems: 'center',
+            color: '#fff', fontWeight: 800, fontSize: 15,
+            background: 'linear-gradient(135deg, var(--accent), var(--brand-2))',
+            boxShadow: '0 4px 14px -4px var(--accent)',
+          }}
+          >N</span>
+          <div style={{ lineHeight: 1.25 }}>
+            <h1 style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em', margin: 0 }}>
+              Navi<b style={{ color: 'var(--accent)' }}>BA</b> Orbitz
+            </h1>
+            <div style={{ fontSize: 11, color: 'var(--faint)' }}>Engagement Intelligence</div>
+          </div>
         </div>
 
         {azureReady && (
@@ -110,7 +137,7 @@ export default function LoginPage() {
               onClick={handleMicrosoftSignIn}
               disabled={msBusy}
               className="btn"
-              style={{ width: '100%', justifyContent: 'center', padding: '10px 14px', fontSize: 13.5 }}
+              style={{ width: '100%', padding: '11px 14px', fontSize: 13.5 }}
             >
               <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true">
                 <rect x="1" y="1" width="9" height="9" fill="#f25022" />
@@ -120,7 +147,7 @@ export default function LoginPage() {
               </svg>
               {msBusy ? 'Signing in…' : 'Sign in with Microsoft'}
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--muted)', fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0', color: 'var(--muted)', fontSize: 12 }}>
               <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
               or
               <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
@@ -128,10 +155,10 @@ export default function LoginPage() {
           </>
         )}
 
-        <p style={{ color: 'var(--muted)', fontSize: 12.5, marginBottom: 12 }}>
+        <p style={{ color: 'var(--muted)', fontSize: 12.5, marginBottom: 14 }}>
           Sign in (mock auth — dev only, any name/email works).
         </p>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input
             type="text"
             value={name}
@@ -148,10 +175,10 @@ export default function LoginPage() {
             required
             className="field"
           />
-          <button type="submit" disabled={busy} className="btn solid" style={{ justifyContent: 'center' }}>
+          <button type="submit" disabled={busy} className="btn solid" style={{ width: '100%', marginTop: 4 }}>
             {busy ? 'Signing in…' : 'Sign in (mock)'}
           </button>
-          {error && <p className="app-error">{error}</p>}
+          {error && <p className="app-error">⚠ {error}</p>}
         </form>
       </div>
     </div>

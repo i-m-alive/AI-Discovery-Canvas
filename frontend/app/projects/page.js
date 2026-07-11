@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuthedUser } from '../lib/useAuthedUser';
+import { useObTheme } from '../lib/useObTheme';
 import { apiGet, apiPost, apiDelete } from '../lib/api';
 import { Icon } from '../lib/icons';
 import '../shared.css';
@@ -13,6 +14,7 @@ import '../shared.css';
 // bootstrap-y form.
 export default function ProjectsPage() {
   const user = useAuthedUser();
+  const [theme, flipTheme] = useObTheme();
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
   const [name, setName] = useState('');
@@ -70,11 +72,15 @@ export default function ProjectsPage() {
   const initials = ((user && (user.name || user.email)) || '?').trim().slice(0, 1).toUpperCase();
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-obtheme={theme}>
       <div className="app-topbar">
-        <span className="branddot" />
-        <span className="brand">AI Discovery Canvas</span>
+        <span className="ob-mark">N</span>
+        <div className="brandblock">
+          <span className="brand">Navi<b>BA</b> Orbitz</span>
+          <span className="brandsub">Engagement Intelligence</span>
+        </div>
         <div className="spacer" />
+        <button className="themebtn" onClick={flipTheme} title="Toggle theme">{theme === 'dark' ? '☀' : '☾'}</button>
         {user && <div className="av" title={user.name || user.email}>{initials}</div>}
       </div>
 

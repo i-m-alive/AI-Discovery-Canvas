@@ -52,7 +52,7 @@ const MARKUP = `
     <a class="chip" id="backProjects" href="/projects" data-tip="Back to your projects" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-right:8px">‹ Projects</a>
     <div class="boardname" id="boardNameBox" data-tip="Double-click to rename this engagement board"><span class="dot"></span><span id="boardNameText">Untitled Engagement</span></div>
     <div class="session" data-info="session" data-info-title="Session — real" data-info-text="Date is today's real date. The clock counts real elapsed time since this board was opened in this browser tab (resets on refresh — there's no persisted 'session start' concept yet). There is no real multi-facilitator presence tracking yet, so no attendee count is shown."><span class="ic" data-ic="calendar"></span><b id="sessDate">—</b> · <span id="sessClock">00:00</span> · <span id="sessWho">—</span> <span class="ic" data-ic="info" style="font-size:12px;color:#aab2bd"></span></div>
-    <div class="searchbox" data-tip="Search the canvas — highlights &amp; flies to matches"><span class="ic" data-ic="search"></span><input id="searchIn" placeholder="Search canvas…"/><span class="cnt" id="searchCnt"></span><button class="clr" id="searchClr"><span class="ic" data-ic="x"></span></button></div>
+    <div class="searchbox" data-tip="Search the canvas — highlights &amp; flies to matches"><span class="ic" data-ic="search"></span><input id="searchIn" placeholder="Search canvas…"/><span class="cnt" id="searchCnt"></span><button class="clr" id="searchClr" aria-label="Clear search"><span class="ic" data-ic="x"></span></button></div>
     <div class="toggle" data-tip="Edgeless vs. structured Page"><button class="on" id="mEdgeless">Edgeless</button><button id="mPage">Page</button></div>
     <div class="tspacer"></div>
     <div class="facil">
@@ -72,19 +72,6 @@ const MARKUP = `
     </div>
   </div>
   <div class="main" id="main">
-    <div class="ltools" id="ltools">
-      <button class="tool on" data-tool="select" data-tip="Select &amp; move — drag nodes; click to scope the Assistant"><span class="ic" data-ic="pointer"></span></button>
-      <button class="tool" data-tool="pan" data-tip="Hand / pan"><span class="ic" data-ic="hand"></span></button>
-      <div class="sep"></div>
-      <button class="tool" data-tool="sticky" data-tip="Sticky note — click canvas; double-click to type"><span class="ic" data-ic="sticky"></span></button>
-      <button class="tool" data-tool="rect" data-tip="Rectangle"><span class="ic" data-ic="square"></span></button>
-      <button class="tool" data-tool="ellipse" data-tip="Ellipse"><span class="ic" data-ic="circle"></span></button>
-      <button class="tool" data-tool="text" data-tip="Text"><span class="ic" data-ic="text"></span></button>
-      <button class="tool" data-tool="conn" data-tip="Connector — click one node, then another (works across zones)"><span class="ic" data-ic="connector"></span></button>
-      <button class="tool" data-tool="frame" data-tip="Frame"><span class="ic" data-ic="frame"></span></button>
-      <div class="sep"></div>
-      <button class="tool" data-tool="upload" data-tip="Upload a file to ingest"><span class="ic" data-ic="upload"></span></button>
-    </div>
     <div class="stage" id="stage">
       <div class="dotgrid"></div>
       <div class="layer" id="layer"><svg id="edges" width="6000" height="3000"></svg></div>
@@ -94,15 +81,15 @@ const MARKUP = `
 
       <div class="drawer left" id="artDrawer">
         <div class="dhead"><span class="ic" data-ic="folder"></span><div><div class="ttl">Live Artifacts</div><div class="sub">your canvas, indexed</div></div>
-          <button class="infobtn" data-info="artifacts" data-info-title="Live Artifacts" data-info-text="A plain-English index of everything on the canvas, grouped the way you'd look for it. Each item is live. When an output is approved it files itself here and drops a card in the right zone."><span class="ic" data-ic="info"></span></button>
-          <button class="x" id="artClose"><span class="ic" data-ic="x"></span></button></div>
+          <button class="infobtn" aria-label="About Live Artifacts" data-info="artifacts" data-info-title="Live Artifacts" data-info-text="A plain-English index of everything on the canvas, grouped the way you'd look for it. Each item is live. When an output is approved it files itself here and drops a card in the right zone."><span class="ic" data-ic="info"></span></button>
+          <button class="x" id="artClose" aria-label="Collapse Live Artifacts"><span class="ic" data-ic="x"></span></button></div>
         <div id="folders" style="overflow:auto"></div>
       </div>
 
       <div class="drawer right open" id="askDrawer">
         <div class="dhead"><span class="ic" data-ic="sparkles"></span><div><div class="ttl">Assistant</div><div class="sub">sensitive to where you are</div></div>
-          <button class="infobtn" data-info="assistant" data-info-title="Assistant" data-info-text="A guide, not a menu. It defaults its context to the zone you're in, narrows to whatever you select, leads with the few right actions, previews output, and on approve files it by type into the canvas + Live Artifacts."><span class="ic" data-ic="info"></span></button>
-          <button class="x" id="askClose" data-tip="Collapse"><span class="ic" data-ic="x"></span></button></div>
+          <button class="infobtn" aria-label="About the Assistant" data-info="assistant" data-info-title="Assistant" data-info-text="A guide, not a menu. It defaults its context to the zone you're in, narrows to whatever you select, leads with the few right actions, previews output, and on approve files it by type into the canvas + Live Artifacts."><span class="ic" data-ic="info"></span></button>
+          <button class="x" id="askClose" aria-label="Collapse Assistant" data-tip="Collapse"><span class="ic" data-ic="x"></span></button></div>
         <div class="thread" id="thread"></div>
         <div class="suggest" id="suggestBox"><div class="lbl" id="suggestHead" style="cursor:pointer"><span class="ic" data-ic="sparkles"></span>SUGGESTED NEXT <span id="suggStage" style="color:var(--accent)"></span><span class="ic chev" data-ic="chevron" style="margin-left:auto"></span></div><div class="sugg" id="sugg"></div></div>
         <div class="ctxbar" id="ctxbar"><span class="lbl">CONTEXT</span><span class="ctxchip" id="ctxScope"><span class="ic" data-ic="map"></span><span id="ctxScopeLbl">Run zone</span></span></div>
@@ -113,7 +100,7 @@ const MARKUP = `
         </div>
       </div>
 
-      <div id="zoombar" data-tip="Zoom &amp; fit (wheel to zoom)"><button id="zOut"><span class="ic" data-ic="minus"></span></button><span class="zval" id="zVal">100%</span><button id="zIn"><span class="ic" data-ic="plus"></span></button><button id="zFit" data-tip="Fit everything"><span class="ic" data-ic="maximize"></span></button></div>
+      <div id="zoombar" data-tip="Zoom &amp; fit (wheel to zoom)"><button id="zOut" aria-label="Zoom out"><span class="ic" data-ic="minus"></span></button><span class="zval" id="zVal">100%</span><button id="zIn" aria-label="Zoom in"><span class="ic" data-ic="plus"></span></button><button id="zFit" aria-label="Fit everything" data-tip="Fit everything"><span class="ic" data-ic="maximize"></span></button></div>
       <div id="minimap" data-tip="Minimap — click a zone to fly there"><div id="mmInner"></div><span class="mmlabel">map</span></div>
       <div id="transcript"><div class="thead" id="trHead"><span class="live"></span><span class="ttl">Live transcript</span><span class="now" id="trNow"></span><span class="sm"><button class="mini" id="summBtn" data-tip="Summarize into the Assistant"><span class="ic" data-ic="summarize"></span>Summarize</button></span><span class="ic" data-ic="chevron"></span></div><div class="tbody" id="tbody"></div></div>
     </div>
@@ -122,9 +109,9 @@ const MARKUP = `
 
 <div id="nodeBar"></div>
 
-<div id="presentBar"><button class="pb" id="pPrev"><span class="ic" data-ic="caretL"></span></button><div><div class="pname" id="pName">Run</div><div class="step-of" id="pStep"></div></div><button class="pb" id="pNext"><span class="ic" data-ic="caretR"></span></button><button class="ex" id="pExit"><span class="ic" data-ic="x"></span>Exit present</button></div>
+<div id="presentBar"><button class="pb" id="pPrev" aria-label="Previous zone"><span class="ic" data-ic="caretL"></span></button><div><div class="pname" id="pName">Run</div><div class="step-of" id="pStep"></div></div><button class="pb" id="pNext" aria-label="Next zone"><span class="ic" data-ic="caretR"></span></button><button class="ex" id="pExit"><span class="ic" data-ic="x"></span>Exit present</button></div>
 
-<div id="modalWrap"><div class="modal"><div class="mh"><span class="ic" data-ic="upload"></span><span class="t">Handoff package</span><button class="x" id="modalX"><span class="ic" data-ic="x"></span></button></div><div class="mb"><p class="vsub">Assembled from your Live Artifacts — documentation only in Phase 1.</p><div id="handoffList"></div><div class="fmt"><span style="color:var(--muted);font-size:13px">Format:</span><button class="chip on" id="fmtDocx">DOCX</button><button class="chip" id="fmtPdf">PDF</button><button class="chip" id="fmtMd">Markdown</button></div><button class="btn solid" id="exportPkg" style="margin-top:8px"><span class="ic" data-ic="upload"></span>Export package</button></div></div></div><div id="graphModalWrap"><div class="modal wide"><div class="mh"><span class="ic" id="graphModalIcon" data-ic="calendar"></span><span class="t" id="graphModalTitle">Browse</span><button class="x" id="graphModalX"><span class="ic" data-ic="x"></span></button></div><div class="mb" id="graphModalBody"></div></div></div>
+<div id="modalWrap"><div class="modal"><div class="mh"><span class="ic" data-ic="upload"></span><span class="t">Handoff package</span><button class="x" id="modalX" aria-label="Close"><span class="ic" data-ic="x"></span></button></div><div class="mb"><p class="vsub">Assembled from your Live Artifacts — documentation only in Phase 1.</p><div id="handoffList"></div><div class="fmt"><span style="color:var(--muted);font-size:13px">Format:</span><button class="chip on" id="fmtDocx">DOCX</button><button class="chip" id="fmtPdf">PDF</button><button class="chip" id="fmtMd">Markdown</button></div><button class="btn solid" id="exportPkg" style="margin-top:8px"><span class="ic" data-ic="upload"></span>Export package</button></div></div></div><div id="graphModalWrap"><div class="modal wide"><div class="mh"><span class="ic" id="graphModalIcon" data-ic="calendar"></span><span class="t" id="graphModalTitle">Browse</span><button class="x" id="graphModalX" aria-label="Close"><span class="ic" data-ic="x"></span></button></div><div class="mb" id="graphModalBody"></div></div></div>
 
 <input type="file" id="fileInput" style="display:none" multiple/>
 <div id="slash"></div><div id="tooltip"></div><div id="popover"></div><div id="toast"></div>
@@ -374,9 +361,8 @@ export function initCanvasApp(root, opts = {}) {
   }
 
   /* tools */
-  function setTool(t) { S.tool = t; root.querySelectorAll('.ltools .tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === t)); stage.style.cursor = t === 'pan' ? 'grab' : (['sticky', 'rect', 'ellipse', 'text', 'frame'].includes(t) ? 'crosshair' : (t === 'conn' ? 'cell' : 'default')); if (t !== 'conn' && S.connectFrom) { const s = S.nodes.find((x) => x.id === S.connectFrom); if (s && s.el) s.el.classList.remove('connsrc'); S.connectFrom = null; } }
+  function setTool(t) { S.tool = t; stage.style.cursor = t === 'pan' ? 'grab' : (['sticky', 'rect', 'ellipse', 'text', 'frame'].includes(t) ? 'crosshair' : (t === 'conn' ? 'cell' : 'default')); if (t !== 'conn' && S.connectFrom) { const s = S.nodes.find((x) => x.id === S.connectFrom); if (s && s.el) s.el.classList.remove('connsrc'); S.connectFrom = null; } }
   const fileInput = $('fileInput');
-  root.querySelectorAll('.ltools .tool').forEach((b) => { b.onclick = () => { if (b.dataset.tool === 'upload') { fileInput.click(); return; } setTool(b.dataset.tool); }; });
 
   /* canvas pan + create */
   let drag = false, last = null;

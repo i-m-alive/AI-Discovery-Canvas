@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import { useAuthedUser } from '../../lib/useAuthedUser';
 import { apiGet } from '../../lib/api';
-import CanvasApp from '../CanvasApp';
+import OrbitzApp from '../OrbitzApp';
 
 // A Workshop IS the canvas board (see app/routes/projects.py +
 // app/routes/canvas.py) — this page resolves :workshopId to its owning
@@ -37,22 +37,30 @@ export default function CanvasWorkshopPage({ params }) {
     };
   }, [user, workshopId]);
 
+  const shellStyle = {
+    minHeight: '100vh', padding: 40, fontFamily: '"Inter", system-ui, sans-serif',
+    fontSize: 14, background: '#080b14', color: '#94a3b8',
+  };
+
   if (!user || (!workshop && !error)) {
-    return (
-      <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif', color: '#6b7280', fontSize: 14 }}>
-        Loading workshop…
-      </main>
-    );
+    return <main style={shellStyle}>Loading workshop…</main>;
   }
 
   if (error) {
     return (
-      <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif', fontSize: 14 }}>
-        <p style={{ color: '#b91c1c', marginBottom: 12 }}>⚠ {error}</p>
-        <a href="/projects" style={{ color: '#2563eb' }}>‹ Back to Projects</a>
+      <main style={shellStyle}>
+        <p style={{ color: '#f87171', marginBottom: 12 }}>⚠ {error}</p>
+        <a href="/projects" style={{ color: '#8178ff' }}>‹ Back to Projects</a>
       </main>
     );
   }
 
-  return <CanvasApp user={user} workshopId={Number(workshopId)} projectId={workshop.project_id} />;
+  return (
+    <OrbitzApp
+      user={user}
+      workshopId={Number(workshopId)}
+      projectId={workshop.project_id}
+      workshopName={workshop.name}
+    />
+  );
 }

@@ -1,99 +1,162 @@
 /* Shared design system for the "app shell" pages (login, projects list,
-   project detail) — extracted from app/canvas/canvas.css so the rest of
-   the product LOOKS like the same app as the canvas, not a bootstrap-y
-   afterthought bolted on around it. Same color tokens, same button/chip/
-   card shapes, same icon style (24x24 stroke line icons).
+   project detail) — restyled to match the NaviBA Orbitz reference theme
+   (jolly-rock-0ff51a803.7.azurestaticapps.net): Inter, indigo/violet
+   brand, cyan accent, dark theme by default with a light override via
+   [data-obtheme="light"] on .app-shell (same localStorage key as the
+   workshop workspace, see app/lib/useObTheme.js — so the whole product
+   flips theme together).
 
-   Deliberately its own file (not merged into canvas.css, which stays
-   scoped under .aidc-canvas-root and is imported only by the canvas
-   page) and its own unscoped classes — imported directly by the pages
-   that need it (login, projects, projects/[projectId]), not globally
-   in app/layout.js, so it never has to reason about interaction with
-   canvas.css's scoped rules. */
+   Variable/class NAMES are kept from the previous pass so page markup
+   and inline styles keep working — only the values moved to the Orbitz
+   palette. Deliberately its own file (not merged into orbitz.css, which
+   stays scoped under .orbitz-root and is imported only by the workshop
+   page). */
 
-:root {
-  --ink: #1f2733; --muted: #6b7280; --line: #e4e8ee; --line2: #cfd6df;
-  --bg: #f5f7fa; --accent: #2f6fb3; --accent-weak: #eaf2fb;
-  --teal: #1b9384; --amber: #c9881f; --red: #c0463b; --green: #2f8f5b;
-  --shadow: 0 6px 22px rgba(24, 39, 64, .12);
-  --shadow-sm: 0 2px 8px rgba(24, 39, 64, .08);
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+.app-shell {
+  /* dark (default — matches the reference) */
+  --bg: #080b14; --surface: #0f1421; --surface-2: #141a2a; --elevated: #181f32;
+  --ink: #e2e8f0; --muted: #94a3b8; --faint: #64748b;
+  --line: #273047; --line2: #324061;
+  --accent: #8178ff; --accent-hover: #948cff; --brand-2: #a78bfa;
+  --accent-weak: rgba(129, 120, 255, .12); --accent-line: rgba(129, 120, 255, .45);
+  --cyan: #22d3ee;
+  --red: #f87171; --red-weak: rgba(248, 113, 113, .12);
+  --green: #34d399; --amber: #fbbf24; --slate-weak: #141a2a;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, .35);
+  --shadow: 0 8px 30px -8px rgba(0, 0, 0, .5);
+  --shadow-lg: 0 16px 44px -10px rgba(0, 0, 0, .6);
+  --radius-sm: 8px; --radius-md: 10px; --radius-lg: 12px; --radius-xl: 16px;
+  --dur: 160ms; --ease: cubic-bezier(.4, 0, .2, 1);
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+.app-shell[data-obtheme="light"] {
+  --bg: #f4f6fb; --surface: #ffffff; --surface-2: #f8fafd; --elevated: #ffffff;
+  --ink: #0f172a; --muted: #475569; --faint: #94a3b8;
+  --line: #e2e8f0; --line2: #d3dcea;
+  --accent: #4f46e5; --accent-hover: #4338ca; --brand-2: #8b5cf6;
+  --accent-weak: rgba(79, 70, 229, .08); --accent-line: rgba(79, 70, 229, .35);
+  --cyan: #06b6d4;
+  --red: #ef4444; --red-weak: rgba(239, 68, 68, .09);
+  --green: #10b981; --amber: #f59e0b; --slate-weak: #f1f5f9;
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, .05);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, .08), 0 1px 2px rgba(15, 23, 42, .04);
+  --shadow: 0 8px 24px -10px rgba(15, 23, 42, .16);
+  --shadow-lg: 0 16px 40px -8px rgba(15, 23, 42, .18);
 }
 
 .app-shell {
   min-height: 100vh;
   background: var(--bg);
   color: var(--ink);
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13.5px;
+  -webkit-font-smoothing: antialiased;
 }
 .app-shell * { box-sizing: border-box; }
-.app-shell button { font: inherit; cursor: pointer; }
+.app-shell button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .app-shell .ic { display: inline-flex; align-items: center; justify-content: center; }
 .app-shell .ic svg { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.app-shell button:focus-visible, .app-shell a:focus-visible, .app-shell input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm);
+}
+.app-shell ::selection { background: var(--accent-weak); }
+@media (prefers-reduced-motion: reduce) { .app-shell * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
-/* Top bar — same branddot + wordmark as canvas.css's .menubar, plus a
-   user avatar circle matching canvas's .av. */
+/* Top bar — Orbitz brand block (gradient mark + two-line wordmark) */
 .app-topbar {
-  display: flex; align-items: center; gap: 10px;
-  background: #fff; border-bottom: 1px solid var(--line);
-  padding: 0 20px; height: 54px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 0 20px; height: 56px;
 }
-.app-topbar .branddot { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); flex: none; }
-.app-topbar .brand { font-weight: 700; font-size: 14.5px; }
+.app-topbar .ob-mark {
+  width: 34px; height: 34px; border-radius: 11px; flex: none;
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--brand-2));
+  box-shadow: 0 4px 14px -4px var(--accent);
+}
+.app-topbar .brandblock { display: flex; flex-direction: column; line-height: 1.25; }
+.app-topbar .brand { font-weight: 800; font-size: 14px; letter-spacing: -.01em; }
+.app-topbar .brand b { color: var(--accent); }
+.app-topbar .brandsub { font-size: 10.5px; color: var(--faint); }
 .app-topbar .spacer { flex: 1; }
+.app-topbar .themebtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface-2); color: var(--muted); font-size: 13px;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.app-topbar .themebtn:hover { border-color: var(--accent); color: var(--ink); }
 .app-topbar .av {
-  width: 27px; height: 27px; border-radius: 50%; background: #dfe5ec; color: #46505d;
+  width: 30px; height: 30px; border-radius: 50%; background: var(--accent-weak); color: var(--accent);
   font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 1px var(--line);
+  border: 1px solid var(--line);
 }
 
-.app-main { max-width: 760px; margin: 0 auto; padding: 40px 24px 80px; }
-.app-h1 { font-size: 21px; font-weight: 700; margin-bottom: 4px; }
-.app-sub { color: var(--muted); font-size: 13.5px; margin-bottom: 26px; }
-.app-crumb { font-size: 12.5px; color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
-.app-crumb:hover { text-decoration: underline; }
+.app-main { max-width: 760px; margin: 0 auto; padding: 56px 24px 96px; animation: app-fadeUp 240ms var(--ease) both; }
+.app-h1 { font-size: 23px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 6px; }
+.app-sub { color: var(--muted); font-size: 13px; font-weight: 400; margin-bottom: 32px; }
+.app-crumb { font-size: 12.5px; color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 500; transition: color var(--dur) var(--ease); }
+.app-crumb:hover { color: var(--accent); }
 
-/* Buttons — identical shape to canvas.css's .btn / .btn.solid */
+/* Buttons — Secondary (default) / Primary (.solid, brand gradient) */
 .btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--line2); border-radius: 8px; padding: 8px 15px;
-  background: #fff; font-size: 13px; color: #3a4350;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid var(--line2); border-radius: var(--radius-md); padding: 9px 16px;
+  background: var(--surface-2); font-size: 13px; font-weight: 500; color: var(--muted);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.btn:hover { border-color: var(--accent); color: var(--accent); }
-.btn.solid { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn.solid:hover { background: #2a629f; color: #fff; }
-.btn:disabled { opacity: .55; cursor: default; }
-.btn:disabled:hover { border-color: var(--line2); color: #3a4350; }
-.btn.solid:disabled:hover { border-color: var(--accent); color: #fff; }
+.btn:hover { border-color: var(--accent); color: var(--ink); box-shadow: var(--shadow-xs); transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(.97); }
+.btn.solid { background: linear-gradient(135deg, var(--accent), var(--brand-2)); color: #fff; border-color: transparent; font-weight: 600; }
+.btn.solid:hover { filter: brightness(1.1); color: #fff; box-shadow: var(--shadow-sm); }
+.btn:disabled { opacity: .5; cursor: default; transform: none !important; box-shadow: none !important; filter: none !important; }
+.btn:disabled:hover { border-color: var(--line2); color: var(--muted); }
+.btn.solid:disabled:hover { color: #fff; }
 
-/* Inputs — identical shape to canvas.css's .searchbox / .composer textarea */
+/* Inputs */
 .field {
-  border: 1px solid var(--line2); border-radius: 8px; padding: 9px 12px;
-  font: inherit; font-size: 13px; background: #fff; outline: none; color: var(--ink);
+  border: 1px solid var(--line2); border-radius: var(--radius-md); padding: 10px 13px;
+  font: inherit; font-size: 13px; background: var(--surface-2); outline: none; color: var(--ink);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.field:focus { border-color: var(--accent); }
-.field::placeholder { color: #9aa3ad; }
+.field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.field::placeholder { color: var(--faint); }
 
-/* List rows — same card language as canvas.css's .node.card (left color
-   bar + title/meta stack) and .card2 (border/shadow/radius). */
+/* List rows — surface cards with a brand accent bar */
 .row-card {
-  display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--line2); border-left: 4px solid var(--amber);
-  border-radius: 10px; box-shadow: var(--shadow-sm); background: #fff;
-  padding: 13px 15px;
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); background: var(--surface);
+  padding: 15px 16px;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.row-card:hover { border-color: #9fb6d4; }
+.row-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .row-card > a { flex: 1; text-decoration: none; color: inherit; min-width: 0; }
-.row-card .rtitle { font-weight: 700; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 7px; }
-.row-card .rmeta { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
-.row-card .rdel { color: #aab2bd; font-size: 12px; padding: 4px 6px; border-radius: 6px; flex: none; }
-.row-card .rdel:hover { color: var(--red); background: #fbecea; }
+.row-card .rtitle { font-weight: 600; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.row-card .rtitle .ic { color: var(--accent); }
+.row-card .rmeta { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+.row-card .rdel { color: var(--faint); font-size: 12px; padding: 6px 8px; border-radius: var(--radius-sm); flex: none; background: none; border: none; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.row-card .rdel:hover { color: var(--red); background: var(--red-weak); }
 
-.app-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
+.app-form { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 32px; }
 .app-form .field { flex: 1 1 200px; }
 
 .app-error {
-  color: var(--red); font-size: 12.5px; margin-bottom: 14px;
-  background: #fbecea; border: 1px solid #e7c3bf; border-radius: 8px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px;
+  color: var(--red); font-size: 12.5px; margin-bottom: 16px;
+  background: var(--red-weak); border: 1px solid var(--red); border-radius: var(--radius-md); padding: 10px 13px;
 }
-.app-empty { color: var(--muted); font-size: 13.5px; }
-.app-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.app-empty { color: var(--muted); font-size: 13.5px; padding: 4px 0; }
+.app-list { list-style: none; display: flex; flex-direction: column; gap: 12px; padding: 0; margin: 0; }
+
+@keyframes app-fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 640px) {
+  .app-topbar { padding: 0 16px; }
+  .app-main { padding: 32px 16px 64px; }
+  .app-form { flex-direction: column; }
+  .app-form .field { flex: 1 1 auto; }
+}
