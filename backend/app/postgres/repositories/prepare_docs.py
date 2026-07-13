@@ -4,6 +4,7 @@ storage this metadata index points at)."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -15,8 +16,20 @@ from app.postgres.models.prepare_doc import PrepareDoc
 def create(session: Session, *, doc_id: str, workshop_id: int, name: str,
           chars: int, uploaded_by: str = '') -> PrepareDoc:
     row = PrepareDoc(doc_id=doc_id, workshop_id=workshop_id, name=name,
-                     chars=chars, uploaded_by=uploaded_by)
+                     chars=chars, uploaded_by=uploaded_by, status='queued')
     session.add(row)
+    session.flush()
+    return row
+
+
+def set_status(session: Session, doc_id: str, status: str, detail: Optional[str] = None) -> Optional[PrepareDoc]:
+    row = session.get(PrepareDoc, doc_id)
+    if row is None:
+        return None
+    row.status = status
+    row.status_detail = detail
+    if status in ('ingested', 'failed'):
+        row.indexed_at = datetime.now(timezone.utc)
     session.flush()
     return row
 

@@ -4,17 +4,26 @@ import { use, useEffect, useState } from 'react';
 import { useAuthedUser } from '../../lib/useAuthedUser';
 import { apiGet } from '../../lib/api';
 import CanvasApp from '../CanvasApp';
+import AppHeader from '../AppHeader';
+import PhaseTabs, { PHASES } from '../PhaseTabs';
+import PreWorkshopDashboard from '../preworkshop/PreWorkshopDashboard';
+import '../preworkshop/preworkshop.css';
 
 // A Workshop IS the canvas board (see app/routes/projects.py +
 // app/routes/canvas.py) — this page resolves :workshopId to its owning
-// project (for the header breadcrumb) before handing off to the ported
-// prototype engine (CanvasApp -> canvasApp.js), same auth-gate pattern
-// as every other top-level page (see useAuthedUser).
+// project (for the header breadcrumb) before handing off to either the
+// Pre-Workshop dashboard (a plain React page, no canvas) or the ported
+// prototype engine (CanvasApp -> canvasApp.js) for the other 3 phases,
+// same auth-gate pattern as every other top-level page (see
+// useAuthedUser). Only Pre-Workshop has been rebuilt as a dashboard so
+// far — During Workshop/Post-Workshop/Proposal & Planning still render
+// the existing canvas, scoped to that phase's region via `initialLens`.
 export default function CanvasWorkshopPage({ params }) {
   const { workshopId } = use(params);
   const user = useAuthedUser();
   const [workshop, setWorkshop] = useState(null);
   const [error, setError] = useState(null);
+  const [phase, setPhase] = useState('prepare');
 
   useEffect(() => {
     if (!user) return;
@@ -54,5 +63,28 @@ export default function CanvasWorkshopPage({ params }) {
     );
   }
 
-  return <CanvasApp user={user} workshopId={Number(workshopId)} projectId={workshop.project_id} />;
+  const activePhase = PHASES.find((p) => p.id === phase);
+
+  return (
+    <div className="pw-shell">
+      <AppHeader user={user} workshop={workshop} projectId={workshop.project_id} />
+      <PhaseTabs active={phase} onSelect={setPhase} />
+      {activePhase.dashboard ? (
+        <PreWorkshopDashboard
+          user={user}
+          workshopId={Number(workshopId)}
+        />
+      ) : (
+        <div className="pw-canvas-wrap">
+          <CanvasApp
+            key={phase}
+            user={user}
+            workshopId={Number(workshopId)}
+            projectId={workshop.project_id}
+            initialLens={phase}
+          />
+        </div>
+      )}
+    </div>
+  );
 }

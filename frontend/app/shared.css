@@ -34,7 +34,7 @@
    user avatar circle matching canvas's .av. */
 .app-topbar {
   display: flex; align-items: center; gap: 10px;
-  background: #fff; border-bottom: 1px solid var(--line);
+  background: #fff; border-bottom: 1px solid var(--line); color: var(--ink);
   padding: 0 20px; height: 54px;
 }
 .app-topbar .branddot { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); flex: none; }
@@ -45,6 +45,12 @@
   font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 0 0 1px var(--line);
 }
+
+/* Workshop breadcrumb (see AppHeader.jsx) — sits inline in .app-topbar,
+   right after the brand wordmark, before the spacer. */
+.aidc-crumb { display: flex; align-items: center; gap: 6px; margin-left: 18px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.aidc-crumb-sep { color: #cfd6df; }
+.aidc-crumb-cur { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .app-main { max-width: 760px; margin: 0 auto; padding: 40px 24px 80px; }
 .app-h1 { font-size: 21px; font-weight: 700; margin-bottom: 4px; }

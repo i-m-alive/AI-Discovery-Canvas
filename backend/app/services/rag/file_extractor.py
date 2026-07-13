@@ -110,6 +110,48 @@ def _xlsx(data: bytes) -> str:
         return ''
 
 
+_XLSX_VIEW_MAX_ROWS = 500
+_XLSX_VIEW_MAX_COLS = 50
+
+
+def xlsx_to_html(data: bytes) -> str:
+    """Render an .xlsx workbook as an HTML table for the document VIEWER
+    (routes/agents.py's document/<id>/view) — deliberately server-side
+    with openpyxl (already a vetted dependency of this same module,
+    read_only + no formula evaluation) rather than a client-side JS xlsx
+    parser: the well-known 'xlsx'/SheetJS npm package has unpatched high-
+    severity prototype-pollution/ReDoS advisories, which is a real risk
+    for a feature whose whole job is parsing files uploaded by (or
+    forwarded from) a client. Capped at 500 rows / 50 cols per sheet —
+    a preview, not a spreadsheet engine; use the original-file download
+    for anything larger. Multiple sheets are rendered as separate tables
+    with a heading each."""
+    import html as _html_mod
+    try:
+        import openpyxl
+    except ImportError:
+        log.warning('[EXTRACTOR] XLSX view requires openpyxl')
+        return '<p>Preview unavailable — openpyxl is not installed.</p>'
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    parts = []
+    for ws in wb.worksheets:
+        rows_html = []
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            if i >= _XLSX_VIEW_MAX_ROWS:
+                rows_html.append('<tr><td colspan="99"><em>… truncated at '
+                                 f'{_XLSX_VIEW_MAX_ROWS} rows — download the original for the rest</em></td></tr>')
+                break
+            cells = row[:_XLSX_VIEW_MAX_COLS]
+            cells_html = ''.join(
+                '<td>' + _html_mod.escape('' if v is None else str(v)) + '</td>' for v in cells
+            )
+            if cells_html.strip('<td></td>'):
+                rows_html.append(f'<tr>{cells_html}</tr>')
+        if rows_html:
+            parts.append(f'<h4>{_html_mod.escape(ws.title)}</h4><table>{"".join(rows_html)}</table>')
+    return '\n'.join(parts) or '<p>This spreadsheet has no readable cells.</p>'
+
+
 def _pptx(data: bytes) -> str:
     try:
         from pptx import Presentation

@@ -45,8 +45,9 @@ from app.services import llm_service
 
 
 # ── E2E process-workflow diagram shape ─────────────────────────────────
-# Shared by 'drawflow' (direct generation) and the deepresearch synthesis
-# follow-up (_extract_e2e_processes) — both identify the DISTINCT
+# Shared by 'drawflow' (direct generation) and 'deepresearch' whenever
+# the facilitator's own instruction signals workflow intent (see
+# _classify_research_request) — both identify the DISTINCT
 # end-to-end processes a body of content describes (typically 1-4, often
 # different in kind: how the client's business works today, the change
 # being asked for, how delivery will implement it) and each becomes its
@@ -71,14 +72,128 @@ _E2E_TASK_TEXT = (
     'deadlines called out inline. node_meta like "2 processes · 11 steps".'
 )
 
+# ── Structured, cited research findings — for the Pre-Workshop dashboard's
+# insight cards (title + description + citation chips) and its confidence
+# stat. Additive to body_html (kept for backward compat with the generic
+# draft-card render) — deepresearch is the only agent that sets this.
+_INSIGHTS_FIELD = (
+    'Also include "insights": an array of 3-8 objects '
+    '{"title": "short headline", "description": "1-3 sentences", '
+    '"source_refs": [{"type": "client_artifact"|"web", "label": "doc or source name", '
+    '"url": "optional, only for web sources"}]} — each a discrete, cited finding. '
+    'NEVER invent a source_ref that isn\'t actually one of the documents or web results you '
+    'were given. Also include "confidence": an integer 0-100 — your own honest confidence in '
+    'this brief given what sources were actually available (score it low if few or no documents '
+    'and no usable web results were available, rather than defaulting to a high number).'
+)
+_WORKFLOW_NEXT_STEPS_FIELD = (
+    'Also include "next_steps": an array of 5-10 objects {"step": "short imperative action", '
+    '"why": "one sentence"} — concrete, ordered actions the BA should take next, grounded in '
+    'the ingested documents and the research findings supplied above (not generic advice).'
+)
+
+
+# ── deepresearch: intent-driven document type + optional workflow ─────
+# The facilitator's own instruction (the "What should the research agent
+# focus on?" box) can ask for more than a generic brief — a risk
+# assessment, a system architecture doc, a tech spec, or a workflow. This
+# classifies that BEFORE the real research pipeline runs, so the
+# synthesis call is prompted for the actual document shape the
+# facilitator wants instead of always writing a "Research Brief". Costs
+# nothing when the instruction is blank (the common case) — classifying
+# an empty ask is meaningless, so it short-circuits to the default.
+_DOC_TYPE_LABELS = {
+    'brief': 'Research Brief',
+    'risk_assessment': 'Risk Assessment',
+    'architecture': 'System Architecture',
+    'tech_spec': 'Technical Spec',
+    'workflow': 'Workflow',
+}
+_DOC_TYPE_TASKS = {
+    'brief': (
+        'You are writing the SYNTHESIS step of a deep-research pipeline. You are given '
+        'per-source analyses (documents from the Prepare zone, plus fetched web pages). '
+        'Produce a BA-ready research brief: <b>Key insights</b> (5-8 findings, each tied to '
+        'its source), <b>What this means for the workshop</b> (implications), and '
+        '<b>Open questions</b> the BA must resolve in the meeting. Cite sources by name '
+        'inline. If sources conflicted, say so. node_label "Research Brief".'
+    ),
+    'risk_assessment': (
+        'You are writing a RISK ASSESSMENT from the given per-source analyses (documents from '
+        'the Prepare zone, plus fetched web pages). Produce, as body_html: a <b>Risk Register</b> '
+        '(5-8 risks, each as one line: risk — likelihood (Low/Med/High) — impact (Low/Med/High) — '
+        'mitigation), followed by <b>Top exposure</b> (the 2-3 risks that matter most and why) and '
+        '<b>Open questions</b> the BA must resolve. Ground every risk in the actual sources — '
+        'never invent a risk the material gives no basis for. node_label "Risk Assessment".'
+    ),
+    'architecture': (
+        'You are writing a SYSTEM ARCHITECTURE brief from the given per-source analyses '
+        '(documents from the Prepare zone, plus fetched web pages). Produce, as body_html: '
+        '<b>Current state</b> (the components/systems described), <b>Proposed/target '
+        'architecture</b> (components, integration points, data flow), <b>Key technical '
+        'decisions & trade-offs</b>, and <b>Non-functional considerations</b> (scale, security, '
+        'compliance) where the sources give any basis for them. Ground every claim in the actual '
+        'sources. node_label "System Architecture".'
+    ),
+    'tech_spec': (
+        'You are writing a TECHNICAL SPECIFICATION from the given per-source analyses '
+        '(documents from the Prepare zone, plus fetched web pages). Produce, as body_html: '
+        '<b>Purpose & scope</b>, <b>Functional requirements</b>, <b>Key data entities</b>, '
+        '<b>Integration/API contracts</b> (if any are implied), <b>Non-functional requirements</b>, '
+        'and <b>Open technical questions</b>. Ground every requirement in the actual sources. '
+        'node_label "Technical Spec".'
+    ),
+    'workflow': (
+        'You are writing a WORKFLOW brief from the given per-source analyses (documents from '
+        'the Prepare zone, plus fetched web pages). Produce, as body_html: a short paragraph '
+        'naming the process/opportunity, followed by <b>Key insights</b> (3-6 findings grounded '
+        'in the sources) that justify the proposed workflow. The diagram and next-steps fields '
+        'below carry the actual process structure — body_html should read as the narrative that '
+        'introduces them, not repeat them line-for-line. node_label "Proposed Workflow".'
+    ),
+}
+_REQUEST_CLASSIFY_SYSTEM = (
+    'Classify what kind of document a business analyst is asking a research agent to produce, '
+    'and whether they also want a process/workflow diagram with concrete next steps alongside '
+    'it. Respond with STRICT JSON only: {"doc_type": "brief"|"risk_assessment"|"architecture"|'
+    '"tech_spec"|"workflow", "wants_workflow": true|false}. Pick "brief" whenever the instruction '
+    'doesn\'t clearly ask for one of the other four. Set "wants_workflow" to true whenever the '
+    'instruction asks for a workflow, process map, automation plan, or "how it works" diagram — '
+    'including whenever doc_type is already "workflow".'
+)
+
+
+def _classify_research_request(extra: Optional[str]) -> dict:
+    """{'doc_type': one of _DOC_TYPE_LABELS' keys, 'wants_workflow': bool}.
+    Zero-cost (no LLM call) when the facilitator left the instruction
+    blank — classifying nothing is meaningless, and this is what keeps
+    every other agent's behaviour (and cost) completely unchanged: the
+    document-type/workflow integration below ONLY activates when the
+    facilitator's own words actually ask for it."""
+    text = (extra or '').strip()
+    if not text:
+        return {'doc_type': 'brief', 'wants_workflow': False}
+    try:
+        raw = llm_service.complete(f'RESEARCH INSTRUCTION: {_clip(text, 400)}',
+                                   system=_REQUEST_CLASSIFY_SYSTEM,
+                                   tag='[AGENT/DEEPRESEARCH/CLASSIFY]', max_output_tokens=100)
+        obj = _parse_model_json(raw) or {}
+    except Exception as e:
+        log.info('[AGENT/DEEPRESEARCH] request classification skipped (%s)', e.__class__.__name__)
+        obj = {}
+    doc_type = str(obj.get('doc_type') or 'brief').lower()
+    if doc_type not in _DOC_TYPE_LABELS:
+        doc_type = 'brief'
+    return {'doc_type': doc_type, 'wants_workflow': bool(obj.get('wants_workflow'))}
+
 
 # ── Catalogue ─────────────────────────────────────────────────────────
 # folder = artifact-library destination (None → stays in chat).
 # doc = whether the placed canvas card shows an "open document" affordance.
 AGENT_SPECS: dict[str, dict] = {
-    # ---- Prepare ----
+    # ---- Pre-Workshop ----
     'ingest': {
-        'zone': 'Prepare', 'folder': 'Background', 'icon': 'database', 'doc': False,
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'database', 'doc': False,
         'name': 'Ingest client docs',
         'task': (
             'Parse the ATTACHED DOCUMENTS into discovery inputs. Extract: the concrete '
@@ -89,7 +204,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'research': {
-        'zone': 'Prepare', 'folder': 'Background', 'icon': 'globe', 'doc': True,
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'globe', 'doc': True,
         'name': 'Research company',
         'task': (
             'Produce a research summary of the client organisation and its operating/regulatory '
@@ -100,7 +215,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'brief': {
-        'zone': 'Prepare', 'folder': 'Background', 'icon': 'doc-text', 'doc': True,
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'doc-text', 'doc': True,
         'name': 'Context brief',
         'task': (
             'Write a pre-workshop context brief: engagement goal (1-2 sentences), current state, '
@@ -109,7 +224,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'questions': {
-        'zone': 'Prepare', 'folder': 'Background', 'icon': 'list', 'doc': True,
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'list', 'doc': True,
         'name': 'Questions to ask',
         'task': (
             'Generate 8-12 sharp, prioritised discovery questions for the client workshop. '
@@ -119,7 +234,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'agenda': {
-        'zone': 'Prepare', 'folder': 'Background', 'icon': 'list', 'doc': True,
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'list', 'doc': True,
         'name': 'Draft agenda',
         'task': (
             'Draft a structured agenda for a 90-minute discovery workshop: 4-6 timed parts, '
@@ -128,11 +243,12 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'deepresearch': {
-        'zone': 'Prepare', 'folder': 'Background', 'icon': 'target', 'doc': True,
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'target', 'doc': True,
         'name': 'Deep research',
         # Multi-step pipeline (see run_agent): per-document analysis calls
         # first, then any http(s) URLs found in the Prepare material are
         # fetched and summarised, then one synthesis call writes the brief.
+        'extra_fields': _INSIGHTS_FIELD,
         'task': (
             'You are writing the SYNTHESIS step of a deep-research pipeline. You are given '
             'per-source analyses (documents from the Prepare zone, plus fetched web pages). '
@@ -142,9 +258,27 @@ AGENT_SPECS: dict[str, dict] = {
             'inline. If sources conflicted, say so. node_label "Research Brief".'
         ),
     },
-    # ---- Run ----
+    'workflow': {
+        'zone': 'Pre-Workshop', 'folder': 'How it works', 'icon': 'flow', 'doc': False,
+        'name': 'Build workflow',
+        # Runs alongside deepresearch, not instead of it — reuses the same
+        # diagram machinery as 'drawflow' (a proven, working generator)
+        # plus a structured next-steps checklist. See run_agent: its
+        # context is built from BOTH the ingested Prepare documents AND
+        # the latest completed deepresearch run's insights for this
+        # workshop, not documents alone.
+        'extra_fields': _E2E_DIAGRAMS_FIELD + ' ' + _WORKFLOW_NEXT_STEPS_FIELD,
+        'task': (
+            'Given the ingested client documents and (if supplied) the research findings below, '
+            'propose a concrete workflow: the process(es) worth automating or streamlining, and '
+            'the ordered next steps to get there. body_html: a short paragraph naming the '
+            'opportunity, followed by an <ol> summary of the proposed workflow stages. '
+            'node_label "Proposed Workflow".'
+        ),
+    },
+    # ---- During Workshop ----
     'summarize': {
-        'zone': 'Run', 'folder': 'Meeting notes', 'icon': 'summarize', 'doc': True,
+        'zone': 'During Workshop', 'folder': 'Meeting notes', 'icon': 'summarize', 'doc': True,
         'name': 'Summarize',
         'task': (
             'Recap the discussion so far from the LIVE TRANSCRIPT lines in the context: the '
@@ -153,7 +287,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'drawflow': {
-        'zone': 'Run', 'folder': 'How it works', 'icon': 'flow', 'doc': False,
+        'zone': 'During Workshop', 'folder': 'How it works', 'icon': 'flow', 'doc': False,
         'name': 'Draw process flow',
         # diagrams[] is REQUIRED for this agent — the server builds a real
         # multi-page .drawio file from it (services/drawio.py::build_drawio_multi_xml).
@@ -162,7 +296,7 @@ AGENT_SPECS: dict[str, dict] = {
         'task': _E2E_TASK_TEXT,
     },
     'findgaps': {
-        'zone': 'Run', 'folder': 'Issues & decisions', 'icon': 'alert', 'doc': False,
+        'zone': 'During Workshop', 'folder': 'Issues & decisions', 'icon': 'alert', 'doc': False,
         'name': 'Find gaps',
         'task': (
             'Surface gaps, risks and compliance exposure visible in the context: process gaps, '
@@ -171,7 +305,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'decisions': {
-        'zone': 'Run', 'folder': 'Issues & decisions', 'icon': 'check-circle', 'doc': False,
+        'zone': 'During Workshop', 'folder': 'Issues & decisions', 'icon': 'check-circle', 'doc': False,
         'name': 'Capture decisions',
         'task': (
             'Extract the decisions made and action items assigned from the transcript. '
@@ -179,9 +313,9 @@ AGENT_SPECS: dict[str, dict] = {
             'Only include things actually said — never invent owners. node_label "Decisions (N)".'
         ),
     },
-    # ---- Synthesize ----
+    # ---- Post-Workshop ----
     'stories': {
-        'zone': 'Synthesize', 'folder': 'Requirements', 'icon': 'list', 'doc': True,
+        'zone': 'Post-Workshop', 'folder': 'Requirements', 'icon': 'list', 'doc': True,
         'name': 'User stories',
         'task': (
             'Write 4-6 dev-ready user stories from the approved discovery content: '
@@ -190,7 +324,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'bdd': {
-        'zone': 'Synthesize', 'folder': 'Requirements', 'icon': 'check-circle', 'doc': True,
+        'zone': 'Post-Workshop', 'folder': 'Requirements', 'icon': 'check-circle', 'doc': True,
         'name': 'Acceptance criteria',
         'task': (
             'Write Given-When-Then acceptance criteria for the most critical requirement(s) in '
@@ -200,7 +334,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'docs': {
-        'zone': 'Synthesize', 'folder': 'How it works', 'icon': 'doc-text', 'doc': True,
+        'zone': 'Post-Workshop', 'folder': 'How it works', 'icon': 'doc-text', 'doc': True,
         'name': 'Documentation',
         'task': (
             'Outline the documentation deliverables for this engagement: an updated SOP outline '
@@ -209,7 +343,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'opportunities': {
-        'zone': 'Synthesize', 'folder': 'Issues & decisions', 'icon': 'target', 'doc': False,
+        'zone': 'Post-Workshop', 'folder': 'Issues & decisions', 'icon': 'target', 'doc': False,
         'name': 'Find opportunities',
         'task': (
             'Identify 3-5 improvement/automation opportunities grounded in the pain points on '
@@ -218,7 +352,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'mom': {
-        'zone': 'Synthesize', 'folder': 'Meeting notes', 'icon': 'summarize', 'doc': True,
+        'zone': 'Post-Workshop', 'folder': 'Meeting notes', 'icon': 'summarize', 'doc': True,
         'name': 'Minutes of Meeting',
         'task': (
             'Assemble Minutes of Meeting from the session: attendees line (from context if '
@@ -226,9 +360,9 @@ AGENT_SPECS: dict[str, dict] = {
             'next steps. Compact — headings as <b>, lists as <ul>.'
         ),
     },
-    # ---- Project ----
+    # ---- Proposal & Planning ----
     'sow': {
-        'zone': 'Project', 'folder': 'Proposal', 'icon': 'doc-text', 'doc': True,
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'doc-text', 'doc': True,
         'name': 'Draft SOW',
         'task': (
             'Draft a Statement of Work for this engagement: objective, scope (in/out), '
@@ -238,7 +372,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'roi': {
-        'zone': 'Project', 'folder': 'Proposal', 'icon': 'dollar', 'doc': False,
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'dollar', 'doc': False,
         'name': 'Calculate ROI',
         'task': (
             'Estimate the return on this engagement over the horizon given in EXTRA INPUT. '
@@ -249,7 +383,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'risk': {
-        'zone': 'Project', 'folder': 'Proposal', 'icon': 'scale', 'doc': False,
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'scale', 'doc': False,
         'name': 'Benefit ⇄ risk',
         'task': (
             'Weigh the benefits of proceeding against the delivery risks, grounded in the '
@@ -258,7 +392,7 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'team': {
-        'zone': 'Project', 'folder': 'Proposal', 'icon': 'users', 'doc': False,
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'users', 'doc': False,
         'name': 'Suggest team',
         'task': (
             'Recommend a delivery team for this engagement: roles (with count), why each is '
@@ -540,8 +674,119 @@ def _default_research_query(doc_names: list[str], context: dict, intent: str = '
     return 'General discovery-workshop preparation best practices for this type of engagement'
 
 
+# ── Research Chain — a persisted, step-by-step trace of one deepresearch
+# run, for the Pre-Workshop dashboard's live progress timeline. Step keys/
+# labels match the reference product's own "Research Chain" language
+# exactly (Ingest -> Extract context -> Formulate queries -> Search &
+# reconcile -> Synthesize brief) rather than an invented shape. Every
+# function here is best-effort: a Postgres hiccup must never fail the
+# actual research draft, only silently skip the progress trace.
+_RESEARCH_STEPS = [
+    ('ingest', 'Ingest client docs'),
+    ('extract', 'Extract context'),
+    ('queries', 'Formulate queries'),
+    ('search', 'Search & reconcile'),
+    ('synthesize', 'Synthesize brief'),
+]
+
+
+def _start_research_run(workshop_id: Optional[int]) -> Optional[str]:
+    if not workshop_id:
+        return None
+    try:
+        import uuid
+        from app.postgres import session_scope
+        from app.postgres.repositories import research_runs as repo
+        run_id = uuid.uuid4().hex[:16]
+        with session_scope() as s:
+            if s is None:
+                return None
+            repo.create(s, run_id=run_id, workshop_id=workshop_id)
+        return run_id
+    except Exception as e:
+        log.info('[AGENT/DEEPRESEARCH/CHAIN] run creation skipped (%s)', e.__class__.__name__)
+        return None
+
+
+def _log_research_step(run_id: Optional[str], step: str, status: str, detail: str = '') -> None:
+    if not run_id:
+        return
+    try:
+        from datetime import datetime, timezone
+        from app.postgres import session_scope
+        from app.postgres.repositories import research_runs as repo
+        label = next((lbl for k, lbl in _RESEARCH_STEPS if k == step), step)
+        entry = {'step': step, 'label': label, 'status': status, 'detail': detail,
+                 'at': datetime.now(timezone.utc).isoformat()}
+        with session_scope() as s:
+            if s is not None:
+                repo.append_step(s, run_id, entry)
+    except Exception as e:
+        log.info('[AGENT/DEEPRESEARCH/CHAIN] step log skipped (%s)', e.__class__.__name__)
+
+
+def _finish_research_run(run_id: Optional[str], *, status: str,
+                         insights: Optional[list] = None, confidence: Optional[int] = None,
+                         diagram: Optional[dict] = None, next_steps: Optional[list] = None) -> None:
+    if not run_id:
+        return
+    try:
+        from app.postgres import session_scope
+        from app.postgres.repositories import research_runs as repo
+        with session_scope() as s:
+            if s is not None:
+                repo.set_result(s, run_id, status=status, insights=insights, confidence=confidence,
+                                diagram=diagram, next_steps=next_steps)
+    except Exception as e:
+        log.info('[AGENT/DEEPRESEARCH/CHAIN] run finalize skipped (%s)', e.__class__.__name__)
+
+
+def _set_research_counts(run_id: Optional[str], *, doc_count: Optional[int] = None,
+                         web_count: Optional[int] = None) -> None:
+    """Real, server-computed counts (docs actually analysed, web results
+    Tavily actually returned) — NOT derived from how many the model
+    happened to cite in its insights, so the dashboard's stat chips are
+    never a step removed from what actually ran."""
+    if not run_id:
+        return
+    try:
+        from app.postgres import session_scope
+        from app.postgres.repositories import research_runs as repo
+        with session_scope() as s:
+            if s is not None:
+                repo.set_counts(s, run_id, doc_count=doc_count, web_count=web_count)
+    except Exception as e:
+        log.info('[AGENT/DEEPRESEARCH/CHAIN] count update skipped (%s)', e.__class__.__name__)
+
+
+def _coerce_insights(raw_insights) -> list[dict]:
+    """Clamp/validate a model-supplied 'insights' array (see
+    _INSIGHTS_FIELD) — never trusts the model's source_refs to be
+    well-typed."""
+    out: list[dict] = []
+    for it in (raw_insights or [])[:8]:
+        if not isinstance(it, dict):
+            continue
+        title = _clip(it.get('title'), 120)
+        desc = _clip(it.get('description'), 400)
+        if not title or not desc:
+            continue
+        refs: list[dict] = []
+        for r in (it.get('source_refs') or [])[:6]:
+            if not isinstance(r, dict):
+                continue
+            label = _clip(r.get('label'), 120)
+            if not label:
+                continue
+            rtype = str(r.get('type') or '').lower()
+            rtype = 'web' if rtype == 'web' else 'client_artifact'
+            refs.append({'type': rtype, 'label': label, 'url': _clip(r.get('url'), 500)})
+        out.append({'title': title, 'description': desc, 'source_refs': refs})
+    return out
+
+
 def _deep_research_context(context: dict, extra: Optional[str] = None,
-                           workshop_id: Optional[int] = None) -> dict:
+                           workshop_id: Optional[int] = None, run_id: Optional[str] = None) -> dict:
     """The gather+analyse steps of /deepresearch:
       1. Detect the user's actual research intent from a focused sample of
          EVERY document (not just their filenames or first page).
@@ -569,8 +814,11 @@ def _deep_research_context(context: dict, extra: Optional[str] = None,
     if not docs:
         docs = context.get('files') or []   # fallback: whatever was attached this turn
     docs = docs[:_MAX_RESEARCH_DOCS]
+    _log_research_step(run_id, 'ingest', 'done', f'{len(docs)} artifact{"s" if len(docs) != 1 else ""} parsed & embedded')
+    _set_research_counts(run_id, doc_count=len(docs))
 
     intent = _clip(extra, 300) or _detect_research_intent(docs)
+    _log_research_step(run_id, 'extract', 'done', intent or 'no specific intent detected — using document topics')
     sum_system = ('You analyse ONE source document for a business-analysis research brief. '
                   + (f"The user's underlying research intent: {intent}. Focus on the material "
                      'relevant to that intent — do not get distracted by unrelated boilerplate '
@@ -595,6 +843,7 @@ def _deep_research_context(context: dict, extra: Optional[str] = None,
     # document, and not a filename guess.
     query = _clip(extra, 300) or _default_research_query(
         [str((f or {}).get('name') or '') for f in docs], context, intent=intent)
+    _log_research_step(run_id, 'queries', 'done', 'grounded on extracted context')
     try:
         from app.services import web_search
         result = web_search.search(query, max_results=_MAX_RESEARCH_URLS)
@@ -614,6 +863,9 @@ def _deep_research_context(context: dict, extra: Optional[str] = None,
         analyses.append({'name': 'web search', 'text': f'Web search was attempted but is not '
                                                         f'available right now ({result["error"]}) — '
                                                         f'the brief must say so rather than invent findings.'})
+    n_web = len(result.get('results') or [])
+    _log_research_step(run_id, 'search', 'done', f'{n_web} web source{"s" if n_web != 1 else ""} vs. client docs')
+    _set_research_counts(run_id, web_count=n_web)
 
     if not analyses:
         analyses = [{'name': 'note', 'text': 'No documents were available in the Prepare zone and '
@@ -621,20 +873,6 @@ def _deep_research_context(context: dict, extra: Optional[str] = None,
                                              'research inputs are missing and list what to collect.'}]
     context['files'] = analyses
     return context
-
-
-_E2E_CHECK_SYSTEM = (
-    'You read a business-analysis research document body. Identify the DISTINCT end-to-end '
-    'processes/workflows it actually describes (typically 1-4) — they are often different in '
-    'kind, e.g. (a) how the client\'s business/system works today, (b) the change/application '
-    'being requested and how it should behave, (c) how the delivery team will implement it. '
-    'Each needs at least 3 identifiable steps to count — not just a list of facts or '
-    'recommendations. If NONE qualify, return an empty diagrams array. Respond with STRICT '
-    'JSON only: {"diagrams": [{"title": "...", "summary": "one line", '
-    '"nodes": [{"id": "n1", "label": "...", "type": "start|end|process|decision|data"}], '
-    '"edges": [{"from": "n1", "to": "n2", "label": "optional"}]}]} (6-24 nodes per diagram, '
-    'max 4 diagrams). Use "decision" nodes for branch points and label the edges out of them.'
-)
 
 
 def _coerce_diagrams(raw_diagrams) -> list[dict]:
@@ -680,62 +918,101 @@ def _coerce_diagrams(raw_diagrams) -> list[dict]:
     return out
 
 
-def _extract_e2e_processes(body_html: str) -> list[dict]:
-    """The 'workflow sub-agent': one cheap call over an ALREADY-GENERATED
-    research document, identifying the distinct end-to-end processes it
-    describes so run_agent can attach genuine multi-page .drawio diagrams
-    — same generator /drawflow uses — meaning approving the research also
-    hands the BA ready diagrams. Returns [] (no diagram attached) on any
-    failure or a clean 'none found' — this is an enhancement, never
-    something that can fail the research draft."""
-    plain = re.sub(r'<[^>]+>', ' ', body_html or '')[:6000].strip()
-    if not plain:
-        return []
-    try:
-        raw = llm_service.complete(f'RESEARCH DOCUMENT BODY:\n\n{plain}',
-                                   system=_E2E_CHECK_SYSTEM,
-                                   tag='[AGENT/DEEPRESEARCH/E2E]', max_output_tokens=3000)
-        obj = _parse_model_json(raw)
-        if not obj:
-            return []
-        return _coerce_diagrams(obj.get('diagrams'))
-    except Exception as e:
-        log.info('[AGENT/DEEPRESEARCH/E2E] skipped (%s)', e.__class__.__name__)
-        return []
+def _workflow_context(context: dict, workshop_id: Optional[int]) -> dict:
+    """'workflow' agent input: the ingested Prepare documents PLUS the
+    latest COMPLETED deepresearch run's insights for this workshop (if
+    any) — genuinely "documents + research findings", not documents
+    alone. Mirrors _deep_research_context's replacement-context shape so
+    the same _context_block/_rag_block plumbing downstream just works.
+    Best-effort: falls back to whatever context['files'] the frontend
+    already attached when no workshop/persisted corpus is available."""
+    context = dict(context or {})
+    files: list[dict] = []
+    if workshop_id:
+        try:
+            from app.services import prepare_docs
+            files.extend(prepare_docs.get_all_texts(workshop_id))
+        except Exception as e:
+            log.info('[AGENT/WORKFLOW] prepare_docs unavailable (%s)', e.__class__.__name__)
+        try:
+            from app.postgres import session_scope
+            from app.postgres.repositories import research_runs as repo
+            with session_scope() as s:
+                if s is not None:
+                    run = repo.get_latest_for_workshop(s, workshop_id)
+                    if run is not None and run.status == 'done' and run.insights:
+                        lines = [f"- {i.get('title')}: {i.get('description')}" for i in run.insights]
+                        files.append({'name': 'Deep research findings', 'text': '\n'.join(lines)})
+        except Exception as e:
+            log.info('[AGENT/WORKFLOW] research_runs unavailable (%s)', e.__class__.__name__)
+    if not files:
+        files = context.get('files') or []
+    context['files'] = files
+    return context
 
 
 def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
-             workshop_id: Optional[int] = None) -> dict:
+             workshop_id: Optional[int] = None, author: Optional[str] = None) -> dict:
     """Execute one agent. Returns the draft dict (see module docstring).
     `workshop_id` scopes every per-workshop lookup this pipeline makes
     (Prepare-zone documents, RAG retrieval, GraphRAG entities, and where
     the generated draft itself gets persisted) — without it, agents fall
     back to whatever context the frontend attached this turn only, with
-    no document corpus, RAG grounding, or persisted docId.
+    no document corpus, RAG grounding, or persisted docId. `author` (the
+    signed-in BA's name/email) is stored on the persisted generated_docs
+    row for the Pre-Workshop Artifacts card grid — purely descriptive,
+    never used for access control.
     Raises on unknown agent or unrecoverable LLM/parse failure — the
     route maps exceptions to {ok:false, error}."""
     spec = AGENT_SPECS.get(agent_id)
     if not spec:
         raise ValueError(f'unknown agent: {agent_id}')
 
+    research_run_id = None
+    # Only deepresearch classifies — see _classify_research_request's
+    # docstring: a blank instruction short-circuits to the 'brief'
+    # default with wants_workflow=False and no extra LLM call, so this is
+    # a genuine no-op for the common case and for every other agent.
+    doc_type = 'brief'
+    wants_workflow = False
     if agent_id == 'deepresearch':
         # extra doubles as the facilitator's research instruction here —
         # still ALSO passed through as "EXTRA INPUT" below so the model
-        # sees it explicitly, exactly like every other agent.
-        context = _deep_research_context(context, extra=extra, workshop_id=workshop_id)
+        # sees it explicitly, exactly like every other agent. The
+        # research_runs row (best-effort, None if Postgres/workshop_id
+        # unavailable) is what the Pre-Workshop dashboard's Research
+        # Chain timeline polls while this pipeline is in flight.
+        research_run_id = _start_research_run(workshop_id)
+        classified = _classify_research_request(extra)
+        doc_type, wants_workflow = classified['doc_type'], classified['wants_workflow']
+        context = _deep_research_context(context, extra=extra, workshop_id=workshop_id, run_id=research_run_id)
+    elif agent_id == 'workflow':
+        context = _workflow_context(context, workshop_id=workshop_id)
+
+    # Task text and extra-fields are normally the spec's own — deepresearch
+    # is the one exception, swapping in the doc-type-specific task (see
+    # _DOC_TYPE_TASKS) and, when the facilitator's instruction actually
+    # asked for a workflow, folding the diagram+next-steps fields into
+    # THIS synthesis call instead of a separate agent run.
+    task_text = spec['task']
+    extra_fields_text = spec.get('extra_fields')
+    if agent_id == 'deepresearch':
+        task_text = _DOC_TYPE_TASKS[doc_type]
+        if wants_workflow:
+            extra_fields_text = (extra_fields_text or '') + ' ' + _E2E_DIAGRAMS_FIELD + ' ' + _WORKFLOW_NEXT_STEPS_FIELD
 
     prompt_parts = [
         f'AGENT TASK — {spec["name"]} (zone: {spec["zone"]}):',
-        spec['task'],
+        task_text,
     ]
-    if spec.get('extra_fields'):
-        prompt_parts.append('ADDITIONAL REQUIRED JSON FIELDS: ' + spec['extra_fields'])
+    if extra_fields_text:
+        prompt_parts.append('ADDITIONAL REQUIRED JSON FIELDS: ' + extra_fields_text)
     if extra:
-        prompt_parts.append(f'EXTRA INPUT from the facilitator: {_clip(extra, 200)}')
+        prompt_parts.append(f'EXTRA INPUT from the facilitator: {_clip(extra, 400)}')
     prompt_parts.append('')
     prompt_parts.append('=== CONTEXT ===')
     prompt_parts.append(_context_block(context))
-    rag_block = _rag_block(f'{spec["name"]}: {spec["task"][:200]}', workshop_id=workshop_id)
+    rag_block = _rag_block(f'{spec["name"]}: {task_text[:200]}', workshop_id=workshop_id)
     if agent_id == 'deepresearch' and workshop_id:
         # Cross-document relationship context (GraphRAG) — what plain
         # vector similarity search can't give: "Doc A's Process X is the
@@ -756,14 +1033,25 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
         prompt_parts.append(rag_block)
     prompt = '\n'.join(prompt_parts)
 
-    # drawflow/deepresearch can attach a multi-process "diagrams" array
-    # (1-4 diagrams x up to 24 nodes+edges each, on top of body_html) —
-    # meaningfully bigger than every other agent's flat draft, and was
-    # observed truncating mid-JSON at the old 1600-token cap (both the
-    # first call and the retry landed at exactly out_tok=1600, i.e. cut
-    # off, not actually non-JSON output). Give diagram-producing agents
-    # more headroom; everything else keeps the smaller, cheaper cap.
-    max_out = 4000 if spec.get('extra_fields') == _E2E_DIAGRAMS_FIELD else 1600
+    # drawflow/deepresearch/workflow can attach a multi-process "diagrams"
+    # array (1-4 diagrams x up to 24 nodes+edges each, on top of
+    # body_html) and/or structured insights/next_steps — meaningfully
+    # bigger than every other agent's flat draft, and was observed
+    # truncating mid-JSON at the old 1600-token cap (both the first call
+    # and the retry landed at exactly out_tok=1600, i.e. cut off, not
+    # actually non-JSON output). Give any agent with extra structured
+    # fields more headroom; everything else keeps the smaller, cheaper cap.
+    # 'workflow' asks for THREE payloads at once (body_html + diagrams +
+    # next_steps) — the largest combined ask of any agent — and was still
+    # truncating at 4000 (both calls landed at exactly out_tok=4000, same
+    # cut-off signature as the earlier 1600 bug), so it gets its own,
+    # bigger budget rather than sharing drawflow/deepresearch's cap.
+    if agent_id == 'workflow' or (agent_id == 'deepresearch' and wants_workflow):
+        max_out = 8000
+    elif extra_fields_text:
+        max_out = 4000
+    else:
+        max_out = 1600
     raw = llm_service.complete(prompt, system=_SYSTEM,
                                tag=f'[AGENT/{agent_id.upper()}]',
                                max_output_tokens=max_out)
@@ -786,11 +1074,13 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     if obj is None:
         log.warning('[AGENT/%s] model returned non-JSON again (%d chars) — failing the draft',
                     agent_id, len(raw or ''))
+        _finish_research_run(research_run_id, status='failed')
         raise RuntimeError('the model did not return valid JSON for this draft — try again')
 
     title = _clip(obj.get('title'), 120, spec['name'])
     body_html = sanitize_html(_clip(obj.get('body_html'), 8000))
     if not body_html.strip():
+        _finish_research_run(research_run_id, status='failed')
         raise RuntimeError('the model returned an empty draft body — try again')
     node_label = _clip(obj.get('node_label'), 60, title[:60])
     node_meta = _clip(obj.get('node_meta'), 48)
@@ -815,38 +1105,102 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     # nothing — previously no generated draft had anywhere to be fetched
     # from; see app.services.generated_docs / routes/agents.py document
     # GET). Best-effort: a persistence failure must never fail the draft.
+    # deepresearch: extract the structured, cited insights + confidence
+    # (see _INSIGHTS_FIELD) — this is what backs the Pre-Workshop
+    # dashboard's insight cards and confidence stat; body_html stays
+    # populated too for backward compat with the generic draft-card render.
+    insights: list[dict] = []
+    confidence: Optional[int] = None
+    if agent_id == 'deepresearch':
+        insights = _coerce_insights(obj.get('insights'))
+        raw_conf = obj.get('confidence')
+        try:
+            confidence = max(0, min(100, int(raw_conf)))
+        except (TypeError, ValueError):
+            confidence = None
+        draft['insights'] = insights
+        draft['confidence'] = confidence
+        _log_research_step(research_run_id, 'synthesize', 'done',
+                           f'{confidence}% confidence, cited' if confidence is not None else 'cited')
+
+    # 'workflow' (the standalone agent): the ordered next-steps checklist
+    # (see _WORKFLOW_NEXT_STEPS_FIELD) — separate from the diagram below.
+    if agent_id == 'workflow':
+        next_steps = []
+        for it in (obj.get('next_steps') or [])[:10]:
+            if not isinstance(it, dict):
+                continue
+            step = _clip(it.get('step'), 160)
+            if not step:
+                continue
+            next_steps.append({'step': step, 'why': _clip(it.get('why'), 240), 'done': False})
+        draft['next_steps'] = next_steps
+
     if spec['doc'] and workshop_id:
         try:
             from app.services import generated_docs
-            record = generated_docs.register(workshop_id, title, body_html, agent_id=agent_id)
+            desc = (insights[0]['description'] if insights else re.sub(r'<[^>]+>', ' ', body_html)[:280].strip())
+            doc_type_label = _DOC_TYPE_LABELS.get(doc_type, doc_type)
+            tags = [agent_id]
+            if agent_id == 'deepresearch' and doc_type != 'brief':
+                tags.append(doc_type_label)
+            if confidence is not None:
+                tags.append(f'{confidence}% confidence')
+            category = doc_type_label if (agent_id == 'deepresearch' and doc_type != 'brief') else spec['folder']
+            record = generated_docs.register(
+                workshop_id, title, body_html, agent_id=agent_id,
+                status='final' if agent_id == 'deepresearch' else 'draft',
+                completion_pct=confidence if confidence is not None else 100,
+                author=author or '', description=desc, category=category, tags=tags)
             if record:
                 draft['node']['docId'] = record['doc_id']
         except Exception as e:
             log.info('[AGENT/%s] generated-doc persistence skipped (%s)',
                      agent_id, e.__class__.__name__)
 
-    # drawflow → build the real multi-page .drawio file from the model's
-    # distinct end-to-end processes (1-4 typed-node/edge diagrams).
-    if agent_id == 'drawflow':
+    # drawflow/workflow → build the real multi-page .drawio file from the
+    # model's distinct end-to-end processes (1-4 typed-node/edge diagrams).
+    if agent_id in ('drawflow', 'workflow'):
         diagrams = _coerce_diagrams(obj.get('diagrams'))
         if not diagrams:
-            raise RuntimeError('the model returned no process diagrams — try again')
-        from app.services.drawio import build_drawio_multi_xml
-        draft['diagram'] = {'diagrams': diagrams, 'xml': build_drawio_multi_xml(diagrams, title)}
-        node_count = sum(len(d['nodes']) for d in diagrams)
-        plural = 'es' if len(diagrams) != 1 else ''
-        draft['node']['meta'] = draft['node']['meta'] or f'{len(diagrams)} process{plural} · {node_count} steps'
-
-    # deepresearch's "workflow sub-agent": if the research happened to
-    # describe one or more real end-to-end processes, attach genuine
-    # .drawio diagrams to it too — one Approve gets the BA both the
-    # research doc AND ready diagrams, cutting the manual pre-meeting
-    # work this agent exists to remove.
-    if agent_id == 'deepresearch':
-        diagrams = _extract_e2e_processes(body_html)
-        if diagrams:
+            if agent_id == 'drawflow':
+                raise RuntimeError('the model returned no process diagrams — try again')
+            # 'workflow' can still be useful with next_steps only, no hard
+            # failure if the model found nothing diagram-worthy this time.
+        else:
             from app.services.drawio import build_drawio_multi_xml
             draft['diagram'] = {'diagrams': diagrams, 'xml': build_drawio_multi_xml(diagrams, title)}
+            node_count = sum(len(d['nodes']) for d in diagrams)
+            plural = 'es' if len(diagrams) != 1 else ''
+            draft['node']['meta'] = draft['node']['meta'] or f'{len(diagrams)} process{plural} · {node_count} steps'
+
+    # deepresearch + detected workflow intent (see
+    # _classify_research_request): the diagram/next_steps fields were
+    # already requested IN THIS SAME synthesis call (folded into
+    # extra_fields_text above) rather than a separate follow-up LLM call —
+    # only runs when the facilitator's own instruction actually asked for
+    # a workflow, never unconditionally.
+    research_diagram: Optional[dict] = None
+    research_next_steps: list[dict] = []
+    if agent_id == 'deepresearch' and wants_workflow:
+        diagrams = _coerce_diagrams(obj.get('diagrams'))
+        if diagrams:
+            from app.services.drawio import build_drawio_multi_xml
+            research_diagram = {'diagrams': diagrams, 'xml': build_drawio_multi_xml(diagrams, title)}
+            draft['diagram'] = research_diagram
+        for it in (obj.get('next_steps') or [])[:10]:
+            if not isinstance(it, dict):
+                continue
+            step = _clip(it.get('step'), 160)
+            if not step:
+                continue
+            research_next_steps.append({'step': step, 'why': _clip(it.get('why'), 240), 'done': False})
+        if research_next_steps:
+            draft['next_steps'] = research_next_steps
+
+    if agent_id == 'deepresearch':
+        _finish_research_run(research_run_id, status='done', insights=insights, confidence=confidence,
+                             diagram=research_diagram, next_steps=research_next_steps or None)
     return draft
 
 

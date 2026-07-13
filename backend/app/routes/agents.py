@@ -56,6 +56,13 @@ Agent routes.
                              its canvas node is deleted). Tries both
                              registries.
 
+    GET    /api/agents/document/<doc_id>/word?workshop_id=<id>   AUTH-GATED.
+                             -> a .docx file (Content-Disposition:
+                             attachment) — exports a GENERATED document
+                             (research brief, risk assessment, workflow
+                             write-up, ...) as Word. See
+                             app/services/docx_export.py.
+
 Design note: run/chat return HTTP 200 with ok:false on functional
 failures (only auth failures are non-200). The route being reached and
 auth passing vs. the model call failing are different problems — keeping
@@ -65,7 +72,9 @@ error rendering (and debugging) sane.
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+import re
+
+from flask import Blueprint, Response, jsonify, request
 
 from app.auth import auth_required, current_user
 from app.core.logging import log, log_exc
@@ -120,8 +129,10 @@ def run_agent():
         workshop_id = int(workshop_id) if workshop_id else None
     except (TypeError, ValueError):
         workshop_id = None
+    user = current_user() or {}
+    author = user.get('name') or user.get('email') or ''
     try:
-        draft = agent_catalog.run_agent(agent_id, context, extra=extra, workshop_id=workshop_id)
+        draft = agent_catalog.run_agent(agent_id, context, extra=extra, workshop_id=workshop_id, author=author)
         return jsonify({'ok': True, 'draft': draft})
     except Exception as e:
         log_exc(f'[AGENTS/RUN/{agent_id}]', e)
@@ -192,16 +203,23 @@ def upload():
 
     user = current_user() or {}
     record = prepare_docs.register(workshop_id, f.filename, text,
-                                   uploaded_by=user.get('name') or user.get('email') or '')
+                                   uploaded_by=user.get('name') or user.get('email') or '',
+                                   file_bytes=data)
     if not record:
         return jsonify({'ok': False, 'error': 'could not register the document (database unavailable)'}), 200
 
     # Copilot memory: index the extracted text into the RAG corpus (vector)
-    # AND the graph (entity/relationship extraction) on daemon threads —
-    # retrieval then grounds every later agent/chat call. Best-effort:
-    # degrades to a no-op when Bedrock/FAISS/Neo4j are absent, and neither
-    # ever fails the upload itself.
-    def _index_vector(name: str, doc_id: str, body: str):
+    # AND the graph (entity/relationship extraction) — retrieval then
+    # grounds every later agent/chat call. Best-effort: degrades to a
+    # no-op when Bedrock/FAISS/Neo4j are absent, and neither ever fails
+    # the upload itself. Run sequentially in ONE background thread (not
+    # two independent ones) so there's a single, unambiguous point to
+    # flip prepare_docs.status to 'ingested'/'failed' once BOTH finish —
+    # this is what backs the Pre-Workshop "Source Artifacts" status pill
+    # (Queued -> Parsing -> Ingested/Failed), which had no real state to
+    # read before this.
+    def _index_both(name: str, doc_id: str, body: str):
+        vector_ok = graph_ok = False
         try:
             from app.services import rag
             if rag.is_enabled():
@@ -213,24 +231,27 @@ def upload():
                                                 'workflow_id': str(workshop_id), 'doc_id': doc_id},
                                        tag='[AGENTS/UPLOAD/RAG]')
                 log.info('[AGENTS/UPLOAD/RAG] %s -> %d chunks indexed', name, n)
+            vector_ok = True
         except Exception as e:
             log.info('[AGENTS/UPLOAD/RAG] vector indexing skipped for %s (%s)',
                      name, e.__class__.__name__)
-
-    def _index_graph(name: str, doc_id: str, body: str):
         try:
             from app.services import graph_rag
             n = graph_rag.extract_and_store(board_id=str(workshop_id), doc_id=doc_id, name=name, text=body)
             log.info('[AGENTS/UPLOAD/GRAPH] %s -> %d entities extracted', name, n)
+            graph_ok = True
         except Exception as e:
             log.info('[AGENTS/UPLOAD/GRAPH] graph indexing skipped for %s (%s)',
                      name, e.__class__.__name__)
+        # Best-effort either way — a subsystem being unreachable (Neo4j
+        # down, no Bedrock creds) degrades the doc to 'failed' rather than
+        # leaving it stuck on 'parsing' forever, but never raises.
+        prepare_docs.set_status(workshop_id, doc_id, 'ingested' if (vector_ok or graph_ok) else 'failed')
 
+    prepare_docs.set_status(workshop_id, record['doc_id'], 'parsing')
     import threading
-    threading.Thread(target=_index_vector, args=(f.filename, record['doc_id'], text),
-                     name='rag-index-upload', daemon=True).start()
-    threading.Thread(target=_index_graph, args=(f.filename, record['doc_id'], text),
-                     name='graph-index-upload', daemon=True).start()
+    threading.Thread(target=_index_both, args=(f.filename, record['doc_id'], text),
+                     name='doc-index-upload', daemon=True).start()
 
     return jsonify({'ok': True, 'name': f.filename, 'chars': len(text),
                     'truncated': truncated, 'text': text, 'doc_id': record['doc_id']})
@@ -243,6 +264,42 @@ def list_prepare_docs():
     if not workshop_id:
         return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
     return jsonify({'ok': True, 'docs': prepare_docs.list_docs(workshop_id)})
+
+
+@bp.route('/api/agents/generated-docs', methods=['GET'])
+@auth_required
+def list_generated_docs():
+    """For the Pre-Workshop 'Artifacts' card grid — status/completion/
+    author/description/tags per generated draft, scoped to one workshop."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    return jsonify({'ok': True, 'docs': generated_docs.list_docs(workshop_id)})
+
+
+@bp.route('/api/agents/research-chain', methods=['GET'])
+@auth_required
+def research_chain():
+    """For the Pre-Workshop 'Research Chain' timeline — the most recent
+    deepresearch run's step-by-step progress, insights and confidence for
+    this workshop. Polled by the dashboard (~2s) while status=='running'."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.postgres import session_scope
+    from app.postgres.repositories import research_runs as repo
+    with session_scope() as s:
+        if s is None:
+            return jsonify({'ok': True, 'run': None})
+        row = repo.get_latest_for_workshop(s, workshop_id)
+        if row is None:
+            return jsonify({'ok': True, 'run': None})
+        run = {'run_id': row.run_id, 'status': row.status, 'steps': row.steps,
+              'insights': row.insights, 'confidence': row.confidence,
+              'doc_count': row.doc_count, 'web_count': row.web_count,
+              'diagram': row.diagram, 'next_steps': row.next_steps}
+    return jsonify({'ok': True, 'run': run})
 
 
 @bp.route('/api/agents/document/<doc_id>', methods=['GET'])
@@ -264,6 +321,117 @@ def get_prepare_doc(doc_id):
         return jsonify({'ok': True, 'name': name, 'text': html_to_text(html)})
 
     return jsonify({'ok': False, 'error': 'document not found'}), 404
+
+
+_VIEW_MIME_BY_EXT = {
+    'pdf': 'application/pdf',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'csv': 'text/csv', 'txt': 'text/plain', 'md': 'text/markdown', 'html': 'text/html', 'htm': 'text/html',
+}
+
+
+@bp.route('/api/agents/document/<doc_id>/file', methods=['GET'])
+@auth_required
+def get_prepare_doc_file(doc_id):
+    """Raw original bytes of an uploaded source document — the document
+    viewer's PDF <iframe> src and DOCX-via-mammoth fetch both hit this.
+    Only ever the ORIGINAL uploaded file (see prepare_docs.register's
+    file_bytes); generated docs have no "original file", only HTML."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    data = prepare_docs.get_original_bytes(workshop_id, doc_id)
+    if data is None:
+        return jsonify({'ok': False, 'error': 'original file not available for this document '
+                                              '(uploaded before viewing was added, or not a source document)'}), 404
+    name = next((d['name'] for d in prepare_docs.list_docs(workshop_id) if d['doc_id'] == doc_id), doc_id)
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    resp = Response(data, mimetype=_VIEW_MIME_BY_EXT.get(ext, 'application/octet-stream'))
+    resp.headers['Content-Disposition'] = f'inline; filename="{name}"'
+    return resp
+
+
+@bp.route('/api/agents/document/<doc_id>/view', methods=['GET'])
+@auth_required
+def view_document(doc_id):
+    """Tells the document-viewer modal HOW to render a document, so the
+    frontend doesn't need its own per-format rules: -> {ok, kind, name,
+    ...}. `kind` drives the frontend:
+      'pdf'/'docx'  -> fetch raw bytes from the /file route above
+                       (native <iframe> for pdf, mammoth.js for docx).
+      'html'        -> pre-rendered HTML already in the response
+                       (server-side xlsx_to_html, or a generated doc's
+                       own body_html — never a client-side xlsx parser;
+                       see file_extractor.xlsx_to_html's docstring for why).
+      'text'        -> plain-text fallback (PPTX and anything else with
+                       no real renderer) — still the extracted text, not
+                       an error.
+    """
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+
+    docs_by_id = {d['doc_id']: d for d in prepare_docs.list_docs(workshop_id)}
+    if doc_id in docs_by_id:
+        name = docs_by_id[doc_id]['name']
+        ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+        file_url = f'/api/agents/document/{doc_id}/file?workshop_id={workshop_id}'
+        if ext == 'pdf':
+            return jsonify({'ok': True, 'kind': 'pdf', 'name': name, 'file_url': file_url, 'origin': 'source'})
+        if ext == 'docx':
+            return jsonify({'ok': True, 'kind': 'docx', 'name': name, 'file_url': file_url, 'origin': 'source'})
+        if ext == 'xlsx':
+            data = prepare_docs.get_original_bytes(workshop_id, doc_id)
+            if data is not None:
+                from app.services.rag.file_extractor import xlsx_to_html
+                try:
+                    return jsonify({'ok': True, 'kind': 'html', 'name': name, 'html': xlsx_to_html(data), 'origin': 'source'})
+                except Exception as e:
+                    log.warning('[AGENTS/VIEW] xlsx render failed for %s (%s)', doc_id, e.__class__.__name__)
+            # No original bytes (pre-dates this feature) or render failed — fall back to extracted text below.
+        text = prepare_docs.get_text(workshop_id, doc_id)
+        return jsonify({'ok': True, 'kind': 'text', 'name': name, 'text': text or '', 'origin': 'source'})
+
+    from app.services import generated_docs
+    html = generated_docs.get_html(workshop_id, doc_id)
+    if html is not None:
+        name = generated_docs.get_name(workshop_id, doc_id) or ''
+        return jsonify({'ok': True, 'kind': 'html', 'name': name, 'html': html, 'origin': 'generated'})
+
+    return jsonify({'ok': False, 'error': 'document not found'}), 404
+
+
+@bp.route('/api/agents/document/<doc_id>/word', methods=['GET'])
+@auth_required
+def download_generated_doc_word(doc_id):
+    """Export a generated document (research brief, risk assessment,
+    workflow write-up, ...) as a .docx — the "download as Word" affordance
+    on the Pre-Workshop Artifacts grid / document viewer. Only ever a
+    GENERATED doc (see app.services.docx_export) — source uploads already
+    have their own original file, served by the /file route above."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    from app.services.docx_export import html_to_docx_bytes
+    record = generated_docs.get(workshop_id, doc_id)
+    html = generated_docs.get_html(workshop_id, doc_id)
+    if record is None or html is None:
+        return jsonify({'ok': False, 'error': 'document not found'}), 404
+    meta = [
+        ('Author', record.get('author') or ''),
+        ('Category', record.get('category') or ''),
+        ('Status', (record.get('status') or '').replace('_', ' ').title()),
+    ]
+    data = html_to_docx_bytes(record['name'], html, meta=meta)
+    resp = Response(data, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    safe_name = re.sub(r'[^\w\-. ]+', '_', record['name']) or doc_id
+    if not safe_name.lower().endswith('.docx'):
+        safe_name += '.docx'
+    resp.headers['Content-Disposition'] = f'attachment; filename="{safe_name}"'
+    return resp
 
 
 @bp.route('/api/agents/document/<doc_id>', methods=['DELETE'])
