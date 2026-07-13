@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.postgres.base import Base
@@ -41,6 +41,16 @@ class GeneratedDoc(Base):
     description:    Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     category:       Mapped[Optional[str]] = mapped_column(String(60), nullable=True)  # mirrors AGENT_SPECS[...]['folder']
     tags:           Mapped[list]          = mapped_column(JSONBColumn, nullable=False, default=list, server_default='[]')
+
+    # Workflow output (drawflow-style diagrams + an ordered next-steps
+    # checklist) — set by the 'workflow' agent, and by 'deepresearch' when
+    # the facilitator's own instruction asked for a workflow (see
+    # agent_catalog._classify_research_request). Persisted here (not just
+    # returned in the one-off run_agent response) so the Artifacts grid
+    # can still offer "View diagram"/"Download .drawio" after a reload.
+    diagram_xml:    Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diagram_json:   Mapped[Optional[list]] = mapped_column(JSONBColumn, nullable=True)
+    next_steps:     Mapped[Optional[list]] = mapped_column(JSONBColumn, nullable=True)
 
     __table_args__ = (
         Index('ix_generated_docs_workshop', 'workshop_id'),

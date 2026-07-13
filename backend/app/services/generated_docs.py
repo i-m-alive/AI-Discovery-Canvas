@@ -31,11 +31,18 @@ def _obj_key(workshop_id: int, doc_id: str) -> str:
 
 def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
             status: str = 'draft', completion_pct: int = 0, author: str = '',
-            description: str = '', category: str = '', tags: list | None = None) -> dict:
+            description: str = '', category: str = '', tags: list | None = None,
+            diagram_xml: str | None = None, diagram_json: list | None = None,
+            next_steps: list | None = None) -> dict:
     """Store the draft's sanitised body_html in the object store, record
     metadata in Postgres, return the record. Returns an empty dict if
     Postgres isn't reachable — the caller (agent_catalog.run_agent)
-    already treats a missing docId as a soft failure."""
+    already treats a missing docId as a soft failure.
+    `diagram_xml`/`diagram_json`/`next_steps` are set by the 'workflow'
+    agent, and by 'deepresearch' when the facilitator's own instruction
+    asked for a workflow — persisted so the Artifacts grid can still offer
+    "View diagram"/"Download .drawio" after a reload, not just in the
+    one-off run_agent response."""
     doc_id = uuid.uuid4().hex[:16]
     object_store.put_bytes(_obj_key(workshop_id, doc_id), (html or '').encode('utf-8'),
                            content_type='text/html')
@@ -47,7 +54,8 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
                           agent_id=agent_id or '', chars=len(html or ''), status=status,
                           completion_pct=completion_pct, author=author or None,
                           description=(description or '')[:500] or None,
-                          category=category or None, tags=tags or [])
+                          category=category or None, tags=tags or [],
+                          diagram_xml=diagram_xml, diagram_json=diagram_json, next_steps=next_steps)
         record = {'doc_id': row.doc_id, 'name': row.name, 'agent_id': row.agent_id, 'chars': row.chars,
                   'status': row.status, 'completion_pct': row.completion_pct, 'author': row.author,
                   'description': row.description, 'category': row.category, 'tags': row.tags,
@@ -59,8 +67,10 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
 
 def list_docs(workshop_id: int) -> list[dict]:
     """[{doc_id,name,agent_id,category,status,completion_pct,author,
-    description,tags,created_at}, ...] for the Pre-Workshop Artifacts
-    card grid."""
+    description,tags,created_at,has_diagram,next_steps}, ...] for the
+    Pre-Workshop Artifacts card grid. `has_diagram` (bool) is a cheap flag
+    for the grid to decide whether to offer "View diagram" — the actual
+    (possibly large) XML is fetched lazily via get_diagram()."""
     with session_scope() as s:
         if s is None:
             return []
@@ -68,8 +78,22 @@ def list_docs(workshop_id: int) -> list[dict]:
         return [{'doc_id': d.doc_id, 'name': d.name, 'agent_id': d.agent_id,
                  'category': d.category, 'status': d.status, 'completion_pct': d.completion_pct,
                  'author': d.author, 'description': d.description, 'tags': d.tags,
-                 'created_at': int(d.created_at.timestamp())}
+                 'created_at': int(d.created_at.timestamp()),
+                 'has_diagram': bool(d.diagram_xml), 'next_steps': d.next_steps or []}
                 for d in rows]
+
+
+def get_diagram(workshop_id: int, doc_id: str) -> dict | None:
+    """{xml, diagrams} for a persisted generated doc's workflow diagram —
+    None if this doc has none, isn't found, or belongs to another
+    workshop."""
+    with session_scope() as s:
+        if s is None:
+            return None
+        row = repo.get(s, doc_id)
+        if row is None or row.workshop_id != workshop_id or not row.diagram_xml:
+            return None
+        return {'xml': row.diagram_xml, 'diagrams': row.diagram_json or []}
 
 
 def get(workshop_id: int, doc_id: str) -> dict | None:

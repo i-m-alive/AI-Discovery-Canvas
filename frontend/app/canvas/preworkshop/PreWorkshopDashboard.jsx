@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost } from '../../lib/api';
 import { Icon } from '../../lib/icons';
 import DocumentViewer from './DocumentViewer';
+import DrawioViewer from './DrawioViewer';
 import '../../shared.css';
 
 const STATUS_LABEL = { queued: 'Queued', parsing: 'Parsing', ingested: 'Ingested', failed: 'Failed' };
@@ -65,9 +66,11 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
   const [runningResearch, setRunningResearch] = useState(false);
   const [runningWorkflow, setRunningWorkflow] = useState(false);
   const [workflowResult, setWorkflowResult] = useState(null);
+  const [runningSummary, setRunningSummary] = useState(false);
   const [instruction, setInstruction] = useState('');
   const [error, setError] = useState('');
   const [viewerDocId, setViewerDocId] = useState(null);
+  const [viewerDiagram, setViewerDiagram] = useState(null);
   const fileInputRef = useRef(null);
 
   const loadDocs = useCallback(async () => {
@@ -168,6 +171,23 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
     }
   }
 
+  async function runSummarize() {
+    setRunningSummary(true);
+    setError('');
+    try {
+      const res = await apiPost('/api/agents/run', {
+        agent_id: 'summarize_docs', workshop_id: workshopId, context: { zone: 'Pre-Workshop' },
+      });
+      if (!res.ok) { setError(res.error || 'summary failed'); return; }
+      loadArtifacts();
+      if (res.draft && res.draft.node && res.draft.node.docId) setViewerDocId(res.draft.node.docId);
+    } catch (err) {
+      setError(err.message || 'summary failed');
+    } finally {
+      setRunningSummary(false);
+    }
+  }
+
   const insights = (run && run.insights) || [];
   // Real, server-computed count (see research_runs.web_count) — falls
   // back to counting distinct cited web labels only for older runs
@@ -206,15 +226,23 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
         <ResearchPanel
           run={run} onRun={runResearch} running={runningResearch} insights={insights}
           instruction={instruction} onInstructionChange={setInstruction} workshopId={workshopId}
+          onViewDiagram={setViewerDiagram}
         />
 
-        <ArtifactsGrid docs={docs} artifacts={artifacts} onView={setViewerDocId} workshopId={workshopId} />
+        <ArtifactsGrid docs={docs} artifacts={artifacts} onView={setViewerDocId} workshopId={workshopId}
+          onViewDiagram={setViewerDiagram} />
 
-        <WorkflowPanel onRun={runWorkflow} running={runningWorkflow} result={workflowResult} />
+        <WorkflowPanel onRun={runWorkflow} running={runningWorkflow} result={workflowResult}
+          onViewDiagram={setViewerDiagram} />
+
+        <SummarizePanel onRun={runSummarize} running={runningSummary} />
       </div>
 
       {viewerDocId && (
         <DocumentViewer workshopId={workshopId} docId={viewerDocId} onClose={() => setViewerDocId(null)} />
+      )}
+      {viewerDiagram && (
+        <DrawioViewer xml={viewerDiagram.xml} title={viewerDiagram.title} onClose={() => setViewerDiagram(null)} />
       )}
     </div>
   );
@@ -313,7 +341,7 @@ function AskResearchAgent({ workshopId }) {
   );
 }
 
-function ResearchPanel({ run, onRun, running, insights, instruction, onInstructionChange, workshopId }) {
+function ResearchPanel({ run, onRun, running, insights, instruction, onInstructionChange, workshopId, onViewDiagram }) {
   const steps = (run && run.steps) || [];
   const stepByKey = Object.fromEntries(steps.map((s) => [s.step, s]));
   const status = run ? run.status : null;
@@ -387,9 +415,14 @@ function ResearchPanel({ run, onRun, running, insights, instruction, onInstructi
                 separate "Build workflow" step needed.
               </div>
               {run.diagram && (
-                <button className="btn" onClick={() => downloadDrawio(run.diagram, 'research-workflow')}>
-                  <Icon name="upload" />Open diagram (.drawio)
-                </button>
+                <div className="pw-diagram-actions">
+                  <button className="btn solid" onClick={() => onViewDiagram({ xml: run.diagram.xml, title: 'Workflow — from this research' })}>
+                    <Icon name="flow" />View diagram
+                  </button>
+                  <button className="btn" onClick={() => downloadDrawio(run.diagram, 'research-workflow')}>
+                    <Icon name="upload" />Download .drawio
+                  </button>
+                </div>
               )}
               {(run.next_steps || []).length > 0 && (
                 <ul className="pw-checklist" style={{ marginTop: 10 }}>
@@ -430,8 +463,16 @@ function ResearchPanel({ run, onRun, running, insights, instruction, onInstructi
   );
 }
 
-function ArtifactsGrid({ docs, artifacts, onView, workshopId }) {
+function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram }) {
   const isEmpty = docs.length === 0 && artifacts.length === 0;
+
+  async function viewDiagram(a) {
+    try {
+      const data = await apiGet(`/api/agents/document/${a.doc_id}/diagram?workshop_id=${workshopId}`);
+      if (data && data.ok) onViewDiagram({ xml: data.xml, title: a.name });
+    } catch { /* no diagram, or transient — the button just does nothing */ }
+  }
+
   return (
     <section className="pw-artifacts">
       <div className="pw-h3 pw-artifacts-ttl"><Icon name="list" />Pre-Workshop Artifacts</div>
@@ -460,7 +501,9 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId }) {
           {artifacts.map((a) => (
             <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
               <div className="pw-artifact-top">
-                <span className="pw-ic pw-ic-accent"><Icon name={a.agent_id === 'workflow' ? 'flow' : 'search'} /></span>
+                <span className="pw-ic pw-ic-accent">
+                  <Icon name={a.agent_id === 'workflow' ? 'flow' : a.agent_id === 'summarize_docs' ? 'doc-text' : 'search'} />
+                </span>
                 <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
               </div>
               <div className="pw-artifact-cat">{(a.category || a.agent_id || '').toUpperCase()}</div>
@@ -478,6 +521,11 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId }) {
               </div>
               <div className="pw-artifact-actions">
                 <button className="pw-view-btn" onClick={() => onView(a.doc_id)} title="View document"><Icon name="search" />View</button>
+                {a.has_diagram && (
+                  <button className="pw-view-btn" onClick={() => viewDiagram(a)} title="View workflow diagram">
+                    <Icon name="flow" />Diagram
+                  </button>
+                )}
                 <a className="pw-view-btn" href={`/api/agents/document/${a.doc_id}/word?workshop_id=${workshopId}`}
                   download title="Download as Word (.docx)">
                   <Icon name="upload" />Word
@@ -491,7 +539,7 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId }) {
   );
 }
 
-function WorkflowPanel({ onRun, running, result }) {
+function WorkflowPanel({ onRun, running, result, onViewDiagram }) {
   return (
     <section className="pw-panel pw-workflow">
       <div className="pw-panel-head">
@@ -499,7 +547,7 @@ function WorkflowPanel({ onRun, running, result }) {
           <span className="pw-ic pw-ic-indigo"><Icon name="flow" /></span>
           <div>
             <div className="pw-h3">Build Workflow</div>
-            <div className="pw-sub">Grounded on ingested documents + the latest research findings</div>
+            <div className="pw-sub">Grounded on every ingested document + every research document produced so far</div>
           </div>
         </div>
       </div>
@@ -510,9 +558,14 @@ function WorkflowPanel({ onRun, running, result }) {
         <div className="pw-workflow-result">
           <div className="pw-h3">{result.title}</div>
           {result.diagram && (
-            <button className="btn" onClick={() => downloadDrawio(result.diagram, result.title)}>
-              <Icon name="upload" />Open diagram (.drawio)
-            </button>
+            <div className="pw-diagram-actions">
+              <button className="btn solid" onClick={() => onViewDiagram({ xml: result.diagram.xml, title: result.title })}>
+                <Icon name="flow" />View diagram
+              </button>
+              <button className="btn" onClick={() => downloadDrawio(result.diagram, result.title)}>
+                <Icon name="upload" />Download .drawio
+              </button>
+            </div>
           )}
           {(result.next_steps || []).length > 0 && (
             <ul className="pw-checklist">
@@ -529,6 +582,25 @@ function WorkflowPanel({ onRun, running, result }) {
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+function SummarizePanel({ onRun, running }) {
+  return (
+    <section className="pw-panel pw-workflow">
+      <div className="pw-panel-head">
+        <div className="pw-panel-ttl">
+          <span className="pw-ic pw-ic-teal"><Icon name="doc-text" /></span>
+          <div>
+            <div className="pw-h3">Summarize Documents</div>
+            <div className="pw-sub">One consolidated summary of every ingested document + every research document — appears below in Pre-Workshop Artifacts, downloadable as Word</div>
+          </div>
+        </div>
+      </div>
+      <button className="btn solid pw-run-btn" onClick={onRun} disabled={running}>
+        <Icon name="doc-text" />{running ? 'Summarizing…' : 'Summarize documents'}
+      </button>
     </section>
   );
 }

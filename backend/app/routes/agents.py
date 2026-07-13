@@ -63,6 +63,12 @@ Agent routes.
                              write-up, ...) as Word. See
                              app/services/docx_export.py.
 
+    GET    /api/agents/document/<doc_id>/diagram?workshop_id=<id>   AUTH-GATED.
+                             -> { ok, xml, diagrams } — the persisted
+                             workflow diagram for a generated doc (see
+                             generated_docs.get_diagram), fetched lazily
+                             for the "View diagram" affordance.
+
 Design note: run/chat return HTTP 200 with ok:false on functional
 failures (only auth failures are non-200). The route being reached and
 auth passing vs. the model call failing are different problems — keeping
@@ -276,6 +282,23 @@ def list_generated_docs():
         return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
     from app.services import generated_docs
     return jsonify({'ok': True, 'docs': generated_docs.list_docs(workshop_id)})
+
+
+@bp.route('/api/agents/document/<doc_id>/diagram', methods=['GET'])
+@auth_required
+def get_generated_doc_diagram(doc_id):
+    """{ok, xml, diagrams} for a persisted generated doc's workflow
+    diagram (see generated_docs.get_diagram) — fetched lazily so the
+    Artifacts grid's list payload stays light. 404 if this doc has no
+    diagram, isn't found, or belongs to another workshop."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    diagram = generated_docs.get_diagram(workshop_id, doc_id)
+    if diagram is None:
+        return jsonify({'ok': False, 'error': 'no diagram for this document'}), 404
+    return jsonify({'ok': True, **diagram})
 
 
 @bp.route('/api/agents/research-chain', methods=['GET'])

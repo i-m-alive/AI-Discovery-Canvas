@@ -56,14 +56,21 @@ from app.services import llm_service
 _E2E_DIAGRAMS_FIELD = (
     'Also include "diagrams": an array of 1-4 objects '
     '{"title": "...", "summary": "one line", '
-    '"nodes": [{"id": "n1", "label": "...", "type": "start|end|process|decision|data"}], '
+    '"nodes": [{"id": "n1", "label": "...", "type": "start|end|process|decision|data", '
+    '"lane": "..."}], '
     '"edges": [{"from": "n1", "to": "n2", "label": "optional"}]} — '
     'the authoritative process structure (6-24 nodes per diagram). Identify the DISTINCT '
     'end-to-end processes actually described, not one flattened list — they are often '
     'different in kind, e.g. (a) how the client\'s business/system works today, '
     '(b) the change/application being requested and how it should behave, '
     '(c) how the delivery team will implement it. Use "decision" nodes for branch points '
-    'and label the edges out of them (e.g. "yes"/"no", "approved"/"rejected").'
+    'and label the edges out of them (e.g. "yes"/"no", "approved"/"rejected"). '
+    '"lane" is the responsible actor/role/department/system for that step (e.g. "Planner", '
+    '"Shift Supervisor", "QA", "System") — this renders as a swimlane, so REUSE THE EXACT SAME '
+    'lane string for every step that actor/system performs, and order nodes so steps performed '
+    'by the same lane are grouped together where the process logic allows it. If the process '
+    'genuinely has only one actor, use one consistent lane name for every node rather than '
+    'leaving it blank.'
 )
 _E2E_TASK_TEXT = (
     'Reconstruct the business process(es) being described in the transcript/board. '
@@ -259,21 +266,43 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     'workflow': {
-        'zone': 'Pre-Workshop', 'folder': 'How it works', 'icon': 'flow', 'doc': False,
+        'zone': 'Pre-Workshop', 'folder': 'How it works', 'icon': 'flow', 'doc': True,
         'name': 'Build workflow',
         # Runs alongside deepresearch, not instead of it — reuses the same
         # diagram machinery as 'drawflow' (a proven, working generator)
         # plus a structured next-steps checklist. See run_agent: its
-        # context is built from BOTH the ingested Prepare documents AND
-        # the latest completed deepresearch run's insights for this
-        # workshop, not documents alone.
+        # context (_workflow_context) is built from EVERY ingested Prepare
+        # document AND EVERY research document the research agent has
+        # produced for this workshop — not just the latest run's raw
+        # insights. `doc: True` so the result (including its diagram XML
+        # and next-steps checklist — see generated_docs.register's
+        # diagram_xml/diagram_json/next_steps columns) is persisted and
+        # survives a reload, same as any research document.
         'extra_fields': _E2E_DIAGRAMS_FIELD + ' ' + _WORKFLOW_NEXT_STEPS_FIELD,
         'task': (
-            'Given the ingested client documents and (if supplied) the research findings below, '
+            'Given the ingested client documents and the research documents below (if any), '
             'propose a concrete workflow: the process(es) worth automating or streamlining, and '
             'the ordered next steps to get there. body_html: a short paragraph naming the '
             'opportunity, followed by an <ol> summary of the proposed workflow stages. '
             'node_label "Proposed Workflow".'
+        ),
+    },
+    'summarize_docs': {
+        'zone': 'Pre-Workshop', 'folder': 'Background', 'icon': 'doc-text', 'doc': True,
+        'name': 'Summarize documents',
+        # Same context as 'workflow' (_workflow_context: every ingested
+        # Prepare document + every research document produced so far) —
+        # this agent condenses that same corpus into one summary instead
+        # of proposing a workflow from it. No extra_fields: just the base
+        # title/body_html/node_label/node_meta contract.
+        'task': (
+            'Produce ONE consolidated summary of everything supplied below: the ingested client '
+            'documents, and any research documents already produced. body_html: <b>Overview</b> '
+            '(2-3 sentences on what this document set covers), <b>Key points</b> (5-10 bullets, '
+            'the most important facts/findings across ALL sources — say which document/research '
+            'each comes from when it matters), <b>Still unknown</b> (a short list of gaps the '
+            'supplied material does not cover). Ground every point in the actual sources — never '
+            'invent a fact. node_label "Document Summary".'
         ),
     },
     # ---- During Workshop ----
@@ -898,7 +927,8 @@ def _coerce_diagrams(raw_diagrams) -> list[dict]:
             ntype = str(n.get('type') or 'process').lower()
             if ntype not in ('start', 'end', 'process', 'decision', 'data'):
                 ntype = 'process'
-            nodes.append({'id': nid, 'label': label, 'type': ntype})
+            lane = _clip(n.get('lane'), 40)
+            nodes.append({'id': nid, 'label': label, 'type': ntype, 'lane': lane})
         if not nodes:
             continue
         node_ids = {n['id'] for n in nodes}
@@ -919,32 +949,41 @@ def _coerce_diagrams(raw_diagrams) -> list[dict]:
 
 
 def _workflow_context(context: dict, workshop_id: Optional[int]) -> dict:
-    """'workflow' agent input: the ingested Prepare documents PLUS the
-    latest COMPLETED deepresearch run's insights for this workshop (if
-    any) — genuinely "documents + research findings", not documents
-    alone. Mirrors _deep_research_context's replacement-context shape so
-    the same _context_block/_rag_block plumbing downstream just works.
-    Best-effort: falls back to whatever context['files'] the frontend
-    already attached when no workshop/persisted corpus is available."""
+    """'workflow' and 'summarize_docs' agent input: EVERY ingested Prepare
+    document PLUS EVERY research document the research agent has produced
+    for this workshop (research briefs, risk assessments, architecture
+    docs, ...) — not just
+    the single latest run's raw insights. Genuinely "all the existing
+    files as well as the research documents", the way a BA would actually
+    read them before proposing a workflow. Mirrors _deep_research_context's
+    replacement-context shape so the same _context_block/_rag_block
+    plumbing downstream just works. Best-effort: falls back to whatever
+    context['files'] the frontend already attached when no workshop/
+    persisted corpus is available.
+    Capped at _MAX_RESEARCH_DOCS of each kind and clipped per-document —
+    a workshop can accumulate many research docs over time, and this is
+    a synthesis input, not a full re-read of everything ever generated."""
     context = dict(context or {})
     files: list[dict] = []
     if workshop_id:
         try:
             from app.services import prepare_docs
-            files.extend(prepare_docs.get_all_texts(workshop_id))
+            files.extend(prepare_docs.get_all_texts(workshop_id)[:_MAX_RESEARCH_DOCS])
         except Exception as e:
             log.info('[AGENT/WORKFLOW] prepare_docs unavailable (%s)', e.__class__.__name__)
         try:
-            from app.postgres import session_scope
-            from app.postgres.repositories import research_runs as repo
-            with session_scope() as s:
-                if s is not None:
-                    run = repo.get_latest_for_workshop(s, workshop_id)
-                    if run is not None and run.status == 'done' and run.insights:
-                        lines = [f"- {i.get('title')}: {i.get('description')}" for i in run.insights]
-                        files.append({'name': 'Deep research findings', 'text': '\n'.join(lines)})
+            from app.services import generated_docs
+            from app.services.rag.chunking import html_to_text
+            research_docs = [d for d in generated_docs.list_docs(workshop_id)
+                             if d.get('agent_id') == 'deepresearch'][:_MAX_RESEARCH_DOCS]
+            for d in research_docs:
+                html = generated_docs.get_html(workshop_id, d['doc_id'])
+                if not html:
+                    continue
+                files.append({'name': f"research: {d.get('name') or 'untitled'}",
+                             'text': _clip(html_to_text(html), 4000)})
         except Exception as e:
-            log.info('[AGENT/WORKFLOW] research_runs unavailable (%s)', e.__class__.__name__)
+            log.info('[AGENT/WORKFLOW] generated_docs unavailable (%s)', e.__class__.__name__)
     if not files:
         files = context.get('files') or []
     context['files'] = files
@@ -986,7 +1025,7 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
         classified = _classify_research_request(extra)
         doc_type, wants_workflow = classified['doc_type'], classified['wants_workflow']
         context = _deep_research_context(context, extra=extra, workshop_id=workshop_id, run_id=research_run_id)
-    elif agent_id == 'workflow':
+    elif agent_id in ('workflow', 'summarize_docs'):
         context = _workflow_context(context, workshop_id=workshop_id)
 
     # Task text and extra-fields are normally the spec's own — deepresearch
@@ -1136,30 +1175,11 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
             next_steps.append({'step': step, 'why': _clip(it.get('why'), 240), 'done': False})
         draft['next_steps'] = next_steps
 
-    if spec['doc'] and workshop_id:
-        try:
-            from app.services import generated_docs
-            desc = (insights[0]['description'] if insights else re.sub(r'<[^>]+>', ' ', body_html)[:280].strip())
-            doc_type_label = _DOC_TYPE_LABELS.get(doc_type, doc_type)
-            tags = [agent_id]
-            if agent_id == 'deepresearch' and doc_type != 'brief':
-                tags.append(doc_type_label)
-            if confidence is not None:
-                tags.append(f'{confidence}% confidence')
-            category = doc_type_label if (agent_id == 'deepresearch' and doc_type != 'brief') else spec['folder']
-            record = generated_docs.register(
-                workshop_id, title, body_html, agent_id=agent_id,
-                status='final' if agent_id == 'deepresearch' else 'draft',
-                completion_pct=confidence if confidence is not None else 100,
-                author=author or '', description=desc, category=category, tags=tags)
-            if record:
-                draft['node']['docId'] = record['doc_id']
-        except Exception as e:
-            log.info('[AGENT/%s] generated-doc persistence skipped (%s)',
-                     agent_id, e.__class__.__name__)
-
     # drawflow/workflow → build the real multi-page .drawio file from the
     # model's distinct end-to-end processes (1-4 typed-node/edge diagrams).
+    # Computed BEFORE persistence below so 'workflow' (doc: True) can save
+    # its diagram/next_steps alongside the doc, not just return them in
+    # this one-off response — otherwise both vanish on a page reload.
     if agent_id in ('drawflow', 'workflow'):
         diagrams = _coerce_diagrams(obj.get('diagrams'))
         if not diagrams:
@@ -1197,6 +1217,32 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
             research_next_steps.append({'step': step, 'why': _clip(it.get('why'), 240), 'done': False})
         if research_next_steps:
             draft['next_steps'] = research_next_steps
+
+    if spec['doc'] and workshop_id:
+        try:
+            from app.services import generated_docs
+            desc = (insights[0]['description'] if insights else re.sub(r'<[^>]+>', ' ', body_html)[:280].strip())
+            doc_type_label = _DOC_TYPE_LABELS.get(doc_type, doc_type)
+            tags = [agent_id]
+            if agent_id == 'deepresearch' and doc_type != 'brief':
+                tags.append(doc_type_label)
+            if confidence is not None:
+                tags.append(f'{confidence}% confidence')
+            category = doc_type_label if (agent_id == 'deepresearch' and doc_type != 'brief') else spec['folder']
+            diagram = draft.get('diagram')
+            record = generated_docs.register(
+                workshop_id, title, body_html, agent_id=agent_id,
+                status='final' if agent_id == 'deepresearch' else 'draft',
+                completion_pct=confidence if confidence is not None else 100,
+                author=author or '', description=desc, category=category, tags=tags,
+                diagram_xml=diagram['xml'] if diagram else None,
+                diagram_json=diagram['diagrams'] if diagram else None,
+                next_steps=draft.get('next_steps') or None)
+            if record:
+                draft['node']['docId'] = record['doc_id']
+        except Exception as e:
+            log.info('[AGENT/%s] generated-doc persistence skipped (%s)',
+                     agent_id, e.__class__.__name__)
 
     if agent_id == 'deepresearch':
         _finish_research_run(research_run_id, status='done', insights=insights, confidence=confidence,

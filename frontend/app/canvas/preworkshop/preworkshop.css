@@ -194,8 +194,8 @@
   font-size: 11px; font-weight: 600; padding: 4px 6px; border-radius: 6px;
 }
 .pw-view-btn:hover { background: var(--pw-purple-weak, #efedfd); }
-.pw-artifact-actions { display: flex; gap: 8px; margin-top: 8px; }
-.pw-artifact-actions .pw-view-btn { flex: 1; justify-content: center; padding: 7px; border: 1px solid var(--line, #e4e8ee); }
+.pw-artifact-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pw-artifact-actions .pw-view-btn { flex: 1; min-width: 64px; justify-content: center; padding: 7px 5px; border: 1px solid var(--line, #e4e8ee); }
 
 .pw-instruction-lbl { display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 6px; }
 .pw-instruction-lbl span { font-weight: 400; color: var(--muted, #6b7280); }
@@ -283,6 +283,7 @@
 
 /* Workflow panel */
 .pw-workflow-result { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line, #e4e8ee); }
+.pw-diagram-actions { display: flex; gap: 8px; }
 .pw-checklist { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .pw-checklist li { display: flex; align-items: flex-start; gap: 10px; }
 .pw-check-box { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line2, #cfd6df); flex: none; margin-top: 2px; }
@@ -317,4 +318,19 @@
 .pw-doc-html p { margin: 0 0 10px; }
 .pw-doc-html ul, .pw-doc-html ol { margin: 0 0 12px; padding-left: 22px; }
 .pw-doc-html li { margin-bottom: 4px; }
+
+/* Inline draw.io viewer (DrawioViewer.jsx) — bigger stage than the
+   document modal since a multi-page diagram needs real canvas room. */
+.pw-modal-drawio { width: min(1400px, 96vw); height: min(90vh, 1000px); }
+.pw-modal-drawio .pw-modal-head > div:first-child { flex: 1; min-width: 0; }
+.pw-modal-drawio .pw-modal-title { display: block; }
+.pw-drawio-subtitle { font-size: 11.5px; color: var(--muted, #6b7280); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-drawio-filebar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 18px;
+  border-bottom: 1px solid var(--line, #e4e8ee); background: #fafbfc;
+  font-size: 12.5px; color: var(--muted, #6b7280); flex: none;
+}
+.pw-drawio-filename { font-weight: 600; color: var(--ink, #1f2733); }
+.pw-drawio-ai-tag { background: var(--pw-purple-weak, #efedfd); color: var(--pw-purple, #6d5ce8); }
+.pw-drawio-frame { flex: 1; min-height: 0; width: 100%; border: none; display: block; }
 .pw-doc-text { padding: 20px 26px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; font-family: ui-monospace, Menlo, monospace; }
