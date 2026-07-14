@@ -33,6 +33,20 @@ async function request(path, options) {
   }
 
   if (!res.ok) {
+    // A 401 mid-session means the backend no longer recognizes the
+    // cookie — in practice: the server was restarted (the session store
+    // is in-process by design, see backend/app/auth/sessions.py). Every
+    // API call would fail with a cryptic "unauthorized" until the user
+    // figures out they must sign in again — so send them to the login
+    // page directly, preserving where they were. /auth/* endpoints are
+    // exempt (a 401 there is a normal pre-login answer, and redirecting
+    // on it would loop the login page into itself).
+    if (res.status === 401 && typeof window !== 'undefined'
+        && !path.startsWith('/auth/')
+        && !window.location.pathname.startsWith('/login')) {
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.assign(`/login?next=${next}`);
+    }
     const message =
       (parsed && typeof parsed === 'object' && (parsed.error || parsed.message)) ||
       `Request failed: ${res.status}`;

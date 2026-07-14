@@ -72,17 +72,32 @@ import os
 
 from flask import Blueprint, jsonify, request
 
-from app.auth import auth_required
+from app.auth import auth_required, current_user
+from app.postgres.services import user_sync
 from app.services import graph_teams
 
 bp = Blueprint('integrations', __name__)
+
+
+def _owner_user_id() -> int:
+    """Resolve the Postgres user id for the signed-in user — this is what
+    keys graph_teams' per-user token/connection state (and the persisted
+    teams_connections row), so two different BAs signed into this app
+    never share (or clobber) each other's Teams connection. Falls back to
+    0 (a connection that's in-memory-only for this process, matching the
+    single-user behaviour this app originally had) when Postgres isn't
+    configured/reachable — Teams still works, it just won't survive a
+    restart, exactly like before this feature existed."""
+    user = current_user() or {}
+    owner_id = user_sync.resolve_owner_user_id(user.get('email') or '', name=user.get('name'))
+    return owner_id if owner_id is not None else 0
 
 
 # ── Microsoft Teams ───────────────────────────────────────────────────
 @bp.route('/api/integrations/teams/status', methods=['GET'])
 @auth_required
 def teams_status():
-    return jsonify(graph_teams.connection_status())
+    return jsonify(graph_teams.connection_status(_owner_user_id()))
 
 
 @bp.route('/api/integrations/teams/connect-token', methods=['POST'])
@@ -92,7 +107,7 @@ def teams_connect_token():
     frontend already acquired via its OWN MSAL session (same Microsoft
     sign-in used to log into the app) — automatic, no device-code UI."""
     body = request.get_json(silent=True) or {}
-    out = graph_teams.set_token(body.get('access_token') or '',
+    out = graph_teams.set_token(_owner_user_id(), body.get('access_token') or '',
                                 expires_in=body.get('expires_in') or 3300)
     if 'error' in out:
         return jsonify({'ok': False, 'error': out['error']}), 200
@@ -104,7 +119,7 @@ def teams_connect_token():
 def teams_connect():
     """Fallback device-code flow — only reached when the frontend has no
     Microsoft session to reuse (mock auth) or the automatic path failed."""
-    out = graph_teams.start_device_flow()
+    out = graph_teams.start_device_flow(_owner_user_id())
     ok = 'error' not in out
     return jsonify({'ok': ok, **out}), 200
 
@@ -112,7 +127,7 @@ def teams_connect():
 @bp.route('/api/integrations/teams/poll', methods=['POST'])
 @auth_required
 def teams_poll():
-    return jsonify(graph_teams.poll_device_flow())
+    return jsonify(graph_teams.poll_device_flow(_owner_user_id()))
 
 
 @bp.route('/api/integrations/teams/meetings', methods=['GET'])
@@ -122,7 +137,7 @@ def teams_meetings():
     browse and pick one, instead of pasting a join URL. Optional query
     params: start, end (ISO — window navigation), q (subject search)."""
     out = graph_teams.list_recent_meetings(
-        start=request.args.get('start'), end=request.args.get('end'),
+        _owner_user_id(), start=request.args.get('start'), end=request.args.get('end'),
         q=request.args.get('q'))
     if 'error' in out:
         return jsonify({'ok': False, 'error': out['error']}), 200
@@ -139,9 +154,10 @@ def teams_meetings_availability():
     body = request.get_json(silent=True) or {}
     entries = [m for m in (body.get('meetings') or [])
               if isinstance(m, dict) and isinstance(m.get('join_url'), str)][:50]
+    owner_id = _owner_user_id()
     results = {}
     for m in entries:
-        out = graph_teams.check_meeting_availability(m['join_url'], m.get('organizer'))
+        out = graph_teams.check_meeting_availability(owner_id, m['join_url'], m.get('organizer'))
         results[m['join_url']] = out
     return jsonify({'ok': True, 'results': results})
 
@@ -150,7 +166,7 @@ def teams_meetings_availability():
 @auth_required
 def teams_transcript():
     body = request.get_json(silent=True) or {}
-    out = graph_teams.fetch_transcript(body.get('join_url') or '', body.get('organizer'))
+    out = graph_teams.fetch_transcript(_owner_user_id(), body.get('join_url') or '', body.get('organizer'))
     if 'error' in out:
         return jsonify({'ok': False, 'error': out['error']}), 200
     return jsonify({'ok': True, **out})

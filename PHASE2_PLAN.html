@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Phase 2 — During Workshop · Implementation Plan</title>
+<style>
+  :root {
+    --bg: #f6f6fa; --panel: #ffffff; --sunken: #eef0f6;
+    --ink: #191c28; --soft: #59617a; --faint: #8a91a8;
+    --line: #e3e6ef; --line2: #cdd2e2;
+    --purple: #6d5ce8; --purple-dark: #5645c9; --purple-weak: #efedfd;
+    --teal: #1d968f; --teal-weak: #e2f4f2;
+    --amber: #c9881f; --amber-weak: #faf1e1;
+    --green: #2f8f5b; --green-weak: #e8f6ee;
+    --red: #c0463b; --red-weak: #fbecea;
+    --code-bg: #14161f; --code-fg: #d7dded;
+    --shadow: 0 1px 2px rgba(20,24,40,.05), 0 10px 30px rgba(20,24,40,.07);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0f17; --panel: #151824; --sunken: #10131c;
+      --ink: #e9eaf2; --soft: #9aa2bd; --faint: #6c7490;
+      --line: #242940; --line2: #313854;
+      --purple: #8d7ef2; --purple-dark: #a99df5; --purple-weak: rgba(141,126,242,.14);
+      --teal: #3ec2b9; --teal-weak: rgba(62,194,185,.13);
+      --amber: #e0a63e; --amber-weak: rgba(224,166,62,.13);
+      --green: #45c581; --green-weak: rgba(69,197,129,.13);
+      --red: #e57272; --red-weak: rgba(229,114,114,.13);
+      --code-bg: #0a0c12; --code-fg: #c9d1e6;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 34px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    font-size: 15px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px clamp(18px, 4vw, 44px) 90px; }
+  h1, h2, h3 { text-wrap: balance; }
+  code, .mono { font-family: var(--mono); font-size: .88em; }
+  .kbd { background: var(--code-bg); color: var(--code-fg); border-radius: 5px; padding: 1px 7px; white-space: nowrap; font-family: var(--mono); font-size: .84em; }
+  a { color: var(--purple-dark); }
+
+  /* Hero */
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--purple-dark);
+    background: var(--purple-weak); padding: 6px 14px; border-radius: 20px; margin-bottom: 16px;
+  }
+  h1 { font-size: clamp(28px, 4.5vw, 40px); line-height: 1.1; margin: 0 0 14px; font-weight: 800; }
+  .lede { font-size: 16px; color: var(--soft); max-width: 640px; margin: 0 0 24px; }
+  .decisions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 26px 0 0; }
+  @media (max-width: 700px) { .decisions { grid-template-columns: 1fr; } }
+  .decision {
+    background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--purple);
+    border-radius: 12px; padding: 14px 18px; box-shadow: var(--shadow);
+  }
+  .decision b { display: block; font-size: 13px; margin-bottom: 3px; }
+  .decision span { font-size: 12.5px; color: var(--soft); }
+
+  /* Sections */
+  section { margin-top: 64px; }
+  .sec-kicker { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--purple-dark); margin-bottom: 6px; }
+  section > h2 { font-size: 23px; margin: 0 0 8px; font-weight: 800; }
+  .sec-intro { color: var(--soft); font-size: 14px; max-width: 660px; margin: 0 0 24px; }
+  h3 { font-size: 16px; margin: 26px 0 10px; font-weight: 750; }
+  p { margin: 0 0 13px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+
+  /* Inventory list */
+  .inv { display: flex; flex-direction: column; gap: 9px; counter-reset: inv; }
+  .inv-item {
+    display: flex; gap: 13px; align-items: flex-start; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 11px; padding: 12px 15px; box-shadow: var(--shadow);
+  }
+  .inv-item::before {
+    counter-increment: inv; content: counter(inv, decimal-leading-zero);
+    font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--faint);
+    margin-top: 3px; flex: none;
+  }
+  .inv-body { flex: 1; min-width: 0; }
+  .inv-t { font-weight: 700; font-size: 13.5px; }
+  .inv-d { font-size: 12.5px; color: var(--soft); margin-top: 1px; }
+  .badge {
+    flex: none; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+    border-radius: 20px; padding: 4px 11px; margin-top: 2px; white-space: nowrap;
+  }
+  .b-have { background: var(--green-weak); color: var(--green); }
+  .b-partial { background: var(--amber-weak); color: var(--amber); }
+  .b-build { background: var(--purple-weak); color: var(--purple-dark); }
+
+  /* Tables */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 13px; }
+  th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 700; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 650; white-space: nowrap; }
+
+  /* Diagram centerpiece mock */
+  .dia-mock {
+    border: 1px solid var(--line2); border-radius: 14px; overflow: hidden; background: var(--panel);
+    box-shadow: var(--shadow); margin: 18px 0;
+  }
+  .dia-chrome {
+    display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-bottom: 1px solid var(--line);
+    background: var(--sunken); font-size: 12px;
+  }
+  .dots { display: flex; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dia-file { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+  .dia-badge { font-size: 9.5px; font-weight: 700; background: var(--purple-weak); color: var(--purple-dark); border-radius: 12px; padding: 2px 9px; }
+  .dia-tools { margin-left: auto; display: flex; gap: 10px; color: var(--faint); font-size: 11px; align-items: center; }
+  .lanes { padding: 0; }
+  .lane { display: flex; border-bottom: 1px solid var(--line); min-height: 64px; }
+  .lane:last-child { border-bottom: none; }
+  .lane-hd {
+    width: 130px; flex: none; display: flex; align-items: center; padding: 0 16px;
+    font-size: 12px; font-weight: 700; border-right: 1px solid var(--line);
+  }
+  .lane-bd { flex: 1; display: flex; align-items: center; gap: 14px; padding: 12px 18px; flex-wrap: wrap;
+    background-image: radial-gradient(circle, var(--line) 1px, transparent 1px); background-size: 18px 18px; }
+  .nd { font-size: 11px; font-weight: 600; border: 1.5px solid var(--line2); background: var(--panel); border-radius: 8px; padding: 7px 12px; }
+  .nd-term { border-radius: 20px; border-color: var(--purple); background: var(--purple-weak); }
+  .nd-dec { transform: rotate(0); border-color: var(--amber); background: var(--amber-weak); border-radius: 6px; }
+  .nd-hi { border-color: var(--purple); background: var(--purple-weak); box-shadow: 0 0 0 3px var(--purple-weak); }
+  .edge { color: var(--faint); font-size: 13px; }
+
+  /* Milestones — lane-colored strips echoing the swimlane theme */
+  .mile { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: var(--panel); box-shadow: var(--shadow); margin-bottom: 13px; }
+  .mile-rail { width: 8px; flex: none; }
+  .mile-body { flex: 1; padding: 15px 19px; }
+  .mile-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
+  .mile-num { font-family: var(--mono); font-size: 11px; font-weight: 800; color: var(--faint); }
+  .mile-ttl { font-size: 14.5px; font-weight: 750; }
+  .mile-est { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--soft); background: var(--sunken); border-radius: 12px; padding: 3px 10px; }
+  .mile-body ul { margin: 6px 0 0; font-size: 13px; color: var(--soft); }
+  .mile-dep { font-size: 11px; color: var(--faint); margin-top: 7px; }
+
+  .callout {
+    border: 1px solid var(--line); border-left: 4px solid var(--amber); background: var(--amber-weak);
+    border-radius: 11px; padding: 13px 17px; font-size: 13px; margin: 16px 0;
+  }
+  .callout.ok { border-left-color: var(--green); background: var(--green-weak); }
+  .callout b { display: block; margin-bottom: 2px; }
+
+  footer { margin-top: 70px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">AI Discovery Canvas · implementation plan · no code has been changed yet</div>
+  <h1>Phase 2 — During Workshop<br/>“Live Workshop Synthesis”</h1>
+  <p class="lede">
+    Rebuilding the During Workshop tab from the canvas prototype into the reference product's
+    dashboard (NaviBA Orbitz), based on your two screenshots, a fetch of the reference site, and a
+    verified audit of what our codebase already contains.
+  </p>
+
+  <div class="decisions">
+    <div class="decision">
+      <b>Decision 1 — No live transcription</b>
+      <span>Replaced by <i>browse Teams meetings → import transcript</i>. The backend for this already exists and works (meeting list, availability check, transcript download with organizer fallback) — this is mostly a frontend rebuild plus one glue route.</span>
+    </div>
+    <div class="decision">
+      <b>Decision 2 — The diagram is the centerpiece</b>
+      <span>The swimlane viewer gets a native SVG renderer built from our own structured diagram JSON — full visual control matching the reference, with “Edit in draw.io” and Export reusing what we already shipped.</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">01 · Reference inventory</div>
+    <h2>Every component in the reference, and where we stand</h2>
+    <p class="sec-intro">
+      From both screenshots plus the live site fetch. Badges are honest:
+      <span class="badge b-have" style="display:inline">HAVE</span> works today,
+      <span class="badge b-partial" style="display:inline">PARTIAL</span> exists but needs adaptation,
+      <span class="badge b-build" style="display:inline">BUILD</span> is new.
+    </p>
+
+    <div class="inv">
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Phase stepper with completed state</div><div class="inv-d">Pre-Workshop shows a green check once passed; active phase filled purple. Ours already renders ✓ for earlier phases — needs only the green “completed” tint.</div></div><span class="badge b-have">Have</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Source Artifacts sidebar with typed sources</div><div class="inv-d">Teams transcript (with duration), Granola recording, whiteboard photo, GitHub repo link, image — each with type icon, status pill (Ingested/Parsing/Queued) and tag chips. Our Pre-Workshop sidebar has the layout, pills, and upload pipeline; needs source-type icons/tags and the Teams import entry point.</div></div><span class="badge b-partial">Partial</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Hero + live stat chips</div><div class="inv-d">“Live Workshop Synthesis” blurb + 4 stats: capture status, requirement count, capability count, artifacts live. Same pattern as the Pre-Workshop hero; stats need new data sources (requirements/capabilities counts).</div></div><span class="badge b-partial">Partial</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Capture banner</div><div class="inv-d">Reference: “RECORDING — copilot is transcribing…” with waveform. Ours becomes the honest equivalent: which transcript(s) are imported + a “Import from Teams” CTA, with a processing state while extraction runs.</div></div><span class="badge b-build">Build</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Business Requirements — Live panel</div><div class="inv-d">Requirement rows: REQ-ID (mono purple), category chip, MoSCoW pill (Must/Should), “The system shall…” text, source-trace line to the utterance/document, grouped by source, “+ Add requirement”, “In review” status. Nothing like this exists — needs a table, an extraction agent, CRUD, and the panel.</div></div><span class="badge b-build">Build</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Business Capability Map panel</div><div class="inv-d">Domain groups (Demand &amp; Planning, Workforce &amp; Skills, …), heat-colored capability cards (red/amber/green opportunity), 5-segment maturity bars, legend, v1.0 + Draft badges. New agent with a structured contract + new panel.</div></div><span class="badge b-build">Build</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Swimlane diagram viewer (the centerpiece)</div><div class="inv-d">Window chrome (traffic lights, filename, AI-generated badge), zoom/fullscreen/Export toolbar, tool rail, colored lane headers, terminal/process/decision node shapes, labeled yes/no edges, highlighted node, dotted grid. We already generate exactly this structure (swimlane XML + persisted diagram JSON) and have the draw.io editor modal — the inline, styled renderer is new. Full design in §03.</div></div><span class="badge b-partial">Partial</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Workshop Artifacts grid</div><div class="inv-d">BRD / Capability Map / Process Flow cards with status pills, tags, completion %, relative time. Our Pre-Workshop ArtifactsGrid already does all of this (plus filters, Word export, delete, scorecards) — needs a phase-scoped variant.</div></div><span class="badge b-have">Have</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">BRD (Business Requirements Document)</div><div class="inv-d">“Live BRD assembled from pre-workshop context + discovery capture. 34 requirements across 6 capability areas, traced to source utterances.” New assembler agent that composes the requirements table into a persisted, Word-exportable document.</div></div><span class="badge b-build">Build</span></div>
+      <div class="inv-item"><div class="inv-body"><div class="inv-t">Copilot panel</div><div class="inv-d">Grounded chat with source count, citations, suggestion chips. Fully built (grounding, history, streaming, web search, agent dispatch) and already available on every phase.</div></div><span class="badge b-have">Have</span></div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">02 · Reuse map</div>
+    <h2>What our codebase already provides</h2>
+    <p class="sec-intro">Verified by reading the code this session — not assumed.</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Existing asset</th><th>Where</th><th>Reused for</th></tr>
+        <tr><td>Teams integration</td><td><code>graph_teams.py</code>, <code>routes/integrations.py</code></td><td>Meeting list, transcript availability, transcript download (organizer fallback, persisted refresh tokens) — the whole import backend</td></tr>
+        <tr><td>Swimlane generator</td><td><code>drawio.py</code></td><td>Lane layout, node typing, colors — the same geometry feeds the new SVG renderer</td></tr>
+        <tr><td>Persisted diagram JSON</td><td><code>generated_docs.diagram_json</code></td><td>The native renderer's data source (no XML parsing needed)</td></tr>
+        <tr><td>draw.io editor modal</td><td><code>DrawioViewer.jsx</code></td><td>“Edit in draw.io” + Export from the new inline viewer</td></tr>
+        <tr><td>Upload → extract → index pipeline</td><td><code>routes/agents.py::upload</code></td><td>Imported transcripts enter as prepare_docs: status pills, RAG, context cache — all free</td></tr>
+        <tr><td>Agent infrastructure</td><td><code>agent_catalog.py</code></td><td>JSON contracts, coercers, run ledger + live progress, structured persistence — pattern for the 3 new agents</td></tr>
+        <tr><td>ArtifactsGrid + DocumentViewer + delete</td><td>Pre-Workshop components</td><td>Workshop Artifacts section, doc viewing with clickable citations, confirm-delete dialog</td></tr>
+        <tr><td>Sidebar, AgentCard, stat chips, pills, modals, animations</td><td><code>preworkshop.css</code> + components</td><td>The whole visual language of the new page</td></tr>
+        <tr><td>docx export</td><td><code>docx_export.py</code></td><td>BRD → Word</td></tr>
+        <tr><td>Copilot / header search / phase tabs</td><td>page-level components</td><td>Already phase-agnostic</td></tr>
+      </table>
+    </div>
+    <div class="callout ok"><b>Bottom line</b> Roughly half the reference screen is assembly of existing parts. The genuinely new engineering is: the requirements engine, the capability map, the BRD assembler, the Teams-import UX, and the native diagram renderer.</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">03 · The centerpiece</div>
+    <h2>Native swimlane diagram viewer</h2>
+    <p class="sec-intro">
+      Your stated priority. The reference's viewer is impressive because it looks like a real
+      editor embedded in the page. The right way to match it is <b>not</b> an iframe.
+    </p>
+
+    <div class="dia-mock" aria-hidden="true">
+      <div class="dia-chrome">
+        <span class="dots"><span class="dot" style="background:#f26d5f"></span><span class="dot" style="background:#f5bd4f"></span><span class="dot" style="background:#59c157"></span></span>
+        <span class="dia-file">shift-planning-current-state.drawio</span>
+        <span class="dia-badge">✦ AI-generated</span>
+        <span class="dia-tools">− 100% + ⤢ &nbsp;·&nbsp; <b style="color:var(--purple-dark)">Export</b> · Edit in draw.io</span>
+      </div>
+      <div class="lanes">
+        <div class="lane"><div class="lane-hd" style="background:var(--purple-weak)">Planner</div><div class="lane-bd"><span class="nd nd-term">Forecast demand</span><span class="edge">→</span><span class="nd">Draft roster</span></div></div>
+        <div class="lane"><div class="lane-hd" style="background:var(--teal-weak)">Shift Supervisor</div><div class="lane-bd"><span class="nd">Review coverage</span><span class="edge">→</span><span class="nd nd-dec">GMP qualified?</span><span class="edge">yes ↘ · no ↓</span></div></div>
+        <div class="lane"><div class="lane-hd" style="background:var(--amber-weak)">GMP / QA</div><div class="lane-bd"><span class="nd">Line clearance</span></div></div>
+        <div class="lane"><div class="lane-hd" style="background:var(--purple-weak)">System</div><div class="lane-bd"><span class="nd nd-hi">Auto-optimize</span><span class="edge">→</span><span class="nd nd-term">Publish schedule</span></div></div>
+      </div>
+    </div>
+
+    <h3>Why native SVG, not an embedded iframe</h3>
+    <ul>
+      <li><b>We already own the data.</b> Every workflow diagram persists as structured JSON (<code>diagram_json</code>: lanes, typed nodes, labeled edges) — rendering it ourselves is a pure-frontend exercise with zero new backend work.</li>
+      <li><b>Full visual control.</b> Lane tints, node shapes, hover states, highlight-on-select, entry animations — none of which an <code>embed.diagrams.net</code> iframe allows. The iframe is also heavy (~3–5s load) and needs internet.</li>
+      <li><b>The editor stays.</b> “Edit in draw.io” opens our existing editor modal with the same XML; Export downloads the same file. View natively, edit externally — each tool where it's strongest.</li>
+    </ul>
+
+    <h3>Component: <code>DiagramCanvas.jsx</code></h3>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Concern</th><th>Design</th></tr>
+        <tr><td>Input</td><td><code>{ diagrams, title }</code> — the persisted diagram JSON (multi-process → page tabs, like draw.io pages)</td></tr>
+        <tr><td>Layout</td><td>Reuse the exact geometry algorithm from <code>drawio.py</code> ported to JS: topological rank → column, lane → row band. One algorithm, two renderers, identical layouts</td></tr>
+        <tr><td>Lanes</td><td>Full-width horizontal bands, rotated/side label headers, per-lane tint from the same 6-color palette the XML generator uses</td></tr>
+        <tr><td>Nodes</td><td>SVG shapes by type: rounded-pill terminals, rect process, diamond decision, parallelogram data; text wrapped and centered</td></tr>
+        <tr><td>Edges</td><td>Orthogonal elbow paths with arrowheads and mid-point labels (yes/no) — same routing rules as the generator</td></tr>
+        <tr><td>Interactions</td><td>Wheel/pinch zoom + drag pan (viewBox transform), zoom controls + fit-to-view, fullscreen, node hover lift, click-to-highlight, dotted grid background</td></tr>
+        <tr><td>Chrome</td><td>The window bar we already built for DrawioViewer (traffic lights, filename, AI-generated badge) becomes a shared header; toolbar: zoom −/%, +, fullscreen, Export (.drawio), Edit in draw.io</td></tr>
+        <tr><td>Motion</td><td>Staggered node fade-in on first render, smooth zoom transitions; <code>prefers-reduced-motion</code> respected</td></tr>
+        <tr><td>Honest scope</td><td>Read-only rendering — the left tool rail (select/shape/text tools) ships as visual chrome with editing delegated to draw.io. Real in-canvas editing is a separate, much larger project; pretending otherwise would produce a broken editor</td></tr>
+      </table>
+    </div>
+    <p>Also reused in Pre-Workshop: anywhere we currently only offer “View diagram” via the draw.io modal (workflow results, artifact cards) gets the instant native preview.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">04 · Capture without live transcription</div>
+    <h2>Teams meeting import</h2>
+    <p class="sec-intro">The flow that replaces live capture — almost entirely existing backend.</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Step</th><th>Status</th><th>Detail</th></tr>
+        <tr><td>1 · Connect</td><td>HAVE</td><td><code>/api/integrations/teams/status·connect·poll</code> — delegated token with persisted refresh, device-code fallback</td></tr>
+        <tr><td>2 · Browse meetings</td><td>HAVE</td><td><code>GET /teams/meetings</code> (+ date filters) and <code>POST /meetings/availability</code> — which meetings actually have transcripts</td></tr>
+        <tr><td>3 · Fetch transcript</td><td>HAVE</td><td><code>POST /teams/transcript</code> — VTT download incl. organizer fallback</td></tr>
+        <tr><td>4 · Register as source</td><td><b>BUILD</b></td><td>One glue route <code>POST /api/agents/import-transcript</code>: fetched transcript → <code>prepare_docs.register</code> (name “Teams — {subject}”, kind “transcript”) → existing indexing pipeline (status pills, RAG, context cache, everything downstream free)</td></tr>
+        <tr><td>5 · Import UI</td><td><b>BUILD</b></td><td><code>TeamsImportModal.jsx</code>: connect state → meeting list (subject, date, duration, transcript-available badge) → import → live status in the sidebar. The old canvas has this flow in vanilla JS — rebuilt clean in React</td></tr>
+      </table>
+    </div>
+    <p>After import, the capture banner shows the truth: <i>“2 transcripts imported · extracting requirements…”</i> with a processing state while the extraction agent runs — no fake “RECORDING” theater.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">05 · New backend</div>
+    <h2>Three agents and one table</h2>
+
+    <h3>Requirements engine</h3>
+    <ul>
+      <li><b>Table <code>requirements</code></b>: <code>req_id (REQ-01…)</code>, workshop_id, text, category, moscow (must/should/could/wont), source_label, source_doc_id, status, sort order — plus repo + CRUD routes (list/create/update/delete). Editable and manually extendable (“+ Add requirement”), not just AI output.</li>
+      <li><b>Agent <code>extract_reqs</code></b>: reads imported transcripts + pre-workshop context (the cached corpus — the reference explicitly “fuses pre-workshop context with capture”); returns a strict-JSON array of requirements with source attribution per item; upserts with stable IDs so re-running after a new import <i>adds</i> instead of duplicating.</li>
+    </ul>
+
+    <h3>Capability map</h3>
+    <ul>
+      <li><b>Agent <code>capmap</code></b>: structured contract <code>{domains:[{name, capabilities:[{name, maturity 1–5, opportunity high/med/low, note}]}]}</code> — same coerce/clamp discipline as insights/gaps; persisted on the generated doc (a <code>capmap_json</code> column, mirroring <code>analysis_json</code>) so the panel survives reload; versioned by re-run (v1.0 → v1.1).</li>
+    </ul>
+
+    <h3>BRD assembler</h3>
+    <ul>
+      <li><b>Agent <code>brd</code></b>: composes the approved requirements table + capability map + engagement context into the formal BRD document — persisted, Word-exportable, RAG-indexed like every generated doc. Card shows “N reqs · M capability areas”.</li>
+    </ul>
+
+    <div class="callout"><b>Stats endpoint</b> One small <code>GET /api/agents/workshop-stats</code> aggregates the hero chips (transcripts imported, requirement count, capability count, live artifacts) instead of four client-side fetches.</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">06 · New frontend</div>
+    <h2>Component list</h2>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Component</th><th>New?</th><th>Notes</th></tr>
+        <tr><td>DuringWorkshopDashboard.jsx</td><td>New</td><td>The page — replaces CanvasApp for the “run” tab (same swap Pre-Workshop made); fixed sidebar + scroll area layout reused</td></tr>
+        <tr><td>SourceArtifactsPanel</td><td>Adapt</td><td>Extract to shared component; add source-type icons (transcript/recording/photo/link), tag chips, “Import from Teams” action</td></tr>
+        <tr><td>TeamsImportModal.jsx</td><td>New</td><td>Connect → browse → import, availability badges, import progress</td></tr>
+        <tr><td>CaptureBanner</td><td>New</td><td>Imported-transcript status + extraction progress + import CTA</td></tr>
+        <tr><td>RequirementsPanel.jsx</td><td>New</td><td>Grouped rows, REQ-ID/category/MoSCoW chips, source-trace lines, inline edit, add/delete, extraction-run state</td></tr>
+        <tr><td>CapabilityMapPanel.jsx</td><td>New</td><td>Domain groups, heat cards, 5-segment maturity bars, legend, version badge</td></tr>
+        <tr><td>DiagramCanvas.jsx</td><td>New</td><td>§03 — the centerpiece</td></tr>
+        <tr><td>Workshop ArtifactsGrid</td><td>Reuse</td><td>Phase filter prop; BRD/capmap/flow cards get their type actions (Word, Scorecard-style capmap view, diagram preview)</td></tr>
+        <tr><td>Stats hero</td><td>Reuse</td><td>Pre-Workshop hero pattern, new fields</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">07 · Sequence</div>
+    <h2>Milestones</h2>
+    <p class="sec-intro">Ordered so every milestone ends in something you can click and judge. Estimates are working sessions, not promises.</p>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--purple)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M1</span><span class="mile-ttl">Page scaffold + shared components</span><span class="mile-est">~1 session</span></div>
+      <ul><li>DuringWorkshopDashboard mounted for the “run” tab; hero + placeholder stats; SourceArtifactsPanel extracted/shared with typed sources; Workshop Artifacts grid (reused, phase-filtered). Other phases untouched.</li></ul>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--teal)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M2</span><span class="mile-ttl">Teams transcript import</span><span class="mile-est">~1 session</span></div>
+      <ul><li>Glue route (transcript → prepare_doc), TeamsImportModal, capture banner, sidebar shows imported transcripts with real status pills.</li></ul>
+      <div class="mile-dep">Depends on M1 · backend already proven</div>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--amber)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M3</span><span class="mile-ttl">Requirements engine</span><span class="mile-est">~2 sessions</span></div>
+      <ul><li>Table + repo + CRUD routes, extract_reqs agent (dedup on re-run), RequirementsPanel with trace lines, inline edit, MoSCoW/category chips, live extraction state.</li></ul>
+      <div class="mile-dep">Depends on M2 (transcripts are the input) · the largest new build</div>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--purple)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M4</span><span class="mile-ttl">Native diagram viewer</span><span class="mile-est">~2 sessions</span></div>
+      <ul><li>DiagramCanvas per §03: geometry port, SVG shapes/edges, zoom/pan/fullscreen, chrome + Export + Edit-in-draw.io. Wired here and back into Pre-Workshop previews.</li></ul>
+      <div class="mile-dep">Independent — can run parallel to M3 if desired</div>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--green)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M5</span><span class="mile-ttl">Capability map</span><span class="mile-est">~1–1.5 sessions</span></div>
+      <ul><li>capmap agent + persistence + heat-mapped panel with maturity bars, legend, versioning.</li></ul>
+      <div class="mile-dep">Depends on M3 (requirements inform capabilities)</div>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--red)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M6</span><span class="mile-ttl">BRD assembler + stats + polish</span><span class="mile-est">~1 session</span></div>
+      <ul><li>brd agent, workshop-stats endpoint feeding the hero, animations pass, empty states, Copilot routing descriptions for the three new agents.</li></ul>
+      <div class="mile-dep">Depends on M3 + M5</div>
+    </div></div>
+
+    <p style="font-size:13px; color:var(--soft)">Total: ~8–9 working sessions. Each milestone is independently shippable and verifiable in the browser.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-kicker">08 · Boundaries & open questions</div>
+    <h2>Deliberately out of scope</h2>
+    <ul>
+      <li><b>Live transcription / live Teams capture</b> — your explicit call; requires an Azure bot-registration project (assessed previously as multi-week).</li>
+      <li><b>In-canvas diagram editing</b> — the viewer is read-only; editing delegates to the proven draw.io modal (see §03 “Honest scope”).</li>
+      <li><b>Granola / GitHub / whiteboard-photo ingestion</b> — the reference shows these source types; our sidebar will show correct type icons for anything uploaded (images, links as text), but real Granola API and repo-scanning integrations are separate efforts. Whiteboard photo → text needs an OCR/vision step we don't have yet.</li>
+      <li><b>Real-time multi-user sync</b> — panels refresh by polling (the pattern already used for research/analysis progress), not websockets.</li>
+    </ul>
+    <h3>To confirm before/while building</h3>
+    <ul>
+      <li>Retire the During Workshop <i>canvas</i> entirely, or keep it reachable (e.g. a “Board view” toggle) during transition? Plan assumes full replacement, matching what we did for Pre-Workshop.</li>
+      <li>MoSCoW edits and requirement approvals — single-editor assumption OK for now (no locking)?</li>
+      <li>Should extract_reqs run automatically on every transcript import, or stay behind an explicit “Extract requirements” action? Plan assumes explicit first, auto later.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Phase 2 implementation plan · AI Discovery Canvas · grounded in the two reference screenshots, a live fetch of the reference site, and direct reads of
+    <code>graph_teams.py</code>, <code>routes/integrations.py</code>, <code>drawio.py</code>, <code>agent_catalog.py</code>, and the Pre-Workshop components. No code changed yet.
+  </footer>
+</div>
+</body>
+</html>

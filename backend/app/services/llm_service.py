@@ -104,6 +104,12 @@ log = logging.getLogger("app.llm")
 # ── Configuration (env-driven) ───────────────────────────────────────
 AWS_REGION       = os.environ.get("AWS_REGION", "").strip() or os.environ.get("AWS_DEFAULT_REGION", "us-east-1").strip()
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "").strip()
+# Optional cheaper/faster model for tiny classification calls (Copilot's
+# intent router, deepresearch's request classifier) — those run on EVERY
+# chat message with a ~150-token output budget, so a Haiku-class model
+# here cuts per-conversation cost without touching synthesis quality.
+# Falls back to BEDROCK_MODEL_ID when unset.
+ROUTER_MODEL_ID  = os.environ.get("BEDROCK_ROUTER_MODEL_ID", "").strip()
 
 # Conservative defaults — Bedrock quotas are per-account/per-model and vary
 # a lot, so these are deliberately small. Raise via env once you know your
@@ -261,9 +267,20 @@ def complete(
     system: Optional[str] = None,
     max_output_tokens: Optional[int] = None,
     model: Optional[str] = None,
+    cache_system: bool = False,
 ) -> str:
     """Send a single user prompt to AWS Bedrock and return the response
     text.
+
+    ``cache_system=True`` appends a Bedrock prompt-caching checkpoint
+    (``cachePoint``) after the system block — for callers whose system
+    prompt is identical on every call (the chat/router prompts), repeated
+    calls within the cache TTL are billed at the cached-read rate instead
+    of full price. Honest caveat: Bedrock only creates a checkpoint once
+    the prefix exceeds the model's minimum cacheable size (1024 tokens
+    for Sonnet-class models); below that it's a silent no-op, and on
+    models that reject the field outright we strip it and retry once
+    rather than failing the call.
 
     Parameters
     ----------
@@ -346,6 +363,8 @@ def complete(
     }
     if system:
         kwargs["system"] = [{"text": system}]
+        if cache_system:
+            kwargs["system"].append({"cachePoint": {"type": "default"}})
 
     t0 = time.time()
     last_exc: Optional[Exception] = None
@@ -375,6 +394,14 @@ def complete(
 
         except ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")
+            if code == "ValidationException" and cache_system and \
+                    any("cachePoint" in b for b in kwargs.get("system", [])):
+                # Model/region doesn't accept prompt-cache checkpoints —
+                # strip and retry once at full price instead of failing.
+                log.info("%s call #%d cachePoint rejected — retrying without prompt caching", tag, call_id)
+                kwargs["system"] = [{"text": system}]
+                cache_system = False
+                continue
             if code in _NON_RETRYABLE_CODES:
                 log.error("%s call #%d non-retryable Bedrock error %s: %s", tag, call_id, code, e)
                 raise RuntimeError(f"AWS Bedrock error ({code}): {e}") from e
@@ -419,6 +446,72 @@ def _retry_after_seconds(exc: ClientError) -> Optional[float]:
         return float(ra) if ra else None
     except Exception:
         return None
+
+
+def complete_stream(
+    prompt: str,
+    *,
+    tag: str = "[LLM/STREAM]",
+    system: Optional[str] = None,
+    max_output_tokens: Optional[int] = None,
+    model: Optional[str] = None,
+    cache_system: bool = False,
+):
+    """Streaming variant of ``complete`` — yields text deltas as the model
+    produces them (Bedrock ``converse_stream``). Same truncation, rate
+    limiting, and prompt-caching behaviour; deliberately NO mid-stream
+    retry (a throttle before the first token raises normally so the
+    caller can fall back to ``complete``, but once tokens have been sent
+    to a client there is nothing sane to retry into — the generator just
+    raises and the caller ends the stream with an error frame)."""
+    global _CALL_COUNT
+    with _CALL_LOCK:
+        _CALL_COUNT += 1
+        call_id = _CALL_COUNT
+
+    max_out = max_output_tokens or MAX_OUTPUT_TOKENS
+    max_in = max(1024, MAX_CONTEXT_TOKENS - max_out)
+    model_id = (model or BEDROCK_MODEL_ID or "").strip()
+    if not model_id:
+        raise RuntimeError("BEDROCK_MODEL_ID is not set")
+
+    prompt_text, prompt_tokens, was_truncated = _truncate_for_context(prompt or "", max_in)
+    if was_truncated:
+        log.warning("%s call #%d prompt truncated to ~%d tokens", tag, call_id, max_in)
+
+    client = _get_client()
+    _limiter.acquire(prompt_tokens + max_out)
+
+    kwargs: dict = {
+        "modelId": model_id,
+        "messages": [{"role": "user", "content": [{"text": prompt_text}]}],
+        "inferenceConfig": {"maxTokens": max_out},
+    }
+    if system:
+        kwargs["system"] = [{"text": system}]
+        if cache_system:
+            kwargs["system"].append({"cachePoint": {"type": "default"}})
+
+    log.info("%s call #%d → %d input chars (~%d tokens) model=%s (streaming)",
+             tag, call_id, len(prompt_text), prompt_tokens, model_id)
+    t0 = time.time()
+    try:
+        resp = client.converse_stream(**kwargs)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "ValidationException" and cache_system:
+            kwargs["system"] = [{"text": system}]
+            resp = client.converse_stream(**kwargs)
+        else:
+            raise
+    n_chars = 0
+    for event in resp.get("stream", []):
+        delta = event.get("contentBlockDelta", {}).get("delta", {}).get("text")
+        if delta:
+            n_chars += len(delta)
+            yield delta
+    log.info("%s call #%d stream done in %.1fs → %d chars out",
+             tag, call_id, time.time() - t0, n_chars)
 
 
 def check_configured() -> list[str]:

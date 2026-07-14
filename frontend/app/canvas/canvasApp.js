@@ -65,39 +65,23 @@ const MARKUP = `
   </div>
   <div class="lensrow" id="lensrow">
     <div class="lensseg" id="lensseg"></div>
-    <span class="hint">one canvas · these are places on it</span>
+    <span class="hint" id="lensHint">one canvas · these are places on it</span>
     <div class="right">
       <button class="chip" id="focusChip" data-tip="Focus — dim the other zones to work on this one (zoom out to mind-map across all)"><span class="ic" data-ic="target"></span>Focus</button>
       <button class="btn" id="handoffBtn" data-tip="Handoff — assemble &amp; export (an action, not a place)"><span class="ic" data-ic="upload"></span>Handoff</button>
     </div>
   </div>
   <div class="main" id="main">
-    <div class="ltools" id="ltools">
-      <button class="tool on" data-tool="select" data-tip="Select &amp; move — drag nodes; click to scope the Assistant"><span class="ic" data-ic="pointer"></span></button>
-      <button class="tool" data-tool="pan" data-tip="Hand / pan"><span class="ic" data-ic="hand"></span></button>
-      <div class="sep"></div>
-      <button class="tool" data-tool="sticky" data-tip="Sticky note — click canvas; double-click to type"><span class="ic" data-ic="sticky"></span></button>
-      <button class="tool" data-tool="rect" data-tip="Rectangle"><span class="ic" data-ic="square"></span></button>
-      <button class="tool" data-tool="ellipse" data-tip="Ellipse"><span class="ic" data-ic="circle"></span></button>
-      <button class="tool" data-tool="text" data-tip="Text"><span class="ic" data-ic="text"></span></button>
-      <button class="tool" data-tool="conn" data-tip="Connector — click one node, then another (works across zones)"><span class="ic" data-ic="connector"></span></button>
-      <button class="tool" data-tool="frame" data-tip="Frame"><span class="ic" data-ic="frame"></span></button>
-      <div class="sep"></div>
-      <button class="tool" data-tool="upload" data-tip="Upload a file to ingest"><span class="ic" data-ic="upload"></span></button>
+    <div class="drawer left" id="artDrawer">
+      <div class="dhead"><span class="ic" data-ic="folder"></span><div><div class="ttl">Live Artifacts</div><div class="sub">your canvas, indexed</div></div>
+        <button class="infobtn" data-info="artifacts" data-info-title="Live Artifacts" data-info-text="A plain-English index of everything on the canvas, grouped the way you'd look for it. Each item is live. When an output is approved it files itself here and drops a card in the right zone."><span class="ic" data-ic="info"></span></button></div>
+      <div id="folders" style="overflow:auto"></div>
     </div>
     <div class="stage" id="stage">
       <div class="dotgrid"></div>
       <div class="layer" id="layer"><svg id="edges" width="6000" height="3000"></svg></div>
 
-      <button class="handle" id="artHandle" data-tip="Live Artifacts — your canvas index"><span class="ic" data-ic="folder"></span><span class="vt">Live Artifacts</span></button>
       <button class="handle" id="askHandle" data-tip="Open the Assistant"><span class="ic" data-ic="sparkles"></span><span class="vt">Ask</span></button>
-
-      <div class="drawer left" id="artDrawer">
-        <div class="dhead"><span class="ic" data-ic="folder"></span><div><div class="ttl">Live Artifacts</div><div class="sub">your canvas, indexed</div></div>
-          <button class="infobtn" data-info="artifacts" data-info-title="Live Artifacts" data-info-text="A plain-English index of everything on the canvas, grouped the way you'd look for it. Each item is live. When an output is approved it files itself here and drops a card in the right zone."><span class="ic" data-ic="info"></span></button>
-          <button class="x" id="artClose"><span class="ic" data-ic="x"></span></button></div>
-        <div id="folders" style="overflow:auto"></div>
-      </div>
 
       <div class="drawer right open" id="askDrawer">
         <div class="dhead"><span class="ic" data-ic="sparkles"></span><div><div class="ttl">Assistant</div><div class="sub">sensitive to where you are</div></div>
@@ -176,16 +160,25 @@ export function initCanvasApp(root, opts = {}) {
   function fillIcons(r) { (r || root).querySelectorAll('[data-ic]').forEach((e) => { if (e.dataset.done) return; const n = e.getAttribute('data-ic'); if (!ICON[n]) return; e.innerHTML = '<svg viewBox="0 0 24 24">' + ICON[n] + '</svg>'; e.dataset.done = 1; }); }
   const ico = (n) => '<span class="ic"><svg viewBox="0 0 24 24">' + (ICON[n] || '') + '</svg></span>';
 
-  // ── Zones / agents / artifact catalog (verbatim) ────────────────────
+  // ── Zones / agents / artifact catalog ────────────────────────────────
+  // Region `id`s are load-bearing (persisted on every node as `n.region`,
+  // see serializeBoard() below) and MUST stay stable across this
+  // relabel — only `label`/`sub` (display-only, never persisted; REGIONS
+  // itself is a static client-side catalog, rebuilt fresh on every load)
+  // change to the 4-phase engagement-lifecycle language.
   const REGIONS = [
-    { id: 'prepare', label: 'Prepare', x: 40, y: 90, w: 820, h: 600, desc: 'do the homework before the room', suggest: ['ingest', 'deepresearch', 'questions'] },
-    { id: 'run', label: 'Run', x: 960, y: 90, w: 940, h: 700, desc: 'capture the workshop live', suggest: ['drawflow', 'findgaps', 'decisions'] },
-    { id: 'synthesize', label: 'Synthesize', x: 2000, y: 90, w: 960, h: 700, desc: 'turn talk into deliverables', suggest: ['stories', 'bdd', 'mom'] },
-    { id: 'project', label: 'Project', x: 3060, y: 90, w: 900, h: 620, desc: 'scope the engagement', suggest: ['sow', 'roi'] },
+    { id: 'prepare', label: 'Pre-Workshop', sub: 'Ingest · Internalize · Research', x: 40, y: 90, w: 820, h: 600, desc: 'do the homework before the room', suggest: ['ingest', 'deepresearch', 'questions'] },
+    { id: 'run', label: 'During Workshop', sub: 'Capture · Synthesize · Generate', x: 960, y: 90, w: 940, h: 700, desc: 'capture the workshop live', suggest: ['drawflow', 'findgaps', 'decisions'] },
+    { id: 'synthesize', label: 'Post-Workshop', sub: 'Backlog · Opportunities · MoM', x: 2000, y: 90, w: 960, h: 700, desc: 'turn talk into deliverables', suggest: ['opportunities', 'mom', 'stories'] },
+    { id: 'project', label: 'Proposal & Planning', sub: 'SOW · ROI · Risk · Team', x: 3060, y: 90, w: 900, h: 620, desc: 'scope the engagement', suggest: ['sow', 'roi'] },
   ];
   const baseRect = {}; REGIONS.forEach((r) => { baseRect[r.id] = { x: r.x, y: r.y, w: r.w, h: r.h }; });
   const REGION = (id) => REGIONS.find((r) => r.id === id);
-  let curLens = 'run', focusOn = false;
+  // Pre-Workshop now has its own dashboard page (see PreWorkshopDashboard.jsx)
+  // outside this canvas entirely — opts.initialLens lets the phase-tab bar
+  // (frontend/app/canvas/[workshopId]/page.js) open the canvas already
+  // scoped to whichever of the OTHER 3 phases was clicked.
+  let curLens = (opts.initialLens && REGION(opts.initialLens)) ? opts.initialLens : 'run', focusOn = false;
 
   const AGENTS = [
     { id: 'ingest', region: 'prepare', icon: 'database', nm: 'Ingest client docs', ds: 'Pull context from files' },
@@ -373,10 +366,15 @@ export function initCanvasApp(root, opts = {}) {
     renderArtifacts(); drawEdges(); recomputeRegions();
   }
 
-  /* tools */
-  function setTool(t) { S.tool = t; root.querySelectorAll('.ltools .tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === t)); stage.style.cursor = t === 'pan' ? 'grab' : (['sticky', 'rect', 'ellipse', 'text', 'frame'].includes(t) ? 'crosshair' : (t === 'conn' ? 'cell' : 'default')); if (t !== 'conn' && S.connectFrom) { const s = S.nodes.find((x) => x.id === S.connectFrom); if (s && s.el) s.el.classList.remove('connsrc'); S.connectFrom = null; } }
+  /* tools — switched via the Insert menu (MENUS.insert below), not a
+     persistent sidebar; the sidebar (and its Select/Pan buttons) was
+     removed to make room for the always-visible Live Artifacts panel.
+     Select is the default S.tool and needs no dedicated button; Pan had
+     no functional behavior of its own to begin with — empty-canvas
+     drag-to-pan below (stage pointerdown/pointermove) already works
+     regardless of S.tool, it only ever changed the cursor to 'grab'. */
+  function setTool(t) { S.tool = t; stage.style.cursor = ['sticky', 'rect', 'ellipse', 'text', 'frame'].includes(t) ? 'crosshair' : (t === 'conn' ? 'cell' : 'default'); if (t !== 'conn' && S.connectFrom) { const s = S.nodes.find((x) => x.id === S.connectFrom); if (s && s.el) s.el.classList.remove('connsrc'); S.connectFrom = null; } }
   const fileInput = $('fileInput');
-  root.querySelectorAll('.ltools .tool').forEach((b) => { b.onclick = () => { if (b.dataset.tool === 'upload') { fileInput.click(); return; } setTool(b.dataset.tool); }; });
 
   /* canvas pan + create */
   let drag = false, last = null;
@@ -409,8 +407,26 @@ export function initCanvasApp(root, opts = {}) {
   $('zFit').onclick = fitAll;
   on(document, 'keydown', (e) => { const ed = document.activeElement; const typing = ed && (ed.tagName === 'TEXTAREA' || ed.tagName === 'INPUT' || ed.getAttribute('contenteditable') === 'true'); if (typing) return; if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { e.preventDefault(); delNode(S.sel); } if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd' && S.sel) { e.preventDefault(); dupNode(S.sel); } });
 
-  /* lens + focus */
-  function renderLens() { const el = $('lensseg'); el.innerHTML = ''; REGIONS.forEach((r) => { const b = document.createElement('button'); b.className = 'lens' + (r.id === curLens ? ' on' : ''); b.setAttribute('data-tip', r.label + ' — ' + r.desc); b.textContent = r.label; b.onclick = () => setLens(r.id); el.appendChild(b); }); }
+  /* lens + focus — a numbered engagement-phase stepper (Pre-Workshop →
+     During Workshop → Post-Workshop → Proposal & Planning), one step per
+     REGION in array order. Steps before curLens are check-marked done,
+     the current one is highlighted, later ones are dim/upcoming — same
+     visual language as the reference product this was modeled on. */
+  function renderLens() {
+    const el = $('lensseg'); el.innerHTML = '';
+    const curIdx = REGIONS.findIndex((r) => r.id === curLens);
+    REGIONS.forEach((r, i) => {
+      const done = i < curIdx, on = r.id === curLens;
+      const b = document.createElement('button');
+      b.className = 'lens' + (on ? ' on' : '') + (done ? ' done' : '');
+      b.setAttribute('data-tip', r.label + ' — ' + r.desc);
+      b.innerHTML = '<span class="lnum">' + (done ? ico('check') : (i + 1)) + '</span>' +
+        '<span class="ltxt"><span class="llabel">' + esc(r.label) + '</span><span class="lsub">' + esc(r.sub || '') + '</span></span>';
+      b.onclick = () => setLens(r.id);
+      el.appendChild(b); fillIcons(b);
+    });
+    const hint = $('lensHint'); if (hint) hint.textContent = 'Phase ' + (curIdx + 1) + ' of ' + REGIONS.length;
+  }
   function setLens(id) { curLens = id; syncRegionEls(); renderLens(); renderSuggest(); if (!S.sel) scopeToZone(); applyFocus(); panToRegion(id); syncTranscriptVisibility(); }
   function applyFocus() { stage.classList.toggle('focus', focusOn); S.nodes.forEach((n) => { if (!n.el) return; n.el.classList.toggle('faded', focusOn && n.region && n.region !== curLens); }); }
   $('focusChip').onclick = function () { focusOn = !focusOn; this.classList.toggle('on', focusOn); applyFocus(); toast(focusOn ? 'Focus on — other zones dimmed' : 'Focus off'); };
@@ -424,14 +440,13 @@ export function initCanvasApp(root, opts = {}) {
   function ctxLabel() { return $('ctxScopeLbl').textContent; }
   function renderCtxExtras() { root.querySelectorAll('.ctxchip.extra').forEach((e) => e.remove()); const bar = $('ctxbar'); S.files.forEach((f, i) => { const c = document.createElement('span'); c.className = 'ctxchip file extra'; c.title = f.chars ? Math.round(f.chars / 1000) + 'k chars extracted' : ''; c.innerHTML = ico('paperclip') + esc(f.name) + ' <button>' + ico('x') + '</button>'; bar.appendChild(c); fillIcons(c); c.querySelector('button').onclick = () => { S.files.splice(i, 1); renderCtxExtras(); }; }); if (S.web) { const c = document.createElement('span'); c.className = 'ctxchip web extra'; c.innerHTML = ico('globe') + 'Web research <button>' + ico('x') + '</button>'; bar.appendChild(c); fillIcons(c); c.querySelector('button').onclick = () => { S.web = false; $('webBtn').classList.remove('on'); renderCtxExtras(); }; } }
 
-  /* drawers */
-  const askDrawer = $('askDrawer'), artDrawer = $('artDrawer');
+  /* drawers — Live Artifacts is now an always-visible panel (no open/
+     close state of its own, see MARKUP), only the Assistant still
+     collapses/expands. */
+  const askDrawer = $('askDrawer');
   function openAssistant() { askDrawer.classList.add('open'); $('askHandle').style.display = 'none'; }
   function closeAssistant() { askDrawer.classList.remove('open'); $('askHandle').style.display = 'inline-flex'; }
   $('askClose').onclick = closeAssistant; $('askHandle').onclick = openAssistant;
-  function openArt() { artDrawer.classList.add('open'); $('artHandle').style.display = 'none'; }
-  function closeArt() { artDrawer.classList.remove('open'); $('artHandle').style.display = 'inline-flex'; }
-  $('artClose').onclick = closeArt; $('artHandle').onclick = openArt;
 
   // Artifact items are strings (the seeded demo set) OR provenance
   // objects {label, agent, zone, src, by, at} — every Approve since
@@ -736,7 +751,7 @@ export function initCanvasApp(root, opts = {}) {
             by: USER.name || USER.email || 'you',
             at: new Date().toISOString().slice(0, 16).replace('T', ' '),
           });
-          if (curLens !== 'prepare') toast(j.name + ' uploaded → Prepare zone · Background');
+          if (curLens !== 'prepare') toast(j.name + ' uploaded → ' + REGION('prepare').label + ' zone · Background');
           else toast('Uploaded ' + j.name + ' (' + Math.max(1, Math.round(j.chars / 1000)) + 'k chars)');
         } else toast('⚠ ' + ((j && j.error) || ('could not attach ' + f.name)));
       } catch { if (!disposed) toast('⚠ upload failed: ' + f.name); }
@@ -1194,13 +1209,12 @@ export function initCanvasApp(root, opts = {}) {
       { label: 'Present', icon: 'play', action: 'present' },
       { sep: true },
       { label: 'Search canvas', icon: 'search', action: 'search' },
-      { label: 'Live Artifacts', icon: 'folder', action: 'artifacts' },
       { label: 'Assistant', icon: 'sparkles', action: 'assistant' },
       { sep: true },
-      { label: 'Go to Prepare', icon: 'database', action: 'lens:prepare' },
-      { label: 'Go to Run', icon: 'play', action: 'lens:run' },
-      { label: 'Go to Synthesize', icon: 'list', action: 'lens:synthesize' },
-      { label: 'Go to Project', icon: 'dollar', action: 'lens:project' },
+      { label: 'Go to Pre-Workshop', icon: 'database', action: 'lens:prepare' },
+      { label: 'Go to During Workshop', icon: 'play', action: 'lens:run' },
+      { label: 'Go to Post-Workshop', icon: 'list', action: 'lens:synthesize' },
+      { label: 'Go to Proposal & Planning', icon: 'dollar', action: 'lens:project' },
     ],
     insert: [
       { label: 'Sticky note', icon: 'sticky', action: 'tool:sticky' },
@@ -1267,7 +1281,6 @@ export function initCanvasApp(root, opts = {}) {
       case 'focus': $('focusChip').click(); break;
       case 'present': $('cPresent').click(); break;
       case 'search': $('searchIn').focus(); break;
-      case 'artifacts': openArt(); break;
       case 'assistant': openAssistant(); break;
       case 'agents': openAssistant(); openSlash(''); break;
       case 'teams': $('teamsBtn').click(); break;
@@ -1317,7 +1330,7 @@ export function initCanvasApp(root, opts = {}) {
 
   /* init */
   if (PROJECT_ID) $('backProjects').href = '/projects/' + PROJECT_ID;
-  fillIcons(root); renderRegions(); renderPrepareActions(); renderRunActions(); renderArtifacts(); renderLens(); renderSuggest(); scopeToZone(); drawEdges(); panToRegion('run', false); syncTranscriptVisibility();
+  fillIcons(root); renderRegions(); renderPrepareActions(); renderRunActions(); renderArtifacts(); renderLens(); renderSuggest(); scopeToZone(); drawEdges(); panToRegion(curLens, false); syncTranscriptVisibility();
   $('askHandle').style.display = 'none'; /* Assistant open by default */
   botMsg(WELCOME_HTML);
 
