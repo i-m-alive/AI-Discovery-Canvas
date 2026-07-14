@@ -56,7 +56,7 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
             description: str = '', category: str = '', tags: list | None = None,
             diagram_xml: str | None = None, diagram_json: list | None = None,
             next_steps: list | None = None, analysis_json: dict | None = None,
-            capmap_json: dict | None = None) -> dict:
+            capmap_json: dict | None = None, inputs_json: list | None = None) -> dict:
     """Store the draft's sanitised body_html in the object store, record
     metadata in Postgres, return the record. Returns an empty dict if
     Postgres isn't reachable — the caller (agent_catalog.run_agent)
@@ -79,7 +79,7 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
                           description=(description or '')[:500] or None,
                           category=category or None, tags=tags or [],
                           diagram_xml=diagram_xml, diagram_json=diagram_json, next_steps=next_steps,
-                          analysis_json=analysis_json, capmap_json=capmap_json)
+                          analysis_json=analysis_json, capmap_json=capmap_json, inputs_json=inputs_json)
         record = {'doc_id': row.doc_id, 'name': row.name, 'agent_id': row.agent_id, 'chars': row.chars,
                   'status': row.status, 'completion_pct': row.completion_pct, 'author': row.author,
                   'description': row.description, 'category': row.category, 'tags': row.tags,
@@ -114,7 +114,7 @@ def list_docs(workshop_id: int) -> list[dict]:
                  'created_at': int(d.created_at.timestamp()),
                  'has_diagram': bool(d.diagram_xml), 'next_steps': d.next_steps or [],
                  'has_analysis': bool(d.analysis_json), 'has_capmap': bool(d.capmap_json),
-                 'zone': zones.get(d.agent_id, '')}
+                 'zone': zones.get(d.agent_id, ''), 'inputs': d.inputs_json or []}
                 for d in rows]
 
 

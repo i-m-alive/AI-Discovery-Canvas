@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import { Icon } from '../../lib/icons';
+import { STATUS_LABEL, downloadDrawio, fileType, timeAgo } from '../artifactMeta';
+import ArtifactExplorer from '../ArtifactExplorer';
 import AnalysisModal from './AnalysisModal';
 import DocumentViewer from './DocumentViewer';
 import DrawioViewer from './DrawioViewer';
 import '../../shared.css';
 
-export const STATUS_LABEL = { queued: 'Queued', parsing: 'Parsing', ingested: 'Ingested', failed: 'Failed' };
 const RESEARCH_STEP_ORDER = ['ingest', 'extract', 'queries', 'search', 'synthesize'];
 // The 'analyze' pipeline's steps (see agent_catalog._ANALYSIS_STEPS).
 const ANALYSIS_STEP_ORDER = ['inventory', 'perdoc', 'synth', 'readiness'];
@@ -62,6 +63,9 @@ export function fileType(name) {
 // One consistent header for every agent panel below the hero catalogue:
 // icon + name + description, an eye button that reveals a plain-language
 // explainer (what it does / reads / produces), then the agent's own
+// One consistent card per sidebar agent: icon + name, an eye button that
+// reveals a plain-language explainer (what it does / reads / produces —
+// for anyone who doesn't know the agent yet), then the agent's own
 // controls as children.
 function AgentPanelHead({ icon, title, sub, showInfo, onToggleInfo }) {
   return (
@@ -112,18 +116,6 @@ function AgentCatalogue({ selected, onSelect }) {
   );
 }
 
-export function downloadDrawio(diagram, name) {
-  if (!diagram || !diagram.xml) return;
-  const blob = new Blob([diagram.xml], { type: 'application/xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(name || 'workflow').replace(/[^a-z0-9-_]+/gi, '_')}.drawio`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 
 export default function PreWorkshopDashboard({ user, workshopId }) {
   const [docs, setDocs] = useState([]);
@@ -380,7 +372,12 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
 
   return (
     <div className="pw-dash">
-      <SourceArtifactsPanel docs={docs} onAdd={() => fileInputRef.current?.click()} onView={setViewerDocId}
+      <ArtifactExplorer workshopId={workshopId} docs={docs} artifacts={artifacts}
+        activePhase="Pre-Workshop"
+        onAdd={() => fileInputRef.current?.click()}
+        onView={setViewerDocId}
+        onOpenDiagram={setViewerDiagram}
+        onOpenAnalysis={setAnalysisModal}
         onDelete={deleteArtifact} />
       <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleUpload}
             accept=".pdf,.docx,.xlsx,.pptx,.csv,.html,.txt,.md,.zip" />
@@ -1079,6 +1076,36 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
               : (a.agent_id === 'analyze' || a.agent_id === 'capmap') ? 'target' : 'search';
             const actions = (
               <>
+          {visibleArtifacts.map((a) => (
+            <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
+              <div className="pw-artifact-top">
+                <span className="pw-ic pw-ic-accent">
+                  <Icon name={(a.agent_id === 'workflow' || a.agent_id === 'drawflow') ? 'flow'
+                    : (a.agent_id === 'summarize_docs' || a.agent_id === 'artifact_analyst' || a.agent_id === 'brd') ? 'doc-text'
+                    : (a.agent_id === 'analyze' || a.agent_id === 'capmap') ? 'target' : 'search'} />
+                </span>
+                <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
+              </div>
+              <div className="pw-artifact-cat">{(a.category || a.agent_id || '').toUpperCase()}</div>
+              <div className="pw-artifact-name">{a.name}</div>
+              {a.description && <div className="pw-artifact-desc">{a.description}</div>}
+              <div className="pw-artifact-tags">
+                {(a.tags || []).map((t) => <span key={t} className="pw-tag">{t}</span>)}
+                {(a.inputs || []).length > 0 && (
+                  <span className="pw-tag pw-tag-inputs"
+                    title={'Built from: ' + a.inputs.map((i) => i.name).join(', ')}>
+                    from {a.inputs.length} input{a.inputs.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              <div className="pw-artifact-foot">
+                <span>{a.author || 'BA Copilot'} · {timeAgo(a.created_at)}</span>
+                <span className="pw-progress">
+                  <span className="pw-progress-track"><span className="pw-progress-fill" style={{ width: `${a.completion_pct || 0}%` }} /></span>
+                  {a.completion_pct || 0}%
+                </span>
+              </div>
+              <div className="pw-artifact-actions">
                 <button className="pw-view-btn" onClick={() => onView(a.doc_id)} title="View document"><Icon name="search" />View</button>
                 {a.has_diagram && (
                   <button className="pw-view-btn" onClick={() => viewDiagram(a)} title="View workflow diagram">

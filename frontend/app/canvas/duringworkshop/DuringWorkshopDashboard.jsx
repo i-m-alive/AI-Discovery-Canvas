@@ -5,19 +5,16 @@ import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
 import { Icon } from '../../lib/icons';
 import DocumentViewer from '../preworkshop/DocumentViewer';
 import DrawioViewer from '../preworkshop/DrawioViewer';
-import {
-  ArtifactsGrid, ConfirmDeleteModal, SourceArtifactsPanel, timeAgo,
-} from '../preworkshop/PreWorkshopDashboard';
+import { ArtifactsGrid, ConfirmDeleteModal } from '../preworkshop/PreWorkshopDashboard';
+import { isTranscript, timeAgo } from '../artifactMeta';
+import ArtifactExplorer from '../ArtifactExplorer';
 import DiagramCanvas from './DiagramCanvas';
+import SynthesisCanvas, { GENERATORS, loadCanvasSet } from './SynthesisCanvas';
 import TeamsImportModal from './TeamsImportModal';
 import '../../shared.css';
 
 const MOSCOW_LABEL = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" };
 const REQ_CATEGORIES = ['Process', 'Data', 'Integration', 'Reporting', 'Security', 'UX', 'Compliance', 'Other'];
-
-function isTranscript(name) {
-  return /^teams\s*—|^teams\s*--|\.vtt$|transcript/i.test(name || '');
-}
 
 // ══════════════════════════════════════════════════════════════════════
 export default function DuringWorkshopDashboard({ user, workshopId, onBoardView }) {
@@ -29,11 +26,12 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
   const [error, setError] = useState('');
 
   const [teamsOpen, setTeamsOpen] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [lastExtract, setLastExtract] = useState(null);   // {added, total}
-  const [buildingMap, setBuildingMap] = useState(false);
-  const [buildingBrd, setBuildingBrd] = useState(false);
-  const [buildingFlow, setBuildingFlow] = useState(false);
+  // The Synthesis Canvas working set — every generator below runs scoped
+  // to exactly these items (options.doc_ids), never the whole workshop.
+  const [canvasItems, setCanvasItems] = useState([]);
+  const [pipeline, setPipeline] = useState(null);         // [{id,label,status,note}] while a run is live
+  const [lastResult, setLastResult] = useState(null);     // {label, docId?}
+  const runningGen = pipeline ? (pipeline.find((s) => s.status === 'running') || {}).id || null : null;
 
   const [viewerDocId, setViewerDocId] = useState(null);
   const [editDiagram, setEditDiagram] = useState(null);    // {xml,title} -> DrawioViewer
@@ -83,6 +81,25 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
 
+  // Restore the canvas working set after mount (sessionStorage is
+  // browser-only — reading it during render would break hydration).
+  useEffect(() => { setCanvasItems(loadCanvasSet(workshopId)); }, [workshopId]);
+
+  // Persist at MUTATION time, not via an effect on canvasItems: a
+  // persist-effect fires on mount with the initial empty list and (under
+  // StrictMode's double-mount) wipes the stored set before restore wins.
+  // Every canvas mutation flows through here instead.
+  const updateCanvasItems = useCallback((next) => {
+    setCanvasItems((prev) => {
+      const value = typeof next === 'function' ? next(prev) : next;
+      queueMicrotask(() => {
+        try { window.sessionStorage.setItem(`aidc-canvas-${workshopId}`, JSON.stringify(value)); }
+        catch { /* private mode — the set just won't persist */ }
+      });
+      return value;
+    });
+  }, [workshopId]);
+
   // Poll ingestion while any source (e.g. a fresh transcript) is in flight.
   useEffect(() => {
     const pending = docs.some((d) => d.status === 'queued' || d.status === 'parsing');
@@ -109,71 +126,90 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
     }
   }
 
-  async function runExtract() {
-    setExtracting(true);
-    setError('');
-    setLastExtract(null);
+  // One generator call, scoped to the canvas working set. Returns a
+  // short note for the pipeline step (throws on failure).
+  async function runOne(agentId, prompt) {
+    const doc_ids = {
+      sources: canvasItems.filter((i) => i.kind === 'source').map((i) => i.doc_id),
+      generated: canvasItems.filter((i) => i.kind === 'generated').map((i) => i.doc_id),
+    };
+    const res = await apiPost('/api/agents/run', {
+      agent_id: agentId, workshop_id: workshopId, context: { zone: 'During Workshop' },
+      extra: (prompt || '').trim() || undefined,
+      options: { doc_ids },
+    });
+    if (!res.ok) throw new Error(res.error || 'failed');
+    if (agentId === 'extract_reqs') {
+      const added = (res.draft.requirements || []).length;
+      const total = res.draft.extracted_count || 0;
+      loadReqs();
+      return {
+        note: `+${added} new` + (total > added ? ` · ${total - added} duplicate${total - added === 1 ? '' : 's'} skipped` : ''),
+        docId: null,
+      };
+    }
+    if (agentId === 'capmap') loadCapmap();
+    return { note: 'done', docId: res.draft && res.draft.node && res.draft.node.docId };
+  }
+
+  // The Run button: executes the selected outputs as a sequential
+  // pipeline in dependency order (GENERATORS' order — capmap reads the
+  // requirements table, brd reads both), each step scoped to the canvas
+  // selection. Strict gating by design: no selection, no generation.
+  // A failed step is marked and the pipeline continues — later outputs
+  // may still be useful.
+  // `pipelineBusy` is a REF, not state: the button's disabled flag only
+  // takes effect after a re-render, so a double-click fired two whole
+  // pipelines concurrently (observed live: duplicate capability maps and
+  // BRDs ~1 min apart). A ref flips synchronously on the first call and
+  // makes the second a no-op.
+  const pipelineBusy = useRef(false);
+  async function runPipeline(agentIds, prompt) {
+    if (pipelineBusy.current) return;
+    if (canvasItems.length === 0) {
+      setError('Drag documents onto the Synthesis Canvas first — generation reads only what you put there.');
+      return;
+    }
+    pipelineBusy.current = true;
     try {
-      const res = await apiPost('/api/agents/run', {
-        agent_id: 'extract_reqs', workshop_id: workshopId, context: { zone: 'During Workshop' },
-      });
-      if (!res.ok) { setError(res.error || 'extraction failed'); return; }
-      setLastExtract({ added: (res.draft.requirements || []).length, total: res.draft.extracted_count || 0 });
-      loadReqs(); loadStats();
-    } catch (err) {
-      setError(err.message || 'extraction failed');
+      await _runPipelineInner(agentIds, prompt);
     } finally {
-      setExtracting(false);
+      pipelineBusy.current = false;
     }
   }
 
-  async function runCapmap() {
-    setBuildingMap(true);
+  async function _runPipelineInner(agentIds, prompt) {
+    const order = GENERATORS.filter((g) => agentIds.includes(g.id));
+    if (!order.length) return;
     setError('');
-    try {
-      const res = await apiPost('/api/agents/run', {
-        agent_id: 'capmap', workshop_id: workshopId, context: { zone: 'During Workshop' },
-      });
-      if (!res.ok) { setError(res.error || 'capability map failed'); return; }
-      loadCapmap(); loadArtifacts(); loadStats();
-    } catch (err) {
-      setError(err.message || 'capability map failed');
-    } finally {
-      setBuildingMap(false);
+    setLastResult(null);
+    setPipeline(order.map((g) => ({ id: g.id, label: g.label, status: 'pending', note: '' })));
+    let doneCount = 0;
+    let lastDocId = null;
+    for (const g of order) {
+      setPipeline((p) => p.map((s) => s.id === g.id ? { ...s, status: 'running' } : s));
+      try {
+        const out = await runOne(g.id, prompt);
+        doneCount += 1;
+        if (out.docId) lastDocId = out.docId;
+        setPipeline((p) => p.map((s) => s.id === g.id ? { ...s, status: 'done', note: out.note } : s));
+      } catch (err) {
+        setPipeline((p) => p.map((s) => s.id === g.id ? { ...s, status: 'failed', note: err.message || 'failed' } : s));
+      }
     }
+    loadArtifacts(); loadStats();
+    // The finished pipeline stays visible (its per-step notes are the
+    // receipt); the next run replaces it.
+    setLastResult({
+      label: doneCount === order.length
+        ? `${doneCount} output${doneCount === 1 ? '' : 's'} generated from ${canvasItems.length} input${canvasItems.length === 1 ? '' : 's'}`
+        : `${doneCount}/${order.length} outputs generated — see the failed step above`,
+      docId: order.length === 1 ? lastDocId : null,
+    });
   }
 
-  async function runBrd() {
-    setBuildingBrd(true);
-    setError('');
-    try {
-      const res = await apiPost('/api/agents/run', {
-        agent_id: 'brd', workshop_id: workshopId, context: { zone: 'During Workshop' },
-      });
-      if (!res.ok) { setError(res.error || 'BRD assembly failed'); return; }
-      loadArtifacts(); loadStats();
-      if (res.draft && res.draft.node && res.draft.node.docId) setViewerDocId(res.draft.node.docId);
-    } catch (err) {
-      setError(err.message || 'BRD assembly failed');
-    } finally {
-      setBuildingBrd(false);
-    }
-  }
-
-  async function runFlow() {
-    setBuildingFlow(true);
-    setError('');
-    try {
-      const res = await apiPost('/api/agents/run', {
-        agent_id: 'workflow', workshop_id: workshopId, context: { zone: 'During Workshop' },
-      });
-      if (!res.ok) { setError(res.error || 'process flow failed'); return; }
-      loadArtifacts(); loadStats();
-    } catch (err) {
-      setError(err.message || 'process flow failed');
-    } finally {
-      setBuildingFlow(false);
-    }
+  function addToCanvas(item) {
+    updateCanvasItems((prev) => prev.some((x) => x.doc_id === item.doc_id) ? prev : [...prev, item]);
   }
 
   function deleteArtifact(docId, name) { setConfirmDelete({ docId, name }); }
@@ -206,14 +242,19 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
 
   return (
     <div className="pw-dash">
-      <SourceArtifactsPanel docs={docs} onAdd={() => fileInputRef.current?.click()}
-        onView={setViewerDocId} onDelete={deleteArtifact}
+      <ArtifactExplorer workshopId={workshopId} docs={docs} artifacts={artifacts}
+        activePhase="During Workshop"
+        onAdd={() => fileInputRef.current?.click()}
+        onView={setViewerDocId}
+        onOpenDiagram={setEditDiagram}
+        onOpenCapmap={setCapmapModal}
+        onDelete={deleteArtifact}
+        onAddToCanvas={addToCanvas}
         extraAction={(
           <button className="btn solid dw-teams-cta" onClick={() => setTeamsOpen(true)}>
             <Icon name="users" />Import from Teams
           </button>
-        )}
-        emptyText={(<>No sources yet for this workshop.<br />Import a Teams transcript or upload a document.</>)} />
+        )} />
       <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleUpload}
         accept=".pdf,.docx,.xlsx,.pptx,.csv,.html,.txt,.md,.vtt,.zip" />
 
@@ -240,32 +281,34 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
 
         {error && <div className="app-error pw-err">⚠ {error}</div>}
 
-        <CaptureBanner transcripts={transcripts} extracting={extracting} lastExtract={lastExtract}
-          onImport={() => setTeamsOpen(true)} onExtract={runExtract} />
+        <SynthesisCanvas workshopId={workshopId} items={canvasItems} onItemsChange={updateCanvasItems}
+          docs={docs} artifacts={artifacts}
+          pipeline={pipeline} onGenerate={runPipeline}
+          onImportTeams={() => setTeamsOpen(true)}
+          lastResult={lastResult} onOpenResult={setViewerDocId}
+          transcriptsCount={transcripts.length} />
 
-        <RequirementsPanel workshopId={workshopId} reqs={reqs} onChanged={() => { loadReqs(); loadStats(); }}
-          extracting={extracting} onExtract={runExtract} hasTranscripts={transcripts.length > 0} />
-
-        <CapabilityMapPanel capmap={capmap} building={buildingMap} onBuild={runCapmap}
-          hasInput={reqs.length > 0 || docs.length > 0} />
-
-        <DiagramSection workshopId={workshopId} artifacts={artifacts}
-          building={buildingFlow} onBuild={runFlow} onEdit={setEditDiagram} />
-
-        <section className="pw-panel dw-generate">
-          <div className="pw-panel-ttl">
-            <span className="pw-ic pw-ic-accent"><Icon name="doc-text" /></span>
-            <div>
-              <div className="pw-h3">Assemble the BRD</div>
-              <div className="pw-sub">Composes the captured requirements, the capability map and the workshop
-                context into a formal Business Requirements Document — Word-exportable, like every artifact.</div>
-            </div>
-            <button className="btn solid dw-brd-btn" onClick={runBrd} disabled={buildingBrd || reqs.length === 0}
-              title={reqs.length === 0 ? 'Capture requirements first' : 'Assemble the BRD'}>
-              <Icon name="doc-text" />{buildingBrd ? 'Assembling…' : 'Assemble BRD'}
-            </button>
+        {/* Progressive disclosure: each panel exists only once its content
+            does — before the first run, the page is hero + canvas + grid. */}
+        {(reqs.length > 0 || capmap) && (
+          <div className="dw-cols">
+            {reqs.length > 0 && (
+              <RequirementsPanel workshopId={workshopId} reqs={reqs} onChanged={() => { loadReqs(); loadStats(); }}
+                extracting={runningGen === 'extract_reqs'} onExtract={() => runPipeline(['extract_reqs'], '')}
+                canRun={canvasItems.length > 0} />
+            )}
+            {capmap && (
+              <CapabilityMapPanel capmap={capmap} building={runningGen === 'capmap'}
+                onBuild={() => runPipeline(['capmap'], '')} hasInput={canvasItems.length > 0} />
+            )}
           </div>
-        </section>
+        )}
+
+        {artifacts.some((a) => a.has_diagram) && (
+          <DiagramSection workshopId={workshopId} artifacts={artifacts}
+            building={runningGen === 'workflow'} onBuild={() => runPipeline(['workflow'], '')}
+            canRun={canvasItems.length > 0} onEdit={setEditDiagram} />
+        )}
 
         <ArtifactsGrid docs={docs} artifacts={artifacts} onView={setViewerDocId} workshopId={workshopId}
           onViewDiagram={setEditDiagram} onViewAnalysis={() => {}} onDelete={deleteArtifact}
@@ -307,50 +350,7 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
 }
 
 // ══════════════════════════════════════════════════════════════════════
-function CaptureBanner({ transcripts, extracting, lastExtract, onImport, onExtract }) {
-  if (extracting) {
-    return (
-      <div className="dw-capture dw-capture-busy">
-        <span className="dw-capture-dot" />
-        <div className="dw-capture-txt">
-          <b>Extracting requirements…</b> reading {transcripts.length || 'the'} transcript{transcripts.length === 1 ? '' : 's'} and
-          the pre-workshop context — new requirements land in the live table below.
-        </div>
-      </div>
-    );
-  }
-  if (transcripts.length === 0) {
-    return (
-      <div className="dw-capture dw-capture-empty">
-        <span className="pw-ic pw-ic-accent"><Icon name="users" /></span>
-        <div className="dw-capture-txt">
-          <b>No capture yet.</b> Import a Teams meeting transcript to start turning discussion into
-          requirements. Uploads (notes, whiteboard exports) work too.
-        </div>
-        <button className="btn solid" onClick={onImport}><Icon name="users" />Import from Teams</button>
-      </div>
-    );
-  }
-  const latest = transcripts[transcripts.length - 1];
-  return (
-    <div className="dw-capture">
-      <span className="dw-capture-check"><Icon name="check-circle" /></span>
-      <div className="dw-capture-txt">
-        <b>{transcripts.length} transcript{transcripts.length === 1 ? '' : 's'} imported</b>
-        {latest ? <> · latest: {latest.name} ({timeAgo(latest.uploaded_at)})</> : null}
-        {lastExtract && (
-          <span className="dw-capture-note"> · last extraction added {lastExtract.added} new
-            {lastExtract.total > lastExtract.added ? ` (${lastExtract.total - lastExtract.added} duplicates skipped)` : ''}</span>
-        )}
-      </div>
-      <button className="btn" onClick={onImport}><Icon name="users" />Import more</button>
-      <button className="btn solid" onClick={onExtract}><Icon name="sparkles" />Extract requirements</button>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════
-function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract, hasTranscripts }) {
+function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract, canRun }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ text: '', category: 'Process', moscow: 'should' });
   const [editing, setEditing] = useState(null);   // {id, text, category, moscow}
@@ -412,16 +412,20 @@ function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract,
           <span className="pw-ic pw-ic-accent"><Icon name="list" /></span>
           <div>
             <div className="pw-h3">Business Requirements — Live</div>
-            <div className="pw-sub">{reqs.length} captured · each traced to the transcript or document it came from</div>
+            <div className="pw-sub">Auto-extracted &amp; traced to source utterances · {reqs.length} captured</div>
           </div>
         </div>
         <div className="dw-reqs-actions">
-          <button className="btn" onClick={() => { setAdding((a) => !a); setEditing(null); }}>
-            <Icon name="plus" />Add requirement
-          </button>
-          <button className="btn solid" onClick={onExtract} disabled={extracting || !hasTranscripts}
-            title={hasTranscripts ? 'Mine the imported transcripts for requirements' : 'Import a transcript first'}>
-            <Icon name="sparkles" />{extracting ? 'Extracting…' : 'Extract requirements'}
+          {reqs.length > 0 && (
+            <span className={'pw-pill dw-panel-pill ' + (reqs.every((r) => r.status === 'approved') ? 'pw-pill-ingested' : 'pw-pill-parsing')}>
+              {reqs.every((r) => r.status === 'approved') ? 'Approved' : 'In review'}
+            </span>
+          )}
+          <button className="btn solid" onClick={onExtract} disabled={extracting || !canRun}
+            title={canRun
+              ? 'Mine the canvas selection for requirements'
+              : 'Drag documents onto the Synthesis Canvas first'}>
+            <Icon name="sparkles" />{extracting ? 'Extracting…' : 'Extract'}
           </button>
         </div>
       </div>
@@ -451,10 +455,11 @@ function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract,
 
       {reqs.length === 0 ? (
         <div className="pw-empty">
-          No requirements yet — import a transcript and run <b>Extract requirements</b>, or add one manually.
+          No requirements yet — import a transcript and run <b>Extract</b>, or add one manually below.
         </div>
       ) : (
-        groups.map((label) => (
+        <div className="dw-req-scroll">
+        {groups.map((label) => (
           <div key={label} className="dw-req-group">
             <div className="dw-req-group-hd">
               <Icon name={isTranscript(label) ? 'users' : 'doc-text'} />
@@ -509,8 +514,12 @@ function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract,
               ))}
             </ul>
           </div>
-        ))
+        ))}
+        </div>
       )}
+      <button className="dw-req-addlink" onClick={() => { setAdding((a) => !a); setEditing(null); }}>
+        <Icon name="plus" />Add requirement
+      </button>
     </section>
   );
 }
@@ -553,28 +562,31 @@ function CapabilityMapPanel({ capmap, building, onBuild, hasInput }) {
         <div className="pw-panel-ttl">
           <span className="pw-ic pw-ic-accent"><Icon name="target" /></span>
           <div>
-            <div className="pw-h3">Business Capability Map</div>
+            <div className="pw-h3">Business Capability Map{capmap ? ` — ${capmap.version || 'v1.0'}` : ''}</div>
             <div className="pw-sub">
               {capmap
-                ? <>{capmap.version || 'v1.0'} · generated {timeAgo(capmap.created_at)} · maturity 1–5, heat = improvement opportunity</>
+                ? <>Heat-mapped by maturity &amp; optimization opportunity · generated {timeAgo(capmap.created_at)}</>
                 : 'Current-state maturity per capability, heat-colored by how much this engagement could improve it'}
             </div>
           </div>
         </div>
         <div className="dw-capmap-actions">
-          {capmap && (
-            <span className="dw-legend">
-              <i className="dw-opp-high" />High<i className="dw-opp-medium" />Medium<i className="dw-opp-low" />Low
-            </span>
-          )}
+          {capmap && <span className="pw-pill pw-pill-draft dw-panel-pill">Draft</span>}
           <button className="btn solid" onClick={onBuild} disabled={building || !hasInput}
-            title={hasInput ? 'Generate from the captured requirements + workshop documents' : 'Capture requirements or add sources first'}>
-            <Icon name="target" />{building ? 'Mapping…' : capmap ? 'Refresh map' : 'Generate map'}
+            title={hasInput ? 'Generate from the captured requirements + the canvas selection' : 'Drag documents onto the Synthesis Canvas first'}>
+            <Icon name="target" />{building ? 'Mapping…' : capmap ? 'Refresh' : 'Generate map'}
           </button>
         </div>
       </div>
       {capmap ? (
-        <CapabilityHeat domains={capmap.domains} />
+        <>
+          <div className="dw-legend dw-legend-row">
+            <i className="dw-opp-high" />High opportunity<i className="dw-opp-medium" />Medium<i className="dw-opp-low" />Low
+          </div>
+          <div className="dw-cap-scroll">
+            <CapabilityHeat domains={capmap.domains} />
+          </div>
+        </>
       ) : (
         <div className="pw-empty">
           No capability map yet — generate one from the captured requirements and workshop documents.
@@ -585,7 +597,7 @@ function CapabilityMapPanel({ capmap, building, onBuild, hasInput }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-function DiagramSection({ workshopId, artifacts, building, onBuild, onEdit }) {
+function DiagramSection({ workshopId, artifacts, building, onBuild, canRun, onEdit }) {
   const withDiagram = artifacts.filter((a) => a.has_diagram);
   const [docId, setDocId] = useState(null);
   const [payload, setPayload] = useState(null);   // {xml, diagrams, title}
@@ -626,7 +638,8 @@ function DiagramSection({ workshopId, artifacts, building, onBuild, onEdit }) {
               {withDiagram.map((a) => <option key={a.doc_id} value={a.doc_id}>{a.name}</option>)}
             </select>
           )}
-          <button className="btn solid" onClick={onBuild} disabled={building}>
+          <button className="btn solid" onClick={onBuild} disabled={building || !canRun}
+            title={canRun ? 'Map the processes in the canvas selection' : 'Drag documents onto the Synthesis Canvas first'}>
             <Icon name="flow" />{building ? 'Building…' : withDiagram.length ? 'Build another' : 'Build process flow'}
           </button>
         </div>
