@@ -55,7 +55,8 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
             status: str = 'draft', completion_pct: int = 0, author: str = '',
             description: str = '', category: str = '', tags: list | None = None,
             diagram_xml: str | None = None, diagram_json: list | None = None,
-            next_steps: list | None = None, analysis_json: dict | None = None) -> dict:
+            next_steps: list | None = None, analysis_json: dict | None = None,
+            capmap_json: dict | None = None) -> dict:
     """Store the draft's sanitised body_html in the object store, record
     metadata in Postgres, return the record. Returns an empty dict if
     Postgres isn't reachable — the caller (agent_catalog.run_agent)
@@ -78,7 +79,7 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
                           description=(description or '')[:500] or None,
                           category=category or None, tags=tags or [],
                           diagram_xml=diagram_xml, diagram_json=diagram_json, next_steps=next_steps,
-                          analysis_json=analysis_json)
+                          analysis_json=analysis_json, capmap_json=capmap_json)
         record = {'doc_id': row.doc_id, 'name': row.name, 'agent_id': row.agent_id, 'chars': row.chars,
                   'status': row.status, 'completion_pct': row.completion_pct, 'author': row.author,
                   'description': row.description, 'category': row.category, 'tags': row.tags,
@@ -95,6 +96,14 @@ def list_docs(workshop_id: int) -> list[dict]:
     Pre-Workshop Artifacts card grid. `has_diagram` (bool) is a cheap flag
     for the grid to decide whether to offer "View diagram" — the actual
     (possibly large) XML is fetched lazily via get_diagram()."""
+    # zone = the producing agent's engagement phase (AGENT_SPECS), so the
+    # per-phase Artifacts grids can filter without hardcoding agent lists
+    # client-side. Lazy import: agent_catalog imports this module.
+    try:
+        from app.services.agent_catalog import AGENT_SPECS
+        zones = {aid: s.get('zone', '') for aid, s in AGENT_SPECS.items()}
+    except Exception:
+        zones = {}
     with session_scope() as s:
         if s is None:
             return []
@@ -104,7 +113,8 @@ def list_docs(workshop_id: int) -> list[dict]:
                  'author': d.author, 'description': d.description, 'tags': d.tags,
                  'created_at': int(d.created_at.timestamp()),
                  'has_diagram': bool(d.diagram_xml), 'next_steps': d.next_steps or [],
-                 'has_analysis': bool(d.analysis_json)}
+                 'has_analysis': bool(d.analysis_json), 'has_capmap': bool(d.capmap_json),
+                 'zone': zones.get(d.agent_id, '')}
                 for d in rows]
 
 
@@ -118,6 +128,43 @@ def get_analysis(workshop_id: int, doc_id: str) -> dict | None:
         if row is None or row.workshop_id != workshop_id or not row.analysis_json:
             return None
         return dict(row.analysis_json)
+
+
+def get_capmap(workshop_id: int, doc_id: str) -> dict | None:
+    """{domains, version} for a persisted capability map — None if this
+    doc has none / isn't in this workshop."""
+    with session_scope() as s:
+        if s is None:
+            return None
+        row = repo.get(s, doc_id)
+        if row is None or row.workshop_id != workshop_id or not row.capmap_json:
+            return None
+        return dict(row.capmap_json)
+
+
+def latest_capmap(workshop_id: int) -> dict | None:
+    """The newest persisted capability map for this workshop (the During-
+    Workshop panel renders the latest version) — {doc_id, name,
+    created_at, **capmap_json} or None. Also feeds the brd agent's
+    context and the workshop-stats capability count."""
+    with session_scope() as s:
+        if s is None:
+            return None
+        rows = [d for d in repo.list_for_workshop(s, workshop_id) if d.capmap_json]
+        if not rows:
+            return None
+        d = rows[-1]   # list_for_workshop orders by created_at asc
+        return {'doc_id': d.doc_id, 'name': d.name,
+                'created_at': int(d.created_at.timestamp()), **dict(d.capmap_json)}
+
+
+def count_capmaps(workshop_id: int) -> int:
+    """How many capability-map documents exist — versioning (v1.N) for
+    the capmap agent's next run."""
+    with session_scope() as s:
+        if s is None:
+            return 0
+        return sum(1 for d in repo.list_for_workshop(s, workshop_id) if d.capmap_json)
 
 
 def get_diagram(workshop_id: int, doc_id: str) -> dict | None:

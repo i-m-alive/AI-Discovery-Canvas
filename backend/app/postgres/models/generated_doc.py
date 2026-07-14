@@ -56,6 +56,11 @@ class GeneratedDoc(Base):
     # (body_html carries the same content as prose), persisted so the
     # Artifacts grid's scorecard modal survives a reload.
     analysis_json:  Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
+    # 'capmap' output: {domains: [{name, capabilities: [{name, maturity,
+    # opportunity, note}]}], version} — the During-Workshop Business
+    # Capability Map panel's data, persisted so the heat map survives a
+    # reload exactly like analysis_json does for the scorecard.
+    capmap_json:    Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
 
     __table_args__ = (
         Index('ix_generated_docs_workshop', 'workshop_id'),

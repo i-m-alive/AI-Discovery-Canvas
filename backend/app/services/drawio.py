@@ -63,17 +63,56 @@ _LANE_FILLS = ['#EDE7F6', '#E0F2F1', '#FFF3E0', '#E8EAF6', '#FCE4EC', '#E1F5FE']
 _LANE_STROKES = ['#7E57C2', '#26A69A', '#F9A825', '#5C6BC0', '#D81B60', '#0288D1']
 
 
+def _back_edges(ids: list[str], succ: dict[str, list[str]]) -> set[tuple[str, str]]:
+    """DFS back-edge detection (iterative). Model-supplied process edges
+    regularly contain cycles — a QA-rework loop back to an earlier step
+    is a CORRECT process description — and longest-path ranking explodes
+    on them (observed producing a ~25,000-unit-wide page). A human draws
+    the loop as a backward arrow; so do we: rank on the graph minus its
+    back edges, then still draw every edge."""
+    state = {i: 0 for i in ids}   # 0 unvisited, 1 on stack, 2 done
+    back: set[tuple[str, str]] = set()
+    for root in ids:
+        if state[root] != 0:
+            continue
+        state[root] = 1
+        stack: list[tuple[str, iter]] = [(root, iter(succ[root]))]
+        while stack:
+            node, it = stack[-1]
+            advanced = False
+            for t in it:
+                if state[t] == 1:
+                    back.add((node, t))
+                elif state[t] == 0:
+                    state[t] = 1
+                    stack.append((t, iter(succ[t])))
+                    advanced = True
+                    break
+            if not advanced:
+                state[node] = 2
+                stack.pop()
+    return back
+
+
 def _topo_rank(nodes: list[dict], edges: list[dict]) -> dict[str, int]:
     """Longest-path-from-any-root rank per node id — deterministic column
     assignment for a left-to-right flow. Not a real graph layout engine
     (no crossing minimisation), but the model is bad at geometry, so it's
-    never asked to produce any; this stays intentionally simple."""
+    never asked to produce any; this stays intentionally simple. Cycles
+    are handled by ranking on the graph minus its DFS back edges (see
+    _back_edges); ranks are dense-compressed so no column sits empty."""
     ids = [n['id'] for n in nodes]
     id_set = set(ids)
-    preds: dict[str, list[str]] = {i: [] for i in ids}
+    succ: dict[str, list[str]] = {i: [] for i in ids}
     for e in edges:
         f, t = e.get('from'), e.get('to')
         if f in id_set and t in id_set:
+            succ[f].append(t)
+    back = _back_edges(ids, succ)
+    preds: dict[str, list[str]] = {i: [] for i in ids}
+    for e in edges:
+        f, t = e.get('from'), e.get('to')
+        if f in id_set and t in id_set and (f, t) not in back:
             preds[t].append(f)
     rank = {i: 0 for i in ids}
     for _ in range(len(ids) + 1):
@@ -85,7 +124,8 @@ def _topo_rank(nodes: list[dict], edges: list[dict]) -> dict[str, int]:
                     changed = True
         if not changed:
             break
-    return rank
+    remap = {r: idx for idx, r in enumerate(sorted(set(rank.values())))}
+    return {i: remap[r] for i, r in rank.items()}
 
 
 def _node_size(ntype: str) -> tuple[int, int]:

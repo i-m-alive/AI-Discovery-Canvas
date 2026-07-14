@@ -8,7 +8,7 @@ import DocumentViewer from './DocumentViewer';
 import DrawioViewer from './DrawioViewer';
 import '../../shared.css';
 
-const STATUS_LABEL = { queued: 'Queued', parsing: 'Parsing', ingested: 'Ingested', failed: 'Failed' };
+export const STATUS_LABEL = { queued: 'Queued', parsing: 'Parsing', ingested: 'Ingested', failed: 'Failed' };
 const RESEARCH_STEP_ORDER = ['ingest', 'extract', 'queries', 'search', 'synthesize'];
 // The 'analyze' pipeline's steps (see agent_catalog._ANALYSIS_STEPS).
 const ANALYSIS_STEP_ORDER = ['inventory', 'perdoc', 'synth', 'readiness'];
@@ -17,7 +17,7 @@ const ANALYSIS_STEP_LABELS = {
   synth: 'Synthesize analysis', readiness: 'Score readiness',
 };
 
-function timeAgo(unixSeconds) {
+export function timeAgo(unixSeconds) {
   if (!unixSeconds) return '';
   const diff = Math.max(0, Date.now() / 1000 - unixSeconds);
   if (diff < 60) return 'just now';
@@ -48,7 +48,13 @@ const FILE_TYPE = {
   html: { label: 'HTML', icon: 'doc-text', bg: '#efedfd', fg: '#6d5ce8' },
   zip: { label: 'ZIP', icon: 'folder', bg: '#efedfd', fg: '#6d5ce8' },
 };
-function fileType(name) {
+export function fileType(name) {
+  // Imported meeting transcripts (named 'Teams — {subject}' by the
+  // import-transcript route, mirroring the backend's _is_transcript)
+  // get their own source-type identity, not a generic FILE badge.
+  if (/^teams\s*—|^teams\s*--|\.vtt$|transcript/i.test(name || '')) {
+    return { label: 'TRANSCRIPT', icon: 'users', bg: '#efedfd', fg: '#6d5ce8' };
+  }
   const ext = extOf(name);
   return FILE_TYPE[ext] || { label: ext ? ext.toUpperCase() : 'FILE', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' };
 }
@@ -57,7 +63,7 @@ function fileType(name) {
 // reveals a plain-language explainer (what it does / reads / produces —
 // for anyone who doesn't know the agent yet), then the agent's own
 // controls as children.
-function AgentCard({ icon, title, info, children }) {
+export function AgentCard({ icon, title, info, children }) {
   const [showInfo, setShowInfo] = useState(false);
   return (
     <div className="pw-agent-card">
@@ -76,7 +82,7 @@ function AgentCard({ icon, title, info, children }) {
   );
 }
 
-function downloadDrawio(diagram, name) {
+export function downloadDrawio(diagram, name) {
   if (!diagram || !diagram.xml) return;
   const blob = new Blob([diagram.xml], { type: 'application/xml' });
   const url = URL.createObjectURL(blob);
@@ -371,7 +377,8 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
         />
 
         <ArtifactsGrid docs={docs} artifacts={artifacts} onView={setViewerDocId} workshopId={workshopId}
-          onViewDiagram={setViewerDiagram} onViewAnalysis={setAnalysisModal} onDelete={deleteArtifact} />
+          onViewDiagram={setViewerDiagram} onViewAnalysis={setAnalysisModal} onDelete={deleteArtifact}
+          zone="Pre-Workshop" />
       </div>
 
       {viewerDocId && (
@@ -404,7 +411,7 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
 // Delete confirmation — a real dialog in the app's own visual language
 // instead of window.confirm: names the document, states exactly what
 // deletion means, and makes Cancel the easy path.
-function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }) {
+export function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }) {
   return (
     <div className="pw-modal-backdrop pw-confirm-backdrop" onClick={busy ? undefined : onCancel}>
       <div className="pw-confirm" onClick={(e) => e.stopPropagation()}>
@@ -425,7 +432,7 @@ function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }) {
   );
 }
 
-function SourceArtifactsPanel({ docs, onAdd, onView, onDelete }) {
+export function SourceArtifactsPanel({ docs, onAdd, onView, onDelete, extraAction, emptyText }) {
   const ingestedCount = docs.filter((d) => d.status === 'ingested').length;
   return (
     <section className="pw-sources">
@@ -439,13 +446,14 @@ function SourceArtifactsPanel({ docs, onAdd, onView, onDelete }) {
         </div>
         <button className="btn" onClick={onAdd}><Icon name="plus" />Add</button>
       </div>
+      {extraAction}
       <div className="pw-dropzone" onClick={onAdd}>
         <Icon name="upload" />
         <div className="pw-dz-txt">Drop docs, PDFs, videos, links, transcripts</div>
         <div className="pw-dz-sub">SharePoint · Teams · Granola · GitHub · draw.io</div>
       </div>
       {docs.length === 0 ? (
-        <div className="pw-empty">No sources yet for this phase.<br />Ingest client artifacts to ground the research.</div>
+        <div className="pw-empty">{emptyText || (<>No sources yet for this phase.<br />Ingest client artifacts to ground the research.</>)}</div>
       ) : (
         <ul className="pw-source-list">
           {docs.map((d) => {
@@ -779,8 +787,18 @@ function artifactBucket(a) {
   return a.category || a.agent_id || 'Other';
 }
 
-function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onViewAnalysis, onDelete }) {
+export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onViewAnalysis,
+                                onDelete, onViewCapmap, title = 'Pre-Workshop Artifacts',
+                                zone, showSources = true }) {
   const [filter, setFilter] = useState('all');
+  // `zone` scopes the grid to one engagement phase's generated artifacts
+  // (list_docs now carries the producing agent's zone). Legacy rows with
+  // no zone stay visible on the Pre-Workshop grid only — that's where
+  // everything lived before phases had their own grids.
+  if (zone) {
+    artifacts = artifacts.filter((a) => a.zone === zone || (!a.zone && zone === 'Pre-Workshop'));
+  }
+  if (!showSources) docs = [];
   const isEmpty = docs.length === 0 && artifacts.length === 0;
 
   async function viewDiagram(a) {
@@ -808,7 +826,7 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onV
   const buckets = Object.keys(bucketCounts).sort();
   const filters = [
     { key: 'all', label: 'All', count: docs.length + artifacts.length },
-    { key: 'source', label: 'Source', count: docs.length },
+    ...(showSources ? [{ key: 'source', label: 'Source', count: docs.length }] : []),
     ...buckets.map((b) => ({ key: b, label: b, count: bucketCounts[b] })),
   ];
 
@@ -821,7 +839,7 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onV
   return (
     <section className="pw-artifacts">
       <div className="pw-artifacts-head">
-        <div className="pw-h3 pw-artifacts-ttl"><Icon name="list" />Pre-Workshop Artifacts</div>
+        <div className="pw-h3 pw-artifacts-ttl"><Icon name="list" />{title}</div>
         {!isEmpty && (
           <div className="pw-artifact-filters">
             {filters.map((f) => (
@@ -864,9 +882,9 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onV
             <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
               <div className="pw-artifact-top">
                 <span className="pw-ic pw-ic-accent">
-                  <Icon name={a.agent_id === 'workflow' ? 'flow'
-                    : (a.agent_id === 'summarize_docs' || a.agent_id === 'artifact_analyst') ? 'doc-text'
-                    : a.agent_id === 'analyze' ? 'target' : 'search'} />
+                  <Icon name={(a.agent_id === 'workflow' || a.agent_id === 'drawflow') ? 'flow'
+                    : (a.agent_id === 'summarize_docs' || a.agent_id === 'artifact_analyst' || a.agent_id === 'brd') ? 'doc-text'
+                    : (a.agent_id === 'analyze' || a.agent_id === 'capmap') ? 'target' : 'search'} />
                 </span>
                 <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
               </div>
@@ -893,6 +911,11 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onV
                 {a.has_analysis && (
                   <button className="pw-view-btn" onClick={() => viewAnalysis(a)} title="Readiness scorecard & routed gaps">
                     <Icon name="target" />Scorecard
+                  </button>
+                )}
+                {a.has_capmap && onViewCapmap && (
+                  <button className="pw-view-btn" onClick={() => onViewCapmap(a)} title="Open the capability heat map">
+                    <Icon name="target" />Map
                   </button>
                 )}
                 <a className="pw-view-btn" href={`/api/agents/document/${a.doc_id}/word?workshop_id=${workshopId}`}

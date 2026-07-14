@@ -7,7 +7,7 @@
 // straight through as CanvasApp's `initialLens`.
 export const PHASES = [
   { id: 'prepare', label: 'Pre-Workshop', sub: 'Ingest · Internalize · Research', dashboard: true },
-  { id: 'run', label: 'During Workshop', sub: 'Capture · Synthesize · Generate', dashboard: false },
+  { id: 'run', label: 'During Workshop', sub: 'Capture · Synthesize · Generate', dashboard: true },
   { id: 'synthesize', label: 'Post-Workshop', sub: 'Backlog · Opportunities · MoM', dashboard: false },
   { id: 'project', label: 'Proposal & Planning', sub: 'SOW · ROI · Risk · Team', dashboard: false },
 ];

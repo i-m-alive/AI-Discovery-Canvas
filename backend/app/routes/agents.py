@@ -415,17 +415,26 @@ def upload():
     if not record:
         return jsonify({'ok': False, 'error': 'could not register the document (database unavailable)'}), 200
 
-    # Copilot memory: index the extracted text into the RAG corpus (vector)
-    # AND the graph (entity/relationship extraction) — retrieval then
-    # grounds every later agent/chat call. Best-effort: degrades to a
-    # no-op when Bedrock/FAISS/Neo4j are absent, and neither ever fails
-    # the upload itself. Run sequentially in ONE background thread (not
-    # two independent ones) so there's a single, unambiguous point to
-    # flip prepare_docs.status to 'ingested'/'failed' once BOTH finish —
-    # this is what backs the Pre-Workshop "Source Artifacts" status pill
-    # (Queued -> Parsing -> Ingested/Failed), which had no real state to
-    # read before this.
-    def _index_both(name: str, doc_id: str, body: str):
+    _start_prepare_doc_indexing(workshop_id, f.filename, record['doc_id'], text)
+
+    return jsonify({'ok': True, 'name': f.filename, 'chars': len(text),
+                    'truncated': truncated, 'text': text, 'doc_id': record['doc_id']})
+
+
+def _start_prepare_doc_indexing(workshop_id: int, name: str, doc_id: str, text: str) -> None:
+    """Copilot memory: index a freshly-registered prepare-doc's text into
+    the RAG corpus (vector) AND the graph (entity/relationship
+    extraction) — retrieval then grounds every later agent/chat call.
+    Shared by /upload and /import-transcript: an imported transcript is a
+    prepare-doc like any other, so it gets the same status pills, RAG
+    grounding and context-cache warmup for free.
+    Best-effort: degrades to a no-op when Bedrock/FAISS/Neo4j are absent,
+    and never fails the caller. Runs sequentially in ONE background
+    thread (not two independent ones) so there's a single, unambiguous
+    point to flip prepare_docs.status to 'ingested'/'failed' once BOTH
+    finish — which is what backs the "Source Artifacts" status pill
+    (Queued -> Parsing -> Ingested/Failed)."""
+    def _index_both():
         vector_ok = graph_ok = False
         try:
             from app.services import rag
@@ -433,7 +442,7 @@ def upload():
                 # workflow_id reused as "workshop id" — the RAG subsystem's
                 # existing scoping dimension, so retrieval (_rag_block) can
                 # filter to THIS workshop's documents only.
-                n = rag.index_document(doc_id=f'prepare-doc:{doc_id}', text=body,
+                n = rag.index_document(doc_id=f'prepare-doc:{doc_id}', text=text,
                                        metadata={'label': name, 'kind': 'prepare_document',
                                                 'workflow_id': str(workshop_id), 'doc_id': doc_id},
                                        tag='[AGENTS/UPLOAD/RAG]')
@@ -444,7 +453,7 @@ def upload():
                      name, e.__class__.__name__)
         try:
             from app.services import graph_rag
-            n = graph_rag.extract_and_store(board_id=str(workshop_id), doc_id=doc_id, name=name, text=body)
+            n = graph_rag.extract_and_store(board_id=str(workshop_id), doc_id=doc_id, name=name, text=text)
             log.info('[AGENTS/UPLOAD/GRAPH] %s -> %d entities extracted', name, n)
             graph_ok = True
         except Exception as e:
@@ -465,13 +474,60 @@ def upload():
         except Exception as e:
             log.info('[AGENTS/UPLOAD] workshop-context refresh skipped (%s)', e.__class__.__name__)
 
-    prepare_docs.set_status(workshop_id, record['doc_id'], 'parsing')
+    prepare_docs.set_status(workshop_id, doc_id, 'parsing')
     import threading
-    threading.Thread(target=_index_both, args=(f.filename, record['doc_id'], text),
-                     name='doc-index-upload', daemon=True).start()
+    threading.Thread(target=_index_both, name='doc-index-upload', daemon=True).start()
 
-    return jsonify({'ok': True, 'name': f.filename, 'chars': len(text),
-                    'truncated': truncated, 'text': text, 'doc_id': record['doc_id']})
+
+@bp.route('/api/agents/import-transcript', methods=['POST'])
+@auth_required
+def import_transcript():
+    """During-Workshop capture without live transcription: fetch a Teams
+    meeting's transcript (the proven graph_teams pipeline — organizer
+    fallback included) and register it as a normal prepare-doc named
+    'Teams — {subject}', which buys status pills, RAG indexing, the
+    workshop-context cache and requirement extraction downstream for
+    free. body: {workshop_id, join_url, organizer?, subject?}."""
+    body = request.get_json(silent=True) or {}
+    try:
+        workshop_id = int(body.get('workshop_id') or 0)
+    except (TypeError, ValueError):
+        workshop_id = 0
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id is required'}), 400
+    join_url = (body.get('join_url') or '').strip()
+    if not join_url:
+        return jsonify({'ok': False, 'error': 'join_url is required'}), 400
+
+    from app.routes.integrations import _owner_user_id
+    from app.services import graph_teams
+    out = graph_teams.fetch_transcript(_owner_user_id(), join_url, body.get('organizer'))
+    if 'error' in out:
+        return jsonify({'ok': False, 'error': out['error']}), 200
+    lines = out.get('lines') or []
+    text = '\n'.join(lines).strip()
+    if not text:
+        return jsonify({'ok': False, 'error': 'the transcript came back empty'}), 200
+
+    subject = (body.get('subject') or out.get('meeting_subject') or 'Teams meeting').strip()
+    name = f'Teams — {subject}'[:200]
+    # Same meeting imported twice would double every downstream count and
+    # its RAG weight — treat an existing doc with this exact name as
+    # already-imported and just point back at it.
+    existing = next((d for d in prepare_docs.list_docs(workshop_id) if d['name'] == name), None)
+    if existing:
+        return jsonify({'ok': True, 'doc': existing, 'already_imported': True})
+
+    user = current_user() or {}
+    record = prepare_docs.register(workshop_id, name, text,
+                                   uploaded_by=user.get('name') or user.get('email') or '',
+                                   file_bytes=text.encode('utf-8'))
+    if not record:
+        return jsonify({'ok': False, 'error': 'could not register the transcript (database unavailable)'}), 200
+    log.info('[AGENTS/IMPORT-TRANSCRIPT] %s -> %d chars (%d lines) on workshop=%s',
+             name, len(text), len(lines), workshop_id)
+    _start_prepare_doc_indexing(workshop_id, name, record['doc_id'], text)
+    return jsonify({'ok': True, 'doc': record, 'lines': len(lines)})
 
 
 @bp.route('/api/agents/prepare-docs', methods=['GET'])
@@ -515,6 +571,126 @@ def analysis_progress():
             return jsonify({'ok': True, 'run': None})
         run = {'run_id': row.run_id, 'status': row.status, 'steps': row.steps}
     return jsonify({'ok': True, 'run': run})
+
+
+# ── During-Workshop: requirements engine ──────────────────────────────
+@bp.route('/api/agents/requirements', methods=['GET'])
+@auth_required
+def list_requirements():
+    """The 'Business Requirements — Live' panel's read path — every
+    captured requirement for this workshop, REQ-ID order."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import requirements as req_service
+    return jsonify({'ok': True, 'requirements': req_service.list_requirements(workshop_id)})
+
+
+@bp.route('/api/agents/requirements', methods=['POST'])
+@auth_required
+def add_requirement():
+    """'+ Add requirement' — the facilitator's manual write path, same
+    shape as extraction (gets the next stable REQ-ID)."""
+    body = request.get_json(silent=True) or {}
+    workshop_id = body.get('workshop_id')
+    try:
+        workshop_id = int(workshop_id)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'workshop_id is required'}), 400
+    if not (body.get('text') or '').strip():
+        return jsonify({'ok': False, 'error': 'requirement text is required'}), 400
+    from app.services import requirements as req_service
+    user = current_user() or {}
+    rec = req_service.add(workshop_id, body.get('text'),
+                          category=body.get('category') or '',
+                          moscow=body.get('moscow') or 'should',
+                          source_label=body.get('source_label')
+                          or f"added by {user.get('name') or user.get('email') or 'facilitator'}")
+    if not rec:
+        return jsonify({'ok': False, 'error': 'could not save the requirement (database unavailable)'}), 200
+    return jsonify({'ok': True, 'requirement': rec})
+
+
+@bp.route('/api/agents/requirements/<int:row_id>', methods=['PATCH'])
+@auth_required
+def update_requirement(row_id):
+    """Inline edit / MoSCoW change / approve. body: {workshop_id, ...any
+    of text, category, moscow, status, source_quote}."""
+    body = request.get_json(silent=True) or {}
+    try:
+        workshop_id = int(body.get('workshop_id'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'workshop_id is required'}), 400
+    from app.services import requirements as req_service
+    rec = req_service.update(workshop_id, row_id, body)
+    if not rec:
+        return jsonify({'ok': False, 'error': 'requirement not found'}), 404
+    return jsonify({'ok': True, 'requirement': rec})
+
+
+@bp.route('/api/agents/requirements/<int:row_id>', methods=['DELETE'])
+@auth_required
+def delete_requirement(row_id):
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import requirements as req_service
+    if not req_service.delete(workshop_id, row_id):
+        return jsonify({'ok': False, 'error': 'requirement not found'}), 404
+    return jsonify({'ok': True})
+
+
+@bp.route('/api/agents/capmap', methods=['GET'])
+@auth_required
+def latest_capmap():
+    """The newest persisted Business Capability Map for this workshop —
+    what the During-Workshop heat panel renders on load. {ok, capmap:
+    {doc_id, name, version, domains} | null}."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    return jsonify({'ok': True, 'capmap': generated_docs.latest_capmap(workshop_id)})
+
+
+@bp.route('/api/agents/workshop-stats', methods=['GET'])
+@auth_required
+def workshop_stats():
+    """One aggregate for the During-Workshop hero chips — transcripts
+    imported, requirement count, capability count, artifact count —
+    instead of four client-side fetches."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    from app.services import requirements as req_service
+    from app.services.agent_catalog import _is_transcript
+    docs = prepare_docs.list_docs(workshop_id)
+    capmap = generated_docs.latest_capmap(workshop_id)
+    n_caps = sum(len(d.get('capabilities', [])) for d in (capmap or {}).get('domains', []))
+    return jsonify({'ok': True, 'stats': {
+        'sources': len(docs),
+        'transcripts': sum(1 for d in docs if _is_transcript(d['name'])),
+        'requirements': req_service.count(workshop_id),
+        'capabilities': n_caps,
+        'artifacts': len(generated_docs.list_docs(workshop_id)),
+    }})
+
+
+@bp.route('/api/agents/document/<doc_id>/capmap', methods=['GET'])
+@auth_required
+def get_generated_doc_capmap(doc_id):
+    """{ok, domains, version} for a persisted capability-map document —
+    the Artifacts grid's 'Capability map' viewer after a reload. 404 when
+    this doc has no capmap payload."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    payload = generated_docs.get_capmap(workshop_id, doc_id)
+    if payload is None:
+        return jsonify({'ok': False, 'error': 'no capability map for this document'}), 404
+    return jsonify({'ok': True, **payload})
 
 
 @bp.route('/api/agents/document/<doc_id>/analysis', methods=['GET'])

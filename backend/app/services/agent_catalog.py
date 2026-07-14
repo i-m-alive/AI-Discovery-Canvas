@@ -129,6 +129,36 @@ _ANALYSIS_FIELDS = (
     'resolution is "research").'
 )
 
+# ── 'extract_reqs' (During Workshop) structured contract ──────────────
+# One testable business requirement per item, each traced to the actual
+# transcript/document (and the verbatim line) it came from — the
+# reference UI's "Source: ..." trace under every requirement row.
+_REQ_CATEGORIES = ('Process', 'Data', 'Integration', 'Reporting', 'Security', 'UX',
+                   'Compliance', 'Other')
+_REQUIREMENTS_FIELD = (
+    'Also include "requirements": an array of 5-25 objects {"text": "The system shall …" — one '
+    'single, testable business requirement, "category": one of "Process"|"Data"|"Integration"|'
+    '"Reporting"|"Security"|"UX"|"Compliance"|"Other", "moscow": "must"|"should"|"could"|"wont", '
+    '"source_label": "the exact transcript or document name this came from", '
+    '"source_quote": "the short verbatim line (or concrete fact) that justifies it"} — every '
+    'requirement must be grounded in something actually said or written in the supplied '
+    'material, never invented to fill quota. If an EXISTING REQUIREMENTS list is supplied, '
+    'return ONLY genuinely new requirements it does not already cover.'
+)
+
+# ── 'capmap' (During Workshop) structured contract ────────────────────
+_CAPMAP_OPPORTUNITIES = ('high', 'medium', 'low')
+_CAPMAP_FIELD = (
+    'Also include "domains": an array of 3-8 objects {"name": "capability domain, e.g. '
+    '\'Demand & Planning\'", "capabilities": [{"name": "business capability", "maturity": '
+    'integer 1-5 (current-state maturity: 1 = ad-hoc/manual, 5 = optimized), "opportunity": '
+    '"high"|"medium"|"low" (how much this engagement could improve it), "note": "one line of '
+    'evidence from the material"}]} — 2-6 capabilities per domain. Derive domains and '
+    'capabilities from what the requirements and documents actually describe, never a generic '
+    'industry template; score maturity honestly from the evidence (a process described as '
+    'manual/spreadsheet-driven is a 1-2, never a 3).'
+)
+
 
 # ── deepresearch: intent-driven document type + optional workflow ─────
 # The facilitator's own instruction (the "What should the research agent
@@ -444,6 +474,71 @@ AGENT_SPECS: dict[str, dict] = {
             'Extract the decisions made and action items assigned from the transcript. '
             'body_html: <ul> where each item starts with "Decision:" or "Action (owner):". '
             'Only include things actually said — never invent owners. node_label "Decisions (N)".'
+        ),
+    },
+    'extract_reqs': {
+        'zone': 'During Workshop', 'folder': 'Requirements', 'icon': 'list', 'doc': False,
+        'name': 'Extract requirements',
+        # The During-Workshop requirements engine's write path: mines
+        # imported meeting transcripts (+ the pre-workshop corpus for
+        # context) into the `requirements` table. doc: False — its output
+        # IS the table rows (see run_agent's extract_reqs branch →
+        # services/requirements.add_extracted, which assigns stable
+        # REQ-NN ids and dedups against what's already captured), not a
+        # document. Its context builder (_requirements_context) feeds
+        # transcripts at (focused) full text — requirements live in the
+        # verbatim wording — plus cached distillations of everything else,
+        # plus the EXISTING REQUIREMENTS list so re-runs only add.
+        'extra_fields': _REQUIREMENTS_FIELD,
+        'task': (
+            'You are extracting BUSINESS REQUIREMENTS from workshop capture. The context below '
+            'contains imported meeting transcripts (primary source — what the client actually '
+            'said), pre-workshop document summaries (supporting context), and possibly an '
+            'EXISTING REQUIREMENTS list. Extract every concrete, testable business requirement '
+            'stated or clearly implied by the transcripts; use the pre-workshop material to '
+            'phrase them precisely, not as a source of new requirements on its own. '
+            'body_html: a short <b>Extraction notes</b> summary — 3-6 <ul> bullets on the themes '
+            'found and anything ambiguous a BA should confirm. The real output is the '
+            '"requirements" array. node_label "Requirements Extracted".'
+        ),
+    },
+    'capmap': {
+        'zone': 'During Workshop', 'folder': 'How it works', 'icon': 'target', 'doc': True,
+        'name': 'Business Capability Map',
+        # The heat-mapped capability panel's producer. Persisted like the
+        # analyze scorecard: the structured domains land in
+        # generated_docs.capmap_json (survives reload), body_html carries
+        # the narrative. Context: the captured requirements table + the
+        # workshop's cached document distillations (_engagement_context).
+        'extra_fields': _CAPMAP_FIELD,
+        'task': (
+            'Build a BUSINESS CAPABILITY MAP for this engagement from the captured requirements '
+            'and the workshop material below. body_html: <b>Overview</b> (2-3 sentences on the '
+            'capability landscape this engagement touches), then one short paragraph per domain '
+            'naming its weakest capabilities and why they matter to this client. The structured '
+            '"domains" array is the real output — the heat map renders from it. '
+            'node_label "Capability Map".'
+        ),
+    },
+    'brd': {
+        'zone': 'During Workshop', 'folder': 'Requirements', 'icon': 'doc-text', 'doc': True,
+        'name': 'BRD assembler',
+        # Composes the captured requirements table + the latest capability
+        # map + the engagement context into the formal Business
+        # Requirements Document — persisted, Word-exportable, RAG-indexed
+        # like every generated doc.
+        'task': (
+            'Assemble the formal BUSINESS REQUIREMENTS DOCUMENT (BRD) for this engagement. The '
+            'context below contains the captured requirements table (REQ-IDs, MoSCoW priorities, '
+            'sources), the business capability map (if one exists), and the workshop material. '
+            'Produce body_html with these sections: <b>Executive summary</b>; <b>Business '
+            'context &amp; objectives</b>; <b>Scope</b> (in/out, from what the material actually '
+            'establishes); <b>Business requirements</b> (grouped by category, referencing the '
+            'real REQ-IDs, MoSCoW priority stated per requirement — reuse the captured wording, '
+            'do not paraphrase requirements away); <b>Capability impact</b> (which capabilities '
+            'the requirements lift, from the capability map); <b>Assumptions &amp; '
+            'constraints</b>; and <b>Open items</b> (requirements still in review, unresolved '
+            'questions). Ground every statement in the supplied material. node_label "BRD".'
         ),
     },
     # ---- Post-Workshop ----
@@ -1247,6 +1342,170 @@ def _workflow_context(context: dict, workshop_id: Optional[int]) -> dict:
     return context
 
 
+def _is_transcript(name: str) -> bool:
+    """Whether a prepare-doc is an imported meeting transcript — named
+    'Teams — {subject}' by the import-transcript route, or an uploaded
+    .vtt/.transcript file. Name-based on purpose: no schema change, and
+    the import route controls the name."""
+    n = (name or '').lower()
+    return n.startswith('teams — ') or n.startswith('teams -- ') or \
+        n.endswith('.vtt') or 'transcript' in n
+
+
+def _requirements_context(context: dict, workshop_id: Optional[int]) -> dict:
+    """'extract_reqs' input: imported transcripts at (focused) FULL text —
+    requirements live in the verbatim wording, a distillation would
+    paraphrase away exactly the source_quote traces this agent must
+    return — plus cached distillations of the non-transcript corpus for
+    grounding, plus the EXISTING REQUIREMENTS list so a re-run after a
+    new import only ADDS (the service-level dedup is the belt to this
+    prompt-level braces)."""
+    context = dict(context or {})
+    files: list[dict] = []
+    if workshop_id:
+        try:
+            from app.services import prepare_docs
+            docs = prepare_docs.get_all_texts(workshop_id)
+            transcripts = [d for d in docs if _is_transcript(d.get('name', ''))]
+            others = [d for d in docs if not _is_transcript(d.get('name', ''))]
+            per_tr = min(_MAX_FILE_CHARS, max(6000, _MAX_FILES_TOTAL // max(1, len(transcripts))))
+            for d in transcripts[:_MAX_RESEARCH_DOCS]:
+                files.append({'name': f"transcript: {d['name']}",
+                              'text': _focus_text(str(d.get('text') or ''), max_chars=per_tr,
+                                                  extra_facets=['requirements, needs and asks',
+                                                                'decisions and commitments',
+                                                                'pain points and constraints'])})
+            # Non-transcript corpus rides along as cheap cached
+            # distillations — supporting context, not a requirements source.
+            try:
+                from app.services import workshop_context
+                ws_ctx = workshop_context.ensure(workshop_id, others[:_MAX_RESEARCH_DOCS])
+                if ws_ctx and ws_ctx['summaries']:
+                    files.extend({'name': f"pre-workshop: {s['name']}", 'text': s['text']}
+                                 for s in ws_ctx['summaries'])
+            except Exception as e:
+                log.info('[AGENT/EXTRACT_REQS] workshop context unavailable (%s)', e.__class__.__name__)
+        except Exception as e:
+            log.info('[AGENT/EXTRACT_REQS] prepare_docs unavailable (%s)', e.__class__.__name__)
+        try:
+            from app.services import requirements as req_service
+            existing = req_service.as_context_text(workshop_id)
+            if existing:
+                files.append({'name': 'EXISTING REQUIREMENTS (already captured — do NOT repeat these)',
+                              'text': existing})
+        except Exception as e:
+            log.info('[AGENT/EXTRACT_REQS] requirements unavailable (%s)', e.__class__.__name__)
+    if not files:
+        files = context.get('files') or [
+            {'name': 'note', 'text': 'No transcripts or documents are available in this '
+                                     'workshop — return an empty "requirements" array and say '
+                                     'so in the extraction notes.'}]
+    context['files'] = files
+    return context
+
+
+def _engagement_context(context: dict, workshop_id: Optional[int], *,
+                        include_capmap: bool = False) -> dict:
+    """'capmap' and 'brd' input: the captured requirements table (the
+    primary structured source), the latest persisted capability map (brd
+    only), and the cached per-document distillations of the workshop
+    corpus. Everything already computed — no new per-document LLM calls."""
+    context = dict(context or {})
+    files: list[dict] = []
+    if workshop_id:
+        try:
+            from app.services import requirements as req_service
+            reqs = req_service.as_context_text(workshop_id)
+            if reqs:
+                files.append({'name': 'CAPTURED REQUIREMENTS (the live requirements table)',
+                              'text': reqs})
+        except Exception as e:
+            log.info('[AGENT/ENGAGEMENT] requirements unavailable (%s)', e.__class__.__name__)
+        if include_capmap:
+            try:
+                from app.services import generated_docs
+                cm = generated_docs.latest_capmap(workshop_id)
+                if cm and cm.get('domains'):
+                    lines = []
+                    for dom in cm['domains']:
+                        caps = ', '.join(f"{c['name']} (maturity {c['maturity']}/5, "
+                                         f"{c['opportunity']} opportunity)"
+                                         for c in dom.get('capabilities', []))
+                        lines.append(f"{dom['name']}: {caps}")
+                    files.append({'name': f"BUSINESS CAPABILITY MAP ({cm.get('version') or 'v1.0'})",
+                                  'text': '\n'.join(lines)})
+            except Exception as e:
+                log.info('[AGENT/ENGAGEMENT] capmap unavailable (%s)', e.__class__.__name__)
+        try:
+            from app.services import prepare_docs, workshop_context
+            docs = prepare_docs.get_all_texts(workshop_id)[:_MAX_RESEARCH_DOCS]
+            ws_ctx = workshop_context.ensure(workshop_id, docs)
+            if ws_ctx and ws_ctx['summaries']:
+                files.extend({'name': s['name'], 'text': s['text']} for s in ws_ctx['summaries'])
+            elif docs:
+                files.extend({'name': d['name'], 'text': _clip(d['text'], 3000)} for d in docs)
+        except Exception as e:
+            log.info('[AGENT/ENGAGEMENT] corpus unavailable (%s)', e.__class__.__name__)
+    if not files:
+        files = context.get('files') or [
+            {'name': 'note', 'text': 'No requirements or documents have been captured in this '
+                                     'workshop yet — say so and produce nothing speculative.'}]
+    context['files'] = files
+    return context
+
+
+def _coerce_requirements(raw_reqs) -> list[dict]:
+    """Clamp/validate the 'requirements' array (see _REQUIREMENTS_FIELD)
+    into what services/requirements.add_extracted expects — never trusts
+    the model's enums."""
+    out: list[dict] = []
+    for r in (raw_reqs or [])[:25]:
+        if not isinstance(r, dict):
+            continue
+        text = _clip(r.get('text'), 500)
+        if not text:
+            continue
+        category = _clip(r.get('category'), 30)
+        matched_cat = next((c for c in _REQ_CATEGORIES if c.lower() == category.lower()), 'Other')
+        moscow = str(r.get('moscow') or 'should').lower()
+        out.append({'text': text,
+                    'category': matched_cat,
+                    'moscow': moscow if moscow in ('must', 'should', 'could', 'wont') else 'should',
+                    'source_label': _clip(r.get('source_label'), 240),
+                    'source_quote': _clip(r.get('source_quote'), 400)})
+    return out
+
+
+def _coerce_capmap(raw_domains) -> list[dict]:
+    """Clamp/validate the 'domains' array (see _CAPMAP_FIELD). Drops any
+    domain left with no usable capabilities."""
+    out: list[dict] = []
+    for d in (raw_domains or [])[:8]:
+        if not isinstance(d, dict):
+            continue
+        name = _clip(d.get('name'), 60)
+        if not name:
+            continue
+        caps: list[dict] = []
+        for c in (d.get('capabilities') or [])[:6]:
+            if not isinstance(c, dict):
+                continue
+            cname = _clip(c.get('name'), 80)
+            if not cname:
+                continue
+            try:
+                maturity = max(1, min(5, int(c.get('maturity'))))
+            except (TypeError, ValueError):
+                maturity = 3
+            opp = str(c.get('opportunity') or 'medium').lower()
+            caps.append({'name': cname, 'maturity': maturity,
+                         'opportunity': opp if opp in _CAPMAP_OPPORTUNITIES else 'medium',
+                         'note': _clip(c.get('note'), 160)})
+        if caps:
+            out.append({'name': name, 'capabilities': caps})
+    return out
+
+
 def _closed_corpus_context(context: dict, workshop_id: Optional[int],
                            question: Optional[str], scope: str = 'sources') -> dict:
     """'artifact_analyst' input, scope-controlled:
@@ -1495,6 +1754,13 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
         context = _closed_corpus_context(context, workshop_id=workshop_id, question=extra, scope=scope)
     elif agent_id in ('workflow', 'summarize_docs'):
         context = _workflow_context(context, workshop_id=workshop_id)
+    elif agent_id == 'extract_reqs':
+        context = _requirements_context(context, workshop_id=workshop_id)
+    elif agent_id in ('capmap', 'brd'):
+        # brd additionally reads the latest persisted capability map —
+        # its "Capability impact" section composes from it.
+        context = _engagement_context(context, workshop_id=workshop_id,
+                                      include_capmap=(agent_id == 'brd'))
 
     # Task text and extra-fields are normally the spec's own — deepresearch
     # is the one exception, swapping in the doc-type-specific task (see
@@ -1573,7 +1839,9 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     # bigger budget rather than sharing drawflow/deepresearch's cap.
     # 'analyze' joins the 8000 tier: its body_html alone is an 8-section
     # document, plus three structured arrays on top.
-    if agent_id in ('workflow', 'analyze') or (agent_id == 'deepresearch' and wants_workflow):
+    # 'brd' joins the 8000 tier: a full multi-section BRD referencing
+    # every captured REQ-ID is this catalogue's longest flat document.
+    if agent_id in ('workflow', 'analyze', 'brd') or (agent_id == 'deepresearch' and wants_workflow):
         max_out = 8000
     elif extra_fields_text or agent_id == 'artifact_analyst':
         # artifact_analyst has no structured fields but its default output
@@ -1665,6 +1933,51 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
             next_steps.append({'step': step, 'why': _clip(it.get('why'), 240), 'done': False})
         draft['next_steps'] = next_steps
 
+    # 'extract_reqs': the mined requirements land in the requirements
+    # TABLE (stable REQ-ids, normalized-text dedup — see
+    # services/requirements.add_extracted), not in a document. The draft
+    # carries back only what was actually ADDED, so the panel can show
+    # "N new requirements" honestly after a re-run that found duplicates.
+    if agent_id == 'extract_reqs':
+        coerced = _coerce_requirements(obj.get('requirements'))
+        added: list[dict] = []
+        if workshop_id:
+            try:
+                from app.services import requirements as req_service
+                added = req_service.add_extracted(workshop_id, coerced)
+            except Exception as e:
+                log.info('[AGENT/EXTRACT_REQS] requirements persistence failed (%s)',
+                         e.__class__.__name__)
+        else:
+            added = coerced
+        draft['requirements'] = added
+        draft['extracted_count'] = len(coerced)
+        n_new = len(added)
+        draft['node']['meta'] = draft['node']['meta'] or \
+            f'{n_new} new requirement{"s" if n_new != 1 else ""}'
+
+    # 'capmap': the structured domain/capability heat map (see
+    # _CAPMAP_FIELD) — persisted below as capmap_json so the panel
+    # survives a reload; versioned v1.N by how many maps came before.
+    capmap_payload: Optional[dict] = None
+    if agent_id == 'capmap':
+        domains = _coerce_capmap(obj.get('domains'))
+        if not domains:
+            _finish_research_run(research_run_id, status='failed')
+            raise RuntimeError('the model returned no usable capability domains — try again')
+        version = 'v1.0'
+        if workshop_id:
+            try:
+                from app.services import generated_docs
+                version = f'v1.{generated_docs.count_capmaps(workshop_id)}'
+            except Exception:
+                pass
+        capmap_payload = {'domains': domains, 'version': version}
+        draft['capmap'] = capmap_payload
+        n_caps = sum(len(d['capabilities']) for d in domains)
+        draft['node']['meta'] = draft['node']['meta'] or \
+            f'{len(domains)} domains · {n_caps} capabilities'
+
     # 'analyze': the routed gap list, the honest readiness scorecard, and
     # the research topics (see _ANALYSIS_FIELDS) — persisted below as
     # analysis_json so the scorecard modal survives a reload.
@@ -1748,6 +2061,19 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 if analysis_avg is not None:
                     completion = analysis_avg
                     tags.append(f'{analysis_avg}% ready')
+            if agent_id == 'capmap' and capmap_payload:
+                category = 'Capability Map'
+                tags.append(capmap_payload['version'])
+                tags.append(f"{sum(len(d['capabilities']) for d in capmap_payload['domains'])} capabilities")
+            if agent_id == 'brd':
+                category = 'BRD'
+                try:
+                    from app.services import requirements as req_service
+                    nreq = req_service.count(workshop_id)
+                    if nreq:
+                        tags.append(f'{nreq} requirements')
+                except Exception:
+                    pass
             diagram = draft.get('diagram')
             record = generated_docs.register(
                 workshop_id, title, body_html, agent_id=agent_id,
@@ -1757,7 +2083,8 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 diagram_xml=diagram['xml'] if diagram else None,
                 diagram_json=diagram['diagrams'] if diagram else None,
                 next_steps=draft.get('next_steps') or None,
-                analysis_json=analysis_payload)
+                analysis_json=analysis_payload,
+                capmap_json=capmap_payload)
             if record:
                 draft['node']['docId'] = record['doc_id']
         except Exception as e:

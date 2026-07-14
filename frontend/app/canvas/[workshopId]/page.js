@@ -8,17 +8,22 @@ import AppHeader from '../AppHeader';
 import CopilotPanel from '../CopilotPanel';
 import PhaseTabs, { PHASES } from '../PhaseTabs';
 import PreWorkshopDashboard from '../preworkshop/PreWorkshopDashboard';
+import DuringWorkshopDashboard from '../duringworkshop/DuringWorkshopDashboard';
+import { Icon } from '../../lib/icons';
 import '../preworkshop/preworkshop.css';
+import '../duringworkshop/duringworkshop.css';
 
 // A Workshop IS the canvas board (see app/routes/projects.py +
 // app/routes/canvas.py) — this page resolves :workshopId to its owning
-// project (for the header breadcrumb) before handing off to either the
-// Pre-Workshop dashboard (a plain React page, no canvas) or the ported
-// prototype engine (CanvasApp -> canvasApp.js) for the other 3 phases,
-// same auth-gate pattern as every other top-level page (see
-// useAuthedUser). Only Pre-Workshop has been rebuilt as a dashboard so
-// far — During Workshop/Post-Workshop/Proposal & Planning still render
-// the existing canvas, scoped to that phase's region via `initialLens`.
+// project (for the header breadcrumb) before handing off to either a
+// phase dashboard (plain React pages, no canvas) or the ported
+// prototype engine (CanvasApp -> canvasApp.js), same auth-gate pattern
+// as every other top-level page (see useAuthedUser). Pre-Workshop and
+// During Workshop are dashboards now; During Workshop additionally
+// keeps a "Board view" toggle back to its canvas (explicit product
+// decision — the canvas isn't retired for that phase, it's one toggle
+// away). Post-Workshop/Proposal & Planning still render the canvas,
+// scoped via `initialLens`.
 export default function CanvasWorkshopPage({ params }) {
   const { workshopId } = use(params);
   const user = useAuthedUser();
@@ -26,6 +31,7 @@ export default function CanvasWorkshopPage({ params }) {
   const [error, setError] = useState(null);
   const [phase, setPhase] = useState('prepare');
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [runBoardView, setRunBoardView] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -75,13 +81,25 @@ export default function CanvasWorkshopPage({ params }) {
       <CopilotPanel open={copilotOpen} onClose={() => setCopilotOpen(false)}
         workshopId={Number(workshopId)} zone={activePhase.label}
         contextName={workshop.project_name || workshop.name} />
-      {activePhase.dashboard ? (
+      {phase === 'prepare' ? (
         <PreWorkshopDashboard
           user={user}
           workshopId={Number(workshopId)}
         />
+      ) : phase === 'run' && !runBoardView ? (
+        <DuringWorkshopDashboard
+          user={user}
+          workshopId={Number(workshopId)}
+          onBoardView={() => setRunBoardView(true)}
+        />
       ) : (
         <div className="pw-canvas-wrap">
+          {phase === 'run' && (
+            <button className="dw-back-dash" onClick={() => setRunBoardView(false)}
+              title="Back to the During-Workshop dashboard">
+              <Icon name="list" />Dashboard view
+            </button>
+          )}
           <CanvasApp
             key={phase}
             user={user}
