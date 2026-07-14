@@ -265,8 +265,8 @@ export default function CopilotPanel({ open, onClose, workshopId, zone, contextN
   }
 
   return (
-    <div className="cop-backdrop" onClick={onClose}>
-      <div className="cop-panel" onClick={(e) => e.stopPropagation()}>
+    <>
+      <div className="cop-panel">
         <div className="cop-head">
           <span className="cop-ic"><Icon name="sparkles" /><span className="cop-online" /></span>
           <div>
@@ -433,7 +433,7 @@ export default function CopilotPanel({ open, onClose, workshopId, zone, contextN
       {viewerDiagram && (
         <DrawioViewer xml={viewerDiagram.xml} title={viewerDiagram.title} onClose={() => setViewerDiagram(null)} />
       )}
-    </div>
+    </>
   );
 }
 

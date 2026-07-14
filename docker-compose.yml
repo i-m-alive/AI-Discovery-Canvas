@@ -1,9 +1,10 @@
-# Local Neo4j 5 community + APOC for AI Discovery Canvas.
+# Local Neo4j 5 community + APOC, and local Postgres 16, for AI Discovery
+# Canvas.
 #
-#   docker compose up -d      # start Neo4j only (run the backend on the
-#                              # host via `python main.py` — see backend/README)
-#   docker compose down       # stop (graph data retained in the named volume)
-#   docker compose down -v    # stop + WIPE the Neo4j volume (fresh DB)
+#   docker compose up -d      # start both (run the backend on the host via
+#                              # `python main.py` — see backend/README)
+#   docker compose down       # stop (data retained in the named volumes)
+#   docker compose down -v    # stop + WIPE both volumes (fresh DBs)
 #
 # Based on frd-generator's docker-compose.yml `neo4j` service, with the
 # HOST-side port mappings, volume names, and compose project `name` all
@@ -18,9 +19,12 @@
 #   volume neo4j_logs ->    canvas_neo4j_logs
 #   project "navicore" ->   project "ai-discovery-canvas"
 #
-# Set NEO4J_PASSWORD in a `.env` file next to this compose file (compose
-# auto-loads it for ${VAR} interpolation), or rely on the `canvas-dev`
-# fallback below for local dev.
+# Postgres is new to this project (frd-generator has no equivalent), so its
+# standard port 5432 is free — no host mapping needs shifting.
+#
+# Set NEO4J_PASSWORD / POSTGRES_PASSWORD in a `.env` file next to this
+# compose file (compose auto-loads it for ${VAR} interpolation), or rely on
+# the `canvas-dev` fallbacks below for local dev.
 
 name: ai-discovery-canvas
 
@@ -48,6 +52,25 @@ services:
       timeout: 5s
       retries: 20
 
+  postgres:
+    image: postgres:16
+    container_name: canvas-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ai_discovery_canvas
+      POSTGRES_USER: canvas
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-canvas-dev}"
+    volumes:
+      - canvas_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U canvas -d ai_discovery_canvas"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   canvas_neo4j_data:
   canvas_neo4j_logs:
+  canvas_postgres_data:

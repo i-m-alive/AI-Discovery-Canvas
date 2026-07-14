@@ -22,8 +22,14 @@
   height: 100vh; background: var(--bg, #f5f7fa); color: var(--ink, #1f2733);
   display: flex; flex-direction: column; overflow: hidden;
 }
-.pw-canvas-wrap { flex: 1; min-height: 0; display: flex; }
+.pw-canvas-wrap { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .pw-canvas-wrap > * { flex: 1; }
+
+/* Wraps everything below the header + phase tabs: the phase content
+   (dashboard/canvas) AND the Copilot panel, laid out side by side (row)
+   so opening Copilot shrinks the phase content instead of overlaying a
+   dimmed scrim on top of it — both stay fully visible at once. */
+.pw-body { flex: 1; min-height: 0; display: flex; flex-direction: row; }
 
 /* The shared <Icon> component (frontend/app/lib/icons.js) renders
    `<span class="ic"><svg>...</svg></span>` and expects its consumer to
@@ -46,10 +52,13 @@
 .pw-brand-name span { color: #fff; }
 .pw-brand-tag { font-size: 9px; color: #8b87ad; letter-spacing: .06em; margin-top: 1px; }
 .pw-engagement {
-  display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 10px;
-  background: var(--pw-dark-bg2); border: 1px solid var(--pw-dark-line); color: #fff; text-decoration: none; flex: none;
+  display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 6px; border-radius: 10px;
+  background: var(--pw-dark-bg2); border: 1px solid var(--pw-dark-line); color: #fff; flex: none;
 }
 .pw-engagement:hover { border-color: var(--pw-purple); }
+.pw-engagement-link {
+  display: flex; align-items: center; gap: 10px; padding: 0 6px 0 0; color: #fff; text-decoration: none; min-width: 0;
+}
 .pw-eng-avatar {
   width: 26px; height: 26px; border-radius: 8px; flex: none; font-size: 11px; font-weight: 800;
   display: flex; align-items: center; justify-content: center; color: #fff;
@@ -59,6 +68,26 @@
 .pw-eng-name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .pw-eng-sub { font-size: 10.5px; color: #8b87ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .pw-eng-chevron { color: #8b87ad; font-size: 11px; }
+.pw-eng-edit-trigger {
+  width: 26px; height: 26px; border-radius: 7px; flex: none; display: flex; align-items: center; justify-content: center;
+  color: #8b87ad; margin-left: 2px;
+}
+.pw-eng-edit-trigger:hover { color: #fff; background: var(--pw-dark-line); }
+.pw-engagement-editing { padding: 6px 8px; gap: 8px; }
+.pw-eng-edit-input {
+  display: block; width: 150px; max-width: 100%; background: var(--pw-dark-bg, #131120); color: #fff;
+  border: 1px solid var(--pw-dark-line); border-radius: 6px; font: inherit; padding: 3px 7px;
+}
+.pw-eng-edit-input:focus { outline: none; border-color: var(--pw-purple); }
+.pw-eng-edit-input-sub { margin-top: 4px; font-size: 10.5px; color: #cfcbe8; }
+.pw-eng-edit-input:not(.pw-eng-edit-input-sub) { font-size: 12.5px; font-weight: 700; }
+.pw-eng-edit-error { font-size: 10px; color: #f0a3a3; margin-top: 4px; max-width: 150px; }
+.pw-eng-edit-btn {
+  width: 26px; height: 26px; border-radius: 7px; flex: none; display: flex; align-items: center; justify-content: center;
+  color: #cfcbe8; background: var(--pw-dark-bg, #131120); border: 1px solid var(--pw-dark-line);
+}
+.pw-eng-edit-btn:hover { border-color: var(--pw-purple); color: #fff; }
+.pw-eng-edit-btn:disabled { opacity: .5; cursor: default; }
 .pw-search {
   flex: 1; max-width: 480px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px;
   background: var(--pw-dark-bg2); border: 1px solid var(--pw-dark-line); border-radius: 9px; color: #6f6b93;
@@ -148,7 +177,7 @@
 
 /* ── Dashboard shell: fixed left Source Artifacts + independently
    scrolling right content (everything else) ─────────────────────────── */
-.pw-dash { flex: 1; min-height: 0; display: flex; }
+.pw-dash { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .pw-scroll { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 24px 60px; }
 .pw-err { margin: 0 0 18px; }
 
@@ -560,15 +589,16 @@
 .pw-drawio-frame { flex: 1; min-height: 0; width: 100%; border: none; display: block; }
 .pw-doc-text { padding: 20px 26px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; font-family: ui-monospace, Menlo, monospace; }
 
-/* Copilot (CopilotPanel.jsx) — slide-over from the right, available from
-   AppHeader on every phase (not just Pre-Workshop). */
-.cop-backdrop {
-  position: fixed; inset: 0; background: rgba(17, 24, 39, .38); z-index: 70;
-  display: flex; justify-content: flex-end; backdrop-filter: blur(1px);
-}
+/* Copilot (CopilotPanel.jsx) — docked panel, available from AppHeader on
+   every phase (not just Pre-Workshop). A plain flex sibling of the phase
+   content inside `.pw-body` (row layout) — NOT an overlay: opening it
+   shrinks the phase content's flex:1 width instead of dimming/covering
+   it, so both stay fully visible side by side at once. */
 .cop-panel {
-  width: min(440px, 100vw); height: 100vh; background: #fff; box-shadow: -24px 0 60px rgba(24,39,64,.28);
-  display: flex; flex-direction: column;
+  flex: none; width: min(360px, 92vw); height: calc(100% - 24px); margin: 12px 12px 12px 0;
+  background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(24,39,64,.16);
+  display: flex; flex-direction: column; overflow: hidden;
 }
 .cop-head {
   display: flex; align-items: flex-start; gap: 10px; padding: 16px 16px 15px 18px;

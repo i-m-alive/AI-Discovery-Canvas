@@ -76,39 +76,42 @@ export default function CanvasWorkshopPage({ params }) {
   return (
     <div className="pw-shell">
       <AppHeader user={user} workshop={workshop} workshopId={Number(workshopId)}
-        projectId={workshop.project_id} onOpenCopilot={() => setCopilotOpen(true)} />
+        projectId={workshop.project_id} onOpenCopilot={() => setCopilotOpen(true)}
+        onRenamed={(patch) => setWorkshop((w) => ({ ...w, ...patch }))} />
       <PhaseTabs active={phase} onSelect={setPhase} />
-      <CopilotPanel open={copilotOpen} onClose={() => setCopilotOpen(false)}
-        workshopId={Number(workshopId)} zone={activePhase.label}
-        contextName={workshop.project_name || workshop.name} />
-      {phase === 'prepare' ? (
-        <PreWorkshopDashboard
-          user={user}
-          workshopId={Number(workshopId)}
-        />
-      ) : phase === 'run' && !runBoardView ? (
-        <DuringWorkshopDashboard
-          user={user}
-          workshopId={Number(workshopId)}
-          onBoardView={() => setRunBoardView(true)}
-        />
-      ) : (
-        <div className="pw-canvas-wrap">
-          {phase === 'run' && (
-            <button className="dw-back-dash" onClick={() => setRunBoardView(false)}
-              title="Back to the During-Workshop dashboard">
-              <Icon name="list" />Dashboard view
-            </button>
-          )}
-          <CanvasApp
-            key={phase}
+      <div className="pw-body">
+        {phase === 'prepare' ? (
+          <PreWorkshopDashboard
             user={user}
             workshopId={Number(workshopId)}
-            projectId={workshop.project_id}
-            initialLens={phase}
           />
-        </div>
-      )}
+        ) : phase === 'run' && !runBoardView ? (
+          <DuringWorkshopDashboard
+            user={user}
+            workshopId={Number(workshopId)}
+            onBoardView={() => setRunBoardView(true)}
+          />
+        ) : (
+          <div className="pw-canvas-wrap">
+            {phase === 'run' && (
+              <button className="dw-back-dash" onClick={() => setRunBoardView(false)}
+                title="Back to the During-Workshop dashboard">
+                <Icon name="list" />Dashboard view
+              </button>
+            )}
+            <CanvasApp
+              key={phase}
+              user={user}
+              workshopId={Number(workshopId)}
+              projectId={workshop.project_id}
+              initialLens={phase}
+            />
+          </div>
+        )}
+        <CopilotPanel open={copilotOpen} onClose={() => setCopilotOpen(false)}
+          workshopId={Number(workshopId)} zone={activePhase.label}
+          contextName={workshop.project_name || workshop.name} />
+      </div>
     </div>
   );
 }

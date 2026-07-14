@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthedUser } from '../lib/useAuthedUser';
 import { apiGet, apiPost, apiDelete } from '../lib/api';
 import { Icon } from '../lib/icons';
@@ -12,6 +13,7 @@ import '../shared.css';
 // color tokens, button/card shapes, icon style) rather than a generic
 // bootstrap-y form.
 export default function ProjectsPage() {
+  const router = useRouter();
   const user = useAuthedUser();
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
@@ -69,6 +71,14 @@ export default function ProjectsPage() {
 
   const initials = ((user && (user.name || user.email)) || '?').trim().slice(0, 1).toUpperCase();
 
+  async function handleLogout() {
+    try {
+      await apiPost('/auth/logout');
+    } finally {
+      router.push('/login');
+    }
+  }
+
   return (
     <div className="app-shell">
       <div className="app-topbar">
@@ -76,6 +86,11 @@ export default function ProjectsPage() {
         <span className="brand">AI Discovery Canvas</span>
         <div className="spacer" />
         {user && <div className="av" title={user.name || user.email}>{initials}</div>}
+        {user && (
+          <button onClick={handleLogout} className="btn" style={{ marginLeft: 10 }} title="Log out">
+            Log out
+          </button>
+        )}
       </div>
 
       {!user ? (
