@@ -153,10 +153,14 @@
 .pw-err { margin: 0 0 18px; }
 
 .pw-hero {
-  display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  display: flex; align-items: stretch; justify-content: space-between; gap: 24px; flex-wrap: wrap;
   background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 14px;
   padding: 22px 26px; margin-bottom: 22px; box-shadow: var(--shadow-sm, 0 2px 8px rgba(24,39,64,.08));
 }
+/* Left column: title/description + stat tiles, stacked — the Agent
+   Catalogue is the hero's other flex child, filling the right side at
+   matching height (align-items: stretch above). */
+.pw-hero-main { display: flex; flex-direction: column; justify-content: center; gap: 18px; flex: 1 1 420px; min-width: 320px; }
 .pw-hero-txt h1 { font-size: 21px; margin: 0 0 8px; }
 .pw-hero-txt p { font-size: 13.5px; color: var(--muted, #6b7280); max-width: 460px; margin: 0; line-height: 1.55; }
 .pw-stats { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -166,6 +170,50 @@
 }
 .pw-stat-num { font-size: 24px; font-weight: 800; color: var(--pw-purple, #6d5ce8); }
 .pw-stat-lbl { font-size: 10.5px; color: var(--muted, #6b7280); text-transform: uppercase; letter-spacing: .03em; margin-top: 3px; }
+
+/* Agent Catalogue — the hero's right column (matches .pw-hero-main's
+   height via the row's align-items: stretch): one button per
+   pre-workshop agent, picking which agent's own working panel renders
+   below (see AgentPanelHead + the 4 *Workspace components in
+   PreWorkshopDashboard.jsx). */
+.pw-catalogue { display: flex; flex-direction: column; gap: 8px; flex: 1 1 300px; min-width: 260px; max-width: 400px; }
+.pw-catalogue-ttl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #6b7280); }
+.pw-catalogue-list { display: flex; flex-direction: column; gap: 8px; flex: 1; justify-content: center; }
+.pw-catalogue-btn {
+  display: flex; align-items: center; gap: 11px; text-align: left; position: relative;
+  appearance: none; cursor: pointer; font: inherit; min-width: 0;
+  background: #f7f7fb; border: 1px solid var(--line, #e4e8ee); border-radius: 11px; padding: 9px 12px;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+}
+.pw-catalogue-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(24,39,64,.09); border-color: var(--pw-purple-weak, #dcd6fa); background: #fff; }
+.pw-catalogue-btn-ic {
+  width: 34px; height: 34px; border-radius: 9px; flex: none; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; background: #fff; color: var(--pw-purple, #6d5ce8); box-shadow: 0 1px 3px rgba(24,39,64,.08);
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.pw-catalogue-btn-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pw-catalogue-btn-label { font-size: 12.5px; font-weight: 700; color: var(--ink, #1f2733); line-height: 1.25; transition: color .16s ease; }
+.pw-catalogue-btn-desc {
+  font-size: 10.5px; color: var(--muted, #6b7280); line-height: 1.25; transition: color .16s ease;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Selected: solid purple fill + a glossy icon tile (soft highlight top-
+   left, faint inner shadow) so the active agent reads as lifted, not
+   just recolored. */
+.pw-catalogue-btn.on {
+  background: linear-gradient(135deg, var(--pw-purple, #6d5ce8), var(--pw-purple-dark, #5645c9));
+  border-color: var(--pw-purple-dark, #5645c9); box-shadow: 0 8px 18px rgba(86,69,201,.28);
+}
+.pw-catalogue-btn.on:hover { background: linear-gradient(135deg, var(--pw-purple, #6d5ce8), var(--pw-purple-dark, #5645c9)); }
+.pw-catalogue-btn.on .pw-catalogue-btn-label { color: #fff; }
+.pw-catalogue-btn.on .pw-catalogue-btn-desc { color: rgba(255,255,255,.82); }
+.pw-catalogue-btn.on .pw-catalogue-btn-ic {
+  background: linear-gradient(135deg, rgba(255,255,255,.35), rgba(255,255,255,.08));
+  color: #fff; box-shadow: inset 0 1px 1px rgba(255,255,255,.5), inset 0 -4px 8px rgba(0,0,0,.12), 0 2px 5px rgba(0,0,0,.15);
+}
+@media (prefers-reduced-motion: reduce) { .pw-catalogue-btn, .pw-catalogue-btn:hover { transform: none; transition: none; } }
+@media (max-width: 900px) { .pw-hero-main, .pw-catalogue { flex: 1 1 100%; max-width: none; } }
 
 .pw-panel {
   background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 14px;
@@ -183,11 +231,35 @@
 
 /* Source Artifacts — fixed-width sidebar, NOT part of the page scroll;
    sticky within the flex row so it stays put while .pw-scroll scrolls,
-   with its own internal scroll if the list itself is long. */
+   with its own internal scroll if the list itself is long. The wrap div
+   exists only to anchor the floating collapse toggle (below) at the
+   sidebar's vertical center, straddling the border into the main
+   content — .pw-sources itself keeps overflow-y:auto for its own list,
+   which would otherwise clip an absolutely-positioned child sitting
+   half outside its box. */
+.pw-sources-wrap { position: relative; flex: none; display: flex; }
 .pw-sources {
   width: 320px; flex: none; background: #fff; border-right: 1px solid var(--line, #e4e8ee);
   padding: 20px; overflow-y: auto; border-radius: 0; box-shadow: none; margin-bottom: 0;
+  transition: width .18s ease;
 }
+/* Collapsed: a slim rail — just the source-type icon — instead of the
+   full list, for when the sidebar isn't needed. */
+.pw-sources.collapsed { width: 64px; padding: 20px 10px; overflow: visible; }
+.pw-sources.collapsed .pw-panel-head { justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .pw-sources { transition: none; } }
+
+/* Floating collapse toggle — sits on the sidebar's border, vertically
+   centered, following it in either state since the wrap shrinks to
+   .pw-sources's own width. */
+.pw-collapse-btn {
+  position: absolute; top: 50%; right: -14px; transform: translateY(-50%); z-index: 5;
+  width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  appearance: none; cursor: pointer; font: inherit; color: var(--muted, #6b7280);
+  background: #fff; border: 1px solid var(--line, #e4e8ee); box-shadow: 0 1px 4px rgba(24,39,64,.15);
+}
+.pw-collapse-btn:hover { border-color: var(--pw-purple, #6d5ce8); color: var(--pw-purple, #6d5ce8); background: var(--pw-purple-weak, #efedfd); }
+.pw-collapse-btn.flipped svg { transform: scaleX(-1); }
 .pw-dropzone {
   border: 1.5px dashed var(--line2, #cfd6df); border-radius: 10px; padding: 18px 14px; text-align: center;
   color: var(--muted, #6b7280); cursor: pointer; margin-bottom: 12px;
@@ -276,8 +348,11 @@
 .pw-status { font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 10px; }
 .pw-status-done { color: var(--green, #2f8f5b); background: #eaf6f0; }
 .pw-status-running { color: var(--pw-purple, #6d5ce8); background: var(--pw-purple-weak, #efedfd); }
-.pw-run-btn { margin-bottom: 16px; background: var(--pw-purple, #6d5ce8); border-color: var(--pw-purple, #6d5ce8); }
-.pw-run-btn:hover { background: var(--pw-purple-dark, #5645c9); }
+/* .btn.solid from shared.css (blue --accent) is 2 classes, specificity
+   0,2,0 — beats a single-class .pw-run-btn rule regardless of source
+   order, so this scopes under the panel wrapper (0,3,0) to actually win. */
+.pw-research .btn.pw-run-btn { margin-bottom: 16px; background: var(--pw-purple, #6d5ce8); border-color: var(--pw-purple, #6d5ce8); }
+.pw-research .btn.pw-run-btn:hover { background: var(--pw-purple-dark, #5645c9); }
 .pw-research-grid { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: start; }
 @media (max-width: 760px) { .pw-research-grid { grid-template-columns: 1fr; } }
 .pw-insights { display: flex; flex-direction: column; gap: 12px; }
@@ -325,28 +400,9 @@
   border-radius: 9px; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap;
 }
 
-/* More agents (ResearchPanel's sidebar, below the Research Chain +
-   Ask Research Agent) — Build Workflow / Summarize Documents live here
-   instead of as separate full-width panels further down the page. */
-.pw-chain-agents { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line2, #e4e8ee); }
-.pw-chain-agents-ttl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #6b7280); margin-bottom: 10px; }
-.pw-agent-prompt-lbl { display: block; font-size: 11px; font-weight: 700; margin-bottom: 5px; color: var(--ink, #1f2733); }
-.pw-agent-prompt-lbl span { font-weight: 400; color: var(--muted, #6b7280); }
-.pw-agent-prompt { margin-bottom: 14px; font-size: 12px; }
-
-/* Agent cards — one consistent card per sidebar agent (AgentCard):
+/* Agent panels (AgentPanelHead + the per-agent Workspace components) —
    icon + name, an eye button revealing a plain-language explainer, then
    the agent's own controls. */
-.pw-agent-card {
-  background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 12px;
-  padding: 13px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(24,39,64,.05);
-}
-.pw-agent-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
-.pw-agent-card-ic {
-  width: 28px; height: 28px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center;
-  background: var(--pw-purple-weak, #efedfd); color: var(--pw-purple, #6d5ce8);
-}
-.pw-agent-card-ttl { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; }
 .pw-info-btn {
   flex: none; width: 26px; height: 26px; border: none; background: transparent; appearance: none;
   border-radius: 7px; display: flex; align-items: center; justify-content: center; cursor: pointer;
@@ -372,12 +428,19 @@
 }
 .pw-seg-btn {
   appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   font-size: 11px; font-weight: 600; color: var(--muted, #6b7280); padding: 6px 6px; border-radius: 7px;
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background .12s, color .12s;
 }
 .pw-seg-btn:hover { color: var(--ink, #1f2733); }
 .pw-seg-btn.on { background: #fff; color: var(--pw-purple-dark, #5645c9); box-shadow: 0 1px 3px rgba(24,39,64,.14); }
+
+/* View toggle (Pre-Workshop Artifacts grid/list) — the .pw-seg pattern
+   used inline in a header row instead of stacked in a sidebar, so it
+   needs its own width instead of stretching to fill the row. */
+.pw-view-seg { width: auto; min-width: 168px; margin-bottom: 0; flex: none; }
+.pw-view-seg .pw-seg-btn { padding: 6px 12px; }
 
 /* Run buttons inside the agents block: shared.css's .btn.solid (blue
    --accent, specificity 0,2,0) was beating the single-class purple rule
@@ -396,14 +459,17 @@
 }
 .pw-cite-link::before { content: '📄 '; font-size: .85em; }
 .pw-cite-link:hover { border-color: var(--pw-purple, #6d5ce8); }
-.pw-chain-agent { margin-bottom: 14px; }
-.pw-chain-agent:last-child { margin-bottom: 0; }
-.pw-chain-agent-btn { width: 100%; justify-content: center; background: var(--pw-purple, #6d5ce8); border-color: var(--pw-purple, #6d5ce8); }
-.pw-chain-agent-btn:hover { background: var(--pw-purple-dark, #5645c9); }
 .pw-chain-agent-sub { font-size: 11px; color: var(--muted, #6b7280); margin-top: 6px; line-height: 1.4; }
 .pw-chain-agent-result { margin-top: 10px; padding: 10px 12px; background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 9px; }
 .pw-chain-agent-result-ttl { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--green, #2f8f5b); }
 .pw-chain-agent-result .pw-view-btn { margin-top: 8px; border: 1px solid var(--line, #e4e8ee); width: 100%; justify-content: center; padding: 6px; }
+/* Scoped under the result box (0,3,0) so it beats shared.css's
+   `.btn:hover` (0,2,0) — same specificity fix as .pw-run-btn above. */
+.pw-chain-agent-result .btn.pw-run-again-btn {
+  margin-top: 10px; width: 100%; justify-content: center;
+  color: var(--pw-purple, #6d5ce8); border-color: var(--pw-purple-weak, #efedfd);
+}
+.pw-chain-agent-result .btn.pw-run-again-btn:hover { border-color: var(--pw-purple, #6d5ce8); background: var(--pw-purple-weak, #efedfd); color: var(--pw-purple, #6d5ce8); }
 .pw-checklist-compact { margin-top: 10px; gap: 8px; }
 .pw-checklist-compact .pw-check-step { font-size: 12px; }
 .pw-checklist-compact .pw-check-why { font-size: 11px; }
@@ -424,6 +490,25 @@
 }
 .pw-filter-chip.on .pw-filter-count { background: rgba(109,92,232,.18); }
 .pw-artifact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+
+/* List view — same source/generated items as the grid, one compact row
+   each (icon, name+meta, status, actions) instead of a full card; same
+   pattern as .pw-source-item in the Source Artifacts sidebar. */
+.pw-artifact-list { display: flex; flex-direction: column; gap: 8px; }
+.pw-artifact-row {
+  display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--line, #e4e8ee);
+  border-radius: 10px; padding: 10px 14px; animation: pw-fade-up .28s ease both;
+}
+.pw-artifact-row-icon {
+  width: 32px; height: 32px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center;
+}
+.pw-artifact-row-main { flex: 1; min-width: 0; }
+.pw-artifact-row-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-artifact-row-meta { font-size: 11px; color: var(--muted, #6b7280); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.pw-artifact-row-progress { flex: none; }
+.pw-artifact-row-actions { display: flex; flex: none; gap: 6px; }
+.pw-artifact-row-actions .pw-view-btn { border: 1px solid var(--line, #e4e8ee); padding: 6px 9px; }
+@media (prefers-reduced-motion: reduce) { .pw-artifact-row { animation: none; } }
 .pw-artifact-card {
   background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 14px; padding: 16px 18px;
   box-shadow: var(--shadow-sm, 0 2px 8px rgba(24,39,64,.08)); display: flex; flex-direction: column; gap: 6px;
