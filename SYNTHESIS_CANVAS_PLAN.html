@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Synthesis Canvas — During Workshop · Implementation Plan</title>
+<style>
+  :root {
+    --bg: #f6f6fa; --panel: #ffffff; --sunken: #eef0f6;
+    --ink: #191c28; --soft: #59617a; --faint: #8a91a8;
+    --line: #e3e6ef; --line2: #cdd2e2;
+    --purple: #6d5ce8; --purple-dark: #5645c9; --purple-weak: #efedfd;
+    --teal: #1d968f; --teal-weak: #e2f4f2;
+    --amber: #c9881f; --amber-weak: #faf1e1;
+    --green: #2f8f5b; --green-weak: #e8f6ee;
+    --red: #c0463b; --red-weak: #fbecea;
+    --shadow: 0 1px 2px rgba(20,24,40,.05), 0 10px 30px rgba(20,24,40,.07);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0f17; --panel: #151824; --sunken: #10131c;
+      --ink: #e9eaf2; --soft: #9aa2bd; --faint: #6c7490;
+      --line: #242940; --line2: #313854;
+      --purple: #8d7ef2; --purple-dark: #a99df5; --purple-weak: rgba(141,126,242,.14);
+      --teal: #3ec2b9; --teal-weak: rgba(62,194,185,.13);
+      --amber: #e0a63e; --amber-weak: rgba(224,166,62,.13);
+      --green: #45c581; --green-weak: rgba(69,197,129,.13);
+      --red: #e57272; --red-weak: rgba(229,114,114,.13);
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 34px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.62; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 46px clamp(18px, 4vw, 44px) 90px; }
+  h1, h2, h3 { text-wrap: balance; }
+  code { font-family: var(--mono); font-size: .88em; }
+  .eyebrow { display: inline-flex; gap: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--purple-dark); background: var(--purple-weak); padding: 6px 14px; border-radius: 20px; margin-bottom: 16px; }
+  h1 { font-size: clamp(27px, 4.2vw, 38px); line-height: 1.12; margin: 0 0 12px; font-weight: 800; }
+  .lede { font-size: 15.5px; color: var(--soft); max-width: 640px; margin: 0 0 8px; }
+  section { margin-top: 56px; }
+  .kick { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--purple-dark); margin-bottom: 6px; }
+  section > h2 { font-size: 22px; margin: 0 0 8px; font-weight: 800; }
+  .intro { color: var(--soft); font-size: 14px; max-width: 660px; margin: 0 0 20px; }
+  h3 { font-size: 15.5px; margin: 24px 0 10px; font-weight: 750; }
+  p { margin: 0 0 13px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 7px; }
+  .tblw { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 13px; }
+  th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 700; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 650; white-space: nowrap; }
+  .callout { border: 1px solid var(--line); border-left: 4px solid var(--purple); background: var(--panel); border-radius: 11px; padding: 13px 17px; font-size: 13.5px; margin: 16px 0; box-shadow: var(--shadow); }
+  .callout.amber { border-left-color: var(--amber); background: var(--amber-weak); }
+  .callout b { display: block; margin-bottom: 2px; }
+
+  /* Workbench mock */
+  .mock { border: 1px solid var(--line2); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 16px 18px; margin: 18px 0; }
+  .mock-hd { font-weight: 750; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .mock-sub { font-size: 12px; color: var(--faint); margin: 2px 0 12px; }
+  .mock-drop { border: 1.5px dashed var(--line2); border-radius: 11px; padding: 14px; display: flex; flex-wrap: wrap; gap: 9px; background: var(--sunken); }
+  .chipd { display: inline-flex; align-items: center; gap: 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 6px 11px; font-size: 12px; font-weight: 600; box-shadow: var(--shadow); }
+  .chipd i { font-style: normal; color: var(--faint); font-weight: 400; }
+  .chipd .x { color: var(--faint); font-weight: 700; margin-left: 3px; }
+  .chipd.gen { border-color: var(--purple); background: var(--purple-weak); }
+  .mock-prompt { margin: 12px 0; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; font-size: 12.5px; color: var(--faint); background: var(--sunken); }
+  .mock-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .gbtn { border: 1px solid var(--line2); border-radius: 9px; padding: 7px 13px; font-size: 12.5px; font-weight: 650; background: var(--panel); }
+  .gbtn.solid { background: var(--purple); border-color: var(--purple); color: #fff; }
+  .gbtn.auto { border-style: dashed; color: var(--purple-dark); }
+  .mile { display: flex; border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: var(--panel); box-shadow: var(--shadow); margin-bottom: 12px; }
+  .mile-rail { width: 8px; flex: none; }
+  .mile-body { flex: 1; padding: 14px 18px; }
+  .mile-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .mile-num { font-family: var(--mono); font-size: 11px; font-weight: 800; color: var(--faint); }
+  .mile-ttl { font-size: 14px; font-weight: 750; }
+  .mile-est { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--soft); background: var(--sunken); border-radius: 12px; padding: 3px 10px; }
+  .mile-body ul { margin: 6px 0 0; font-size: 13px; color: var(--soft); }
+  footer { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">AI Discovery Canvas · implementation plan · no code changed yet</div>
+  <h1>Synthesis Canvas<br/>selection-scoped generation for During&nbsp;Workshop</h1>
+  <p class="lede">
+    Your vision: Requirements, Capability Map, Process Flow and the BRD should be created
+    <b>from documents the facilitator deliberately drags onto a small canvas</b> — not from
+    "everything in the workshop" — with an optional prompt steering each run.
+  </p>
+
+  <!-- ════════════════════════════════════════════ -->
+  <section>
+    <div class="kick">01 · The concept</div>
+    <h2>A workbench, not another whiteboard</h2>
+    <p class="intro">
+      The "small canvas" is a <b>staging area</b>: the facilitator composes a <i>working set</i> of
+      inputs, optionally types an instruction, and fires a generator. Everything downstream is scoped
+      to exactly that set.
+    </p>
+
+    <div class="mock" aria-hidden="true">
+      <div class="mock-hd">⬡ Synthesis Canvas</div>
+      <div class="mock-sub">Drag artifacts from the left panel — generation uses only what's here</div>
+      <div class="mock-drop">
+        <span class="chipd">👥 Teams — Discovery Day 1 <i>transcript</i> <span class="x">×</span></span>
+        <span class="chipd">📄 Shift Roster SOP.docx <i>source</i> <span class="x">×</span></span>
+        <span class="chipd gen">✦ Research Brief: GMP labour <i>generated</i> <span class="x">×</span></span>
+        <span class="chipd" style="border-style:dashed; color:var(--faint)">+ drop here / add all</span>
+      </div>
+      <div class="mock-prompt">Prompt (optional): “focus on compliance and audit-trail needs”</div>
+      <div class="mock-btns">
+        <span style="font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em">Generate:</span>
+        <span class="gbtn solid">≡ Requirements</span>
+        <span class="gbtn">◎ Capability map</span>
+        <span class="gbtn">⛓ Process flow</span>
+        <span class="gbtn">▤ BRD</span>
+        <span class="gbtn auto">✦ Auto — let the router pick from the prompt</span>
+      </div>
+    </div>
+
+    <h3>The flow, end to end</h3>
+    <ol>
+      <li><b>Compose</b> — drag rows from the Artifact Explorer (sources <i>and</i> generated docs both allowed; generated inputs stay provenance-marked). Click-to-add works too (a small “+ to canvas” on each explorer row) so it's not drag-only.</li>
+      <li><b>Steer</b> — optional prompt, passed as the agent's <code>EXTRA INPUT</code> (the plumbing every agent already has).</li>
+      <li><b>Generate</b> — pick a generator, or hit <b>Auto</b> and a cheap router call (same pattern as Copilot dispatch) classifies the prompt to the right one.</li>
+      <li><b>Trace</b> — the run is scoped server-side to the selected doc ids; the output artifact stores <code>inputs_json</code> (which documents built it), shown on its card as “built from 3 inputs”.</li>
+      <li><b>Iterate</b> — the working set persists (per workshop, sessionStorage), so the natural sequence “same set → requirements → capability map → BRD” is three clicks.</li>
+    </ol>
+  </section>
+
+  <!-- ════════════════════════════════════════════ -->
+  <section>
+    <div class="kick">02 · One agent or many?</div>
+    <h2>Keep the four specialists, add one shared mechanism</h2>
+    <p class="intro">Your question answered directly:</p>
+    <ul>
+      <li><b>Keep the four existing agents</b> (<code>extract_reqs</code>, <code>capmap</code>, <code>workflow</code>, <code>brd</code>). Each has a strict, different output contract (table rows vs. heat-map JSON vs. diagram JSON vs. long document) with its own validation and persistence — merging them into one agent means one giant prompt doing four jobs worse, and one parse failure killing all four outputs.</li>
+      <li><b>What's genuinely shared is the <i>scoping</i>, so build it once</b>: a <code>doc_ids</code> option on <code>run_agent</code> that every context builder respects. The canvas doesn't need new agents — it needs the existing agents to accept “use only these inputs”.</li>
+      <li><b>The “single agent” feel comes from the Auto button</b>: one router call (the cheap <code>BEDROCK_ROUTER_MODEL_ID</code>, same as Copilot's dispatcher) reads the prompt and picks the generator. User experiences one smart agent; quality stays specialist.</li>
+    </ul>
+    <div class="callout"><b>Design principle</b> Selection is a <i>context rule</i>, not an agent. Agents stay experts in their output; the canvas decides what they're allowed to read.</div>
+  </section>
+
+  <!-- ════════════════════════════════════════════ -->
+  <section>
+    <div class="kick">03 · Backend changes</div>
+    <h2>Small and mostly plumbing</h2>
+    <div class="tblw">
+      <table>
+        <tr><th>Change</th><th>Where</th><th>Detail</th></tr>
+        <tr><td>Selection option</td><td><code>run_agent()</code></td><td><code>options.doc_ids = {sources: [...], generated: [...]}</code> — validated, capped (~10), ignored when absent (today's behaviour unchanged)</td></tr>
+        <tr><td>Scoped context builders</td><td><code>_requirements_context</code>, <code>_engagement_context</code>, <code>_workflow_context</code></td><td>Filter <code>prepare_docs.get_all_texts()</code> / <code>generated_docs</code> to the selected ids before building the prompt. Selected transcripts keep focused-full-text treatment; selected generated docs enter with the <code>generated:</code> provenance prefix (same discipline as Artifact Analyst's “all” scope)</td></tr>
+        <tr><td>Auto-router</td><td>new <code>_route_generator(prompt, selection)</code></td><td>Router-model call → one of the four agent ids (+ 'unclear' → ask the user). Only invoked by the Auto button</td></tr>
+        <tr><td>Provenance</td><td><code>generated_docs.inputs_json</code> (new JSONB column)</td><td><code>[{kind, doc_id, name}]</code> persisted at register time; returned by <code>list_docs</code> so cards/explorer can show “built from N inputs”. One manual <code>ALTER TABLE</code>, same as capmap_json</td></tr>
+        <tr><td>RAG discipline</td><td><code>run_agent</code></td><td>When a selection is active, skip the shared RAG block for that run — retrieval would leak non-selected documents back into a context the user explicitly narrowed</td></tr>
+      </table>
+    </div>
+    <p>No new tables, no new routes — <code>POST /api/agents/run</code> already carries <code>options</code> and <code>extra</code>.</p>
+  </section>
+
+  <!-- ════════════════════════════════════════════ -->
+  <section>
+    <div class="kick">04 · Frontend changes</div>
+    <h2>One new panel + drag sources</h2>
+    <div class="tblw">
+      <table>
+        <tr><th>Piece</th><th>New?</th><th>Detail</th></tr>
+        <tr><td>SynthesisCanvas.jsx</td><td>New</td><td>The workbench: dropzone (HTML5 DnD), input chips with remove ×, “add all” convenience chip, prompt textarea, four generator buttons + Auto, per-run progress line, result toast (“+6 requirements · open”). Working set kept in sessionStorage per workshop</td></tr>
+        <tr><td>ArtifactExplorer rows</td><td>Adapt</td><td><code>draggable</code> with <code>dataTransfer</code> payload <code>{kind, doc_id, name}</code>; plus a hover “+ to canvas” button (accessibility / trackpads / touch)</td></tr>
+        <tr><td>Generator buttons in panels</td><td>Adapt</td><td>Requirements “Extract”, capmap “Generate”, flow “Build”, “Assemble BRD” all route through the canvas selection. Empty canvas → buttons disabled with the hint “drag documents to the canvas first” (your rule), and the canvas shows an “add all workshop artifacts” chip as the explicit whole-corpus escape hatch</td></tr>
+        <tr><td>Provenance display</td><td>Adapt</td><td>Artifact cards + explorer rows get a small “3 inputs” chip; clicking lists the source documents (from <code>inputs_json</code>)</td></tr>
+      </table>
+    </div>
+    <h3>Placement</h3>
+    <p>
+      The canvas sits directly under the hero, replacing the capture banner's spot (the banner's
+      import CTA and transcript status fold into the canvas header — “no transcripts yet · Import
+      from Teams” lives naturally where inputs are composed).
+    </p>
+  </section>
+
+  <!-- ════════════════════════════════════════════ -->
+  <section>
+    <div class="kick">05 · Sequence</div>
+    <h2>Milestones</h2>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--purple)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M1</span><span class="mile-ttl">Selection plumbing (backend)</span><span class="mile-est">~½ session</span></div>
+      <ul><li><code>options.doc_ids</code> through run route → run_agent → the three context builders; RAG skip under selection; <code>inputs_json</code> column + persistence + list flag. Verifiable with test_client before any UI exists.</li></ul>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--teal)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M2</span><span class="mile-ttl">The workbench UI</span><span class="mile-est">~1 session</span></div>
+      <ul><li>SynthesisCanvas panel, draggable explorer rows + “+ to canvas”, chips, prompt, four gated generator buttons, run states, panel buttons re-routed, sessionStorage persistence.</li></ul>
+    </div></div>
+
+    <div class="mile"><div class="mile-rail" style="background:var(--amber)"></div><div class="mile-body">
+      <div class="mile-head"><span class="mile-num">M3</span><span class="mile-ttl">Auto-router + provenance UX</span><span class="mile-est">~½–1 session</span></div>
+      <ul><li>“Auto” button + router call; “built from N inputs” chips with popover; polish (drop animation, reduced-motion, empty states).</li></ul>
+    </div></div>
+
+    <p style="font-size:13px;color:var(--soft)">Total ≈ 2–2.5 working sessions. Each milestone independently verifiable.</p>
+  </section>
+
+  <!-- ════════════════════════════════════════════ -->
+  <section>
+    <div class="kick">06 · Decisions & edge cases</div>
+    <h2>To confirm before building</h2>
+    <ul>
+      <li><b>Strict gating</b> — plan follows your rule: empty canvas = generators disabled, with an explicit “add all” chip as the whole-corpus path. Alternative: empty canvas silently means “everything” (today's behaviour). Which do you want?</li>
+      <li><b>Generated docs as inputs</b> — plan allows it (research briefs are legitimate BRD inputs), always provenance-prefixed. Veto if you want sources-only.</li>
+      <li><b>Auto button in v1</b> — include, or ship the four explicit buttons first and add Auto in M3? (Plan: M3.)</li>
+      <li><b>Requirements dedup stays workshop-global</b> — extracting from a selection still won't duplicate an existing REQ row captured earlier from another document. Assumed yes.</li>
+      <li><b>Pre-Workshop parity later</b> — the same canvas could scope deepresearch/analyze in Pre-Workshop. Out of scope here; the mechanism will already support it.</li>
+    </ul>
+    <div class="callout amber"><b>Honest boundary</b> The canvas is a staging strip, not a spatial whiteboard — chips don't have meaningful x/y positions. If you later want arrangement to mean something (e.g. ordering inputs by priority), that's a separate design.</div>
+  </section>
+
+  <footer>
+    Synthesis Canvas implementation plan · builds on the shipped During-Workshop dashboard
+    (ArtifactExplorer, extract_reqs / capmap / workflow / brd agents, run-options plumbing) · no code changed yet.
+  </footer>
+</div>
+</body>
+</html>

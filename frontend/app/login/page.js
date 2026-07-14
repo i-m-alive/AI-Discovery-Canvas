@@ -36,6 +36,19 @@ export default function LoginPage() {
   const [azureReady, setAzureReady] = useState(false);
   const [msBusy, setMsBusy] = useState(false);
 
+  // Where to land after sign-in: the ?next= the 401 redirect (see
+  // app/lib/api.js) or the backend's own /login bounce put in the URL —
+  // so a facilitator kicked out by a backend restart returns straight
+  // to the workshop they were in, not the projects list. Same-origin
+  // paths only; anything else falls back to /projects.
+  function afterLogin() {
+    try {
+      const next = new URLSearchParams(window.location.search).get('next');
+      if (next && next.startsWith('/') && !next.startsWith('//')) return next;
+    } catch { /* fall through */ }
+    return '/projects';
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -55,7 +68,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await apiPost('/auth/login/mock', { name, email });
-      router.push('/projects');
+      router.push(afterLogin());
     } catch (err) {
       setError(err.message || 'Sign-in failed');
     } finally {
@@ -80,7 +93,7 @@ export default function LoginPage() {
         home_account_id: result.account?.homeAccountId || '',
         tenant_id: result.account?.tenantId || '',
       });
-      router.push('/projects');
+      router.push(afterLogin());
     } catch (err) {
       // MSAL throws its own error shapes (interaction_in_progress,
       // popup_window_error, user_cancelled, ...) — surface the message

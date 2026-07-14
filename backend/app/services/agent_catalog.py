@@ -1285,7 +1285,8 @@ def _coerce_diagrams(raw_diagrams) -> list[dict]:
     return out
 
 
-def _workflow_context(context: dict, workshop_id: Optional[int]) -> dict:
+def _workflow_context(context: dict, workshop_id: Optional[int],
+                      selection: Optional[dict] = None) -> dict:
     """'workflow' and 'summarize_docs' agent input: EVERY ingested Prepare
     document PLUS EVERY research document the research agent has produced
     for this workshop (research briefs, risk assessments, architecture
@@ -1302,6 +1303,17 @@ def _workflow_context(context: dict, workshop_id: Optional[int]) -> dict:
     a synthesis input, not a full re-read of everything ever generated."""
     context = dict(context or {})
     files: list[dict] = []
+    if selection and workshop_id:
+        # Synthesis-Canvas run: the hand-picked working set only.
+        files, inputs = _selection_files(workshop_id, selection, per_doc=5000,
+                                         facets=['process steps, handoffs and decision points',
+                                                 'roles, teams and systems involved'])
+        if files:
+            files.insert(0, {'name': 'note', 'text': _SELECTION_NOTE})
+            context['files'] = files
+            context['_selection_inputs'] = inputs
+            return context
+        files = []
     if workshop_id:
         try:
             from app.services import prepare_docs
@@ -1352,7 +1364,81 @@ def _is_transcript(name: str) -> bool:
         n.endswith('.vtt') or 'transcript' in n
 
 
-def _requirements_context(context: dict, workshop_id: Optional[int]) -> dict:
+_MAX_SELECTION_DOCS = 12
+
+
+def _parse_selection(options: Optional[dict]) -> Optional[dict]:
+    """The Synthesis Canvas working set — options.doc_ids = {sources:
+    [...], generated: [...]}. None when absent/empty, i.e. every existing
+    caller keeps whole-workshop behaviour unchanged."""
+    opts = options if isinstance(options, dict) else {}
+    sel = opts.get('doc_ids')
+    if not isinstance(sel, dict):
+        return None
+    sources = [str(x)[:32] for x in (sel.get('sources') or []) if x][:_MAX_SELECTION_DOCS]
+    generated = [str(x)[:32] for x in (sel.get('generated') or []) if x][:_MAX_SELECTION_DOCS]
+    if not sources and not generated:
+        return None
+    return {'sources': sources, 'generated': generated}
+
+
+def _selection_files(workshop_id: Optional[int], selection: dict, *,
+                     facets: Optional[list] = None, per_doc: int = 6000) -> tuple[list, list]:
+    """(files, provenance) for a canvas selection. Hand-picked sources get
+    focused near-full text (the facilitator chose them deliberately —
+    they deserve depth, not a distillation); generated docs enter with
+    the 'generated: ' provenance prefix, same discipline as the Artifact
+    Analyst's 'all' scope. Unknown/foreign doc ids are silently dropped.
+    provenance = [{kind, doc_id, name}] — persisted as inputs_json so
+    the output artifact can always say what built it."""
+    files: list[dict] = []
+    inputs: list[dict] = []
+    if not workshop_id:
+        return files, inputs
+    if selection['sources']:
+        try:
+            from app.services import prepare_docs
+            by_id = {d['doc_id']: d for d in prepare_docs.get_all_texts(workshop_id)}
+            for did in selection['sources']:
+                d = by_id.get(did)
+                if not d:
+                    continue
+                name = str(d.get('name') or 'document')
+                label = f'transcript: {name}' if _is_transcript(name) else f'document: {name}'
+                files.append({'name': label,
+                              'text': _focus_text(str(d.get('text') or ''), max_chars=per_doc,
+                                                  extra_facets=facets)})
+                inputs.append({'kind': 'source', 'doc_id': did, 'name': name})
+        except Exception as e:
+            log.info('[AGENT/SELECTION] prepare_docs unavailable (%s)', e.__class__.__name__)
+    if selection['generated']:
+        try:
+            from app.services import generated_docs
+            from app.services.rag.chunking import html_to_text
+            meta = {g['doc_id']: g for g in generated_docs.list_docs(workshop_id)}
+            for did in selection['generated']:
+                g = meta.get(did)
+                if not g:
+                    continue
+                html = generated_docs.get_html(workshop_id, did)
+                if not html:
+                    continue
+                files.append({'name': f"generated: {g['name']}",
+                              'text': _clip(html_to_text(html), 4000)})
+                inputs.append({'kind': 'generated', 'doc_id': did, 'name': g['name']})
+        except Exception as e:
+            log.info('[AGENT/SELECTION] generated_docs unavailable (%s)', e.__class__.__name__)
+    return files, inputs
+
+
+_SELECTION_NOTE = (
+    'SELECTION NOTE: the facilitator hand-picked the documents below for this run — treat them '
+    'as the ONLY source material; do not assume anything from documents that are not present.'
+)
+
+
+def _requirements_context(context: dict, workshop_id: Optional[int],
+                          selection: Optional[dict] = None) -> dict:
     """'extract_reqs' input: imported transcripts at (focused) FULL text —
     requirements live in the verbatim wording, a distillation would
     paraphrase away exactly the source_quote traces this agent must
@@ -1362,29 +1448,64 @@ def _requirements_context(context: dict, workshop_id: Optional[int]) -> dict:
     prompt-level braces)."""
     context = dict(context or {})
     files: list[dict] = []
+    req_facets = ['requirements, needs and asks',
+                  'decisions and commitments',
+                  'pain points and constraints']
+    if selection:
+        # Synthesis-Canvas run: exactly the hand-picked working set, plus
+        # the existing-requirements list so dedup still holds.
+        files, inputs = _selection_files(workshop_id, selection, facets=req_facets)
+        files.insert(0, {'name': 'note to the extractor', 'text': _SELECTION_NOTE})
+        try:
+            from app.services import requirements as req_service
+            existing = req_service.as_context_text(workshop_id)
+            if existing:
+                files.append({'name': 'EXISTING REQUIREMENTS (already captured — do NOT repeat these)',
+                              'text': existing})
+        except Exception as e:
+            log.info('[AGENT/EXTRACT_REQS] requirements unavailable (%s)', e.__class__.__name__)
+        context['files'] = files
+        context['_selection_inputs'] = inputs
+        return context
     if workshop_id:
         try:
             from app.services import prepare_docs
             docs = prepare_docs.get_all_texts(workshop_id)
             transcripts = [d for d in docs if _is_transcript(d.get('name', ''))]
             others = [d for d in docs if not _is_transcript(d.get('name', ''))]
-            per_tr = min(_MAX_FILE_CHARS, max(6000, _MAX_FILES_TOTAL // max(1, len(transcripts))))
-            for d in transcripts[:_MAX_RESEARCH_DOCS]:
-                files.append({'name': f"transcript: {d['name']}",
-                              'text': _focus_text(str(d.get('text') or ''), max_chars=per_tr,
-                                                  extra_facets=['requirements, needs and asks',
-                                                                'decisions and commitments',
-                                                                'pain points and constraints'])})
-            # Non-transcript corpus rides along as cheap cached
-            # distillations — supporting context, not a requirements source.
-            try:
-                from app.services import workshop_context
-                ws_ctx = workshop_context.ensure(workshop_id, others[:_MAX_RESEARCH_DOCS])
-                if ws_ctx and ws_ctx['summaries']:
-                    files.extend({'name': f"pre-workshop: {s['name']}", 'text': s['text']}
-                                 for s in ws_ctx['summaries'])
-            except Exception as e:
-                log.info('[AGENT/EXTRACT_REQS] workshop context unavailable (%s)', e.__class__.__name__)
+            if transcripts:
+                per_tr = min(_MAX_FILE_CHARS, max(6000, _MAX_FILES_TOTAL // max(1, len(transcripts))))
+                for d in transcripts[:_MAX_RESEARCH_DOCS]:
+                    files.append({'name': f"transcript: {d['name']}",
+                                  'text': _focus_text(str(d.get('text') or ''), max_chars=per_tr,
+                                                      extra_facets=req_facets)})
+                # Non-transcript corpus rides along as cheap cached
+                # distillations — supporting context, not a requirements source.
+                try:
+                    from app.services import workshop_context
+                    ws_ctx = workshop_context.ensure(workshop_id, others[:_MAX_RESEARCH_DOCS])
+                    if ws_ctx and ws_ctx['summaries']:
+                        files.extend({'name': f"pre-workshop: {s['name']}", 'text': s['text']}
+                                     for s in ws_ctx['summaries'])
+                except Exception as e:
+                    log.info('[AGENT/EXTRACT_REQS] workshop context unavailable (%s)', e.__class__.__name__)
+            elif others:
+                # No meeting transcript exists (not every workshop records
+                # one) — the facilitator's own capture IS the primary
+                # source: typed meeting notes, minutes, whiteboard exports,
+                # client documents. Feed them at focused full text, not as
+                # distillations, so the verbatim wording that becomes
+                # source_quote traces survives.
+                files.append({'name': 'note to the extractor',
+                              'text': 'No meeting transcripts have been imported. The documents '
+                                      'below (meeting notes, minutes, client documents) ARE the '
+                                      'capture — extract the requirements they state or clearly '
+                                      'imply, tracing each to its document.'})
+                per_doc = min(_MAX_FILE_CHARS, max(4000, _MAX_FILES_TOTAL // max(1, len(others))))
+                for d in others[:_MAX_RESEARCH_DOCS]:
+                    files.append({'name': f"document: {d['name']}",
+                                  'text': _focus_text(str(d.get('text') or ''), max_chars=per_doc,
+                                                      extra_facets=req_facets)})
         except Exception as e:
             log.info('[AGENT/EXTRACT_REQS] prepare_docs unavailable (%s)', e.__class__.__name__)
         try:
@@ -1405,13 +1526,18 @@ def _requirements_context(context: dict, workshop_id: Optional[int]) -> dict:
 
 
 def _engagement_context(context: dict, workshop_id: Optional[int], *,
-                        include_capmap: bool = False) -> dict:
+                        include_capmap: bool = False,
+                        selection: Optional[dict] = None) -> dict:
     """'capmap' and 'brd' input: the captured requirements table (the
     primary structured source), the latest persisted capability map (brd
     only), and the cached per-document distillations of the workshop
-    corpus. Everything already computed — no new per-document LLM calls."""
+    corpus. Everything already computed — no new per-document LLM calls.
+    Under a Synthesis-Canvas selection the corpus part is replaced by the
+    hand-picked working set (the requirements table and capmap still ride
+    along — they're the live structured state, not corpus)."""
     context = dict(context or {})
     files: list[dict] = []
+    sel_inputs: list[dict] = []
     if workshop_id:
         try:
             from app.services import requirements as req_service
@@ -1436,21 +1562,29 @@ def _engagement_context(context: dict, workshop_id: Optional[int], *,
                                   'text': '\n'.join(lines)})
             except Exception as e:
                 log.info('[AGENT/ENGAGEMENT] capmap unavailable (%s)', e.__class__.__name__)
-        try:
-            from app.services import prepare_docs, workshop_context
-            docs = prepare_docs.get_all_texts(workshop_id)[:_MAX_RESEARCH_DOCS]
-            ws_ctx = workshop_context.ensure(workshop_id, docs)
-            if ws_ctx and ws_ctx['summaries']:
-                files.extend({'name': s['name'], 'text': s['text']} for s in ws_ctx['summaries'])
-            elif docs:
-                files.extend({'name': d['name'], 'text': _clip(d['text'], 3000)} for d in docs)
-        except Exception as e:
-            log.info('[AGENT/ENGAGEMENT] corpus unavailable (%s)', e.__class__.__name__)
+        if selection:
+            sel_files, sel_inputs = _selection_files(workshop_id, selection, per_doc=5000)
+            if sel_files:
+                files.append({'name': 'note', 'text': _SELECTION_NOTE})
+                files.extend(sel_files)
+        else:
+            try:
+                from app.services import prepare_docs, workshop_context
+                docs = prepare_docs.get_all_texts(workshop_id)[:_MAX_RESEARCH_DOCS]
+                ws_ctx = workshop_context.ensure(workshop_id, docs)
+                if ws_ctx and ws_ctx['summaries']:
+                    files.extend({'name': s['name'], 'text': s['text']} for s in ws_ctx['summaries'])
+                elif docs:
+                    files.extend({'name': d['name'], 'text': _clip(d['text'], 3000)} for d in docs)
+            except Exception as e:
+                log.info('[AGENT/ENGAGEMENT] corpus unavailable (%s)', e.__class__.__name__)
     if not files:
         files = context.get('files') or [
             {'name': 'note', 'text': 'No requirements or documents have been captured in this '
                                      'workshop yet — say so and produce nothing speculative.'}]
     context['files'] = files
+    if sel_inputs:
+        context['_selection_inputs'] = sel_inputs
     return context
 
 
@@ -1726,6 +1860,9 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     scope = opts.get('scope')
     if scope not in ('sources', 'all'):
         scope = 'sources' if agent_id == 'artifact_analyst' else 'all'
+    # `options.doc_ids` — the Synthesis Canvas working set: when present,
+    # the run reads ONLY these hand-picked documents (see _selection_files).
+    selection = _parse_selection(options)
 
     research_run_id = None
     # Only deepresearch classifies — see _classify_research_request's
@@ -1753,14 +1890,15 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     elif agent_id == 'artifact_analyst':
         context = _closed_corpus_context(context, workshop_id=workshop_id, question=extra, scope=scope)
     elif agent_id in ('workflow', 'summarize_docs'):
-        context = _workflow_context(context, workshop_id=workshop_id)
+        context = _workflow_context(context, workshop_id=workshop_id, selection=selection)
     elif agent_id == 'extract_reqs':
-        context = _requirements_context(context, workshop_id=workshop_id)
+        context = _requirements_context(context, workshop_id=workshop_id, selection=selection)
     elif agent_id in ('capmap', 'brd'):
         # brd additionally reads the latest persisted capability map —
         # its "Capability impact" section composes from it.
         context = _engagement_context(context, workshop_id=workshop_id,
-                                      include_capmap=(agent_id == 'brd'))
+                                      include_capmap=(agent_id == 'brd'),
+                                      selection=selection)
 
     # Task text and extra-fields are normally the spec's own — deepresearch
     # is the one exception, swapping in the doc-type-specific task (see
@@ -1769,6 +1907,19 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     # THIS synthesis call instead of a separate agent run.
     task_text = spec['task']
     extra_fields_text = spec.get('extra_fields')
+    if agent_id == 'extract_reqs':
+        # The spec's task treats transcripts as the requirements source
+        # and other documents as phrasing context — correct when both are
+        # present, but a canvas selection (or a workshop) may contain no
+        # transcript at all, and the model then rightly extracts nothing.
+        # Override for that case: the supplied documents ARE the capture.
+        task_text += (
+            ' CAPTURE RULE: if the supplied material contains NO transcript, then the supplied '
+            'documents themselves (meeting notes, minutes, client documents) ARE the capture — '
+            'extract every concrete, testable requirement they state or clearly imply, tracing '
+            'each to its document via source_label and source_quote. Never return an empty '
+            'requirements array merely because no transcript is present.'
+        )
     if agent_id == 'artifact_analyst' and scope == 'all':
         task_text += (
             ' SCOPE NOTE: this corpus ALSO includes generated documents (our own prior AI '
@@ -1800,7 +1951,10 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     # contains generated docs too, which would leak our own prior output
     # back into a context that must trace ONLY to client artifacts (and
     # their context already carries the focused full documents anyway).
-    if spec.get('closed_corpus'):
+    # Same rule for a Synthesis-Canvas selection: retrieval would leak
+    # non-selected documents back into a context the facilitator
+    # explicitly narrowed.
+    if spec.get('closed_corpus') or context.get('_selection_inputs'):
         rag_block = ''
     else:
         rag_block = _rag_block(f'{spec["name"]}: {task_text[:200]}', workshop_id=workshop_id)
@@ -2084,7 +2238,8 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 diagram_json=diagram['diagrams'] if diagram else None,
                 next_steps=draft.get('next_steps') or None,
                 analysis_json=analysis_payload,
-                capmap_json=capmap_payload)
+                capmap_json=capmap_payload,
+                inputs_json=context.get('_selection_inputs') or None)
             if record:
                 draft['node']['docId'] = record['doc_id']
         except Exception as e:

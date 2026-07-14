@@ -26,6 +26,81 @@
 .dw-back-dash:hover { background: #f5f2ff; }
 .dw-back-dash svg { width: 14px; height: 14px; }
 
+/* ── Artifact Explorer (ax-*) — the left-hand artifact tree ────────── */
+.ax-drop { margin-bottom: 10px; }
+.ax-filter {
+  display: flex; align-items: center; gap: 7px; border: 1px solid #e3e2ee;
+  background: #fbfbfe; border-radius: 9px; padding: 6px 10px; margin-bottom: 10px;
+  color: #8a91a8;
+}
+.ax-filter svg { width: 13px; height: 13px; flex: none; }
+.ax-filter input {
+  flex: 1; min-width: 0; border: none; background: transparent; outline: none;
+  font: inherit; font-size: 12.5px; color: #23263a;
+}
+.ax-filter-x {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  color: #8a91a8; display: inline-flex; padding: 2px; border-radius: 5px;
+}
+.ax-filter-x:hover { background: #eef0f6; }
+.ax-filter-x svg { width: 12px; height: 12px; }
+
+.ax-tree { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+.ax-group { border-radius: 9px; }
+.ax-group-hd {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  width: 100%; display: flex; align-items: center; gap: 7px; text-align: left;
+  font-size: 11.5px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em;
+  color: #4b5064; padding: 8px 6px; border-radius: 8px;
+}
+.ax-group-hd:hover:not(:disabled) { background: #f3f2fa; }
+.ax-group-hd:disabled { cursor: default; }
+.ax-dim .ax-group-hd { color: #b3b8cb; }
+.ax-chev {
+  display: inline-block; width: 12px; flex: none; color: #a6abc2;
+  transition: transform .15s ease; font-size: 11px;
+}
+.ax-chev.open { transform: rotate(90deg); }
+.ax-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ax-dim .ax-dot { opacity: .35; }
+.ax-count {
+  margin-left: auto; background: #eef0f6; color: #6a7188; border-radius: 10px;
+  font-size: 10px; font-weight: 700; padding: 1px 8px; letter-spacing: 0;
+}
+.ax-dim .ax-count { background: #f4f5f9; color: #b3b8cb; }
+.ax-empty { font-size: 11.5px; color: #a6abc2; padding: 2px 8px 8px 25px; }
+
+.ax-sub { padding: 0 0 6px 14px; }
+.ax-sub-hd {
+  display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 750;
+  text-transform: uppercase; letter-spacing: .06em; color: #9aa0b6; padding: 4px 6px 3px;
+}
+.ax-sub-hd .ax-count { margin-left: 6px; }
+.ax-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ax-row {
+  display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 8px;
+  border-left: 2px solid #edecf5; margin-left: 4px;
+}
+.ax-row:hover { background: #f6f5fc; border-left-color: #cdc2f7; }
+.ax-row-ic {
+  width: 22px; height: 22px; border-radius: 6px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ax-row-ic svg { width: 12px; height: 12px; }
+.ax-ic-gen { background: #efedfd; color: #6d5ce8; }
+.ax-row-name {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  flex: 1; min-width: 0; text-align: left; font-size: 12px; font-weight: 550; color: #2b2f42;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0;
+}
+.ax-row-name:hover { color: #5645c9; }
+.ax-pill { flex: none; font-size: 9px; padding: 2px 7px; }
+.ax-row-tools { display: none; align-items: center; gap: 2px; flex: none; }
+.ax-row:hover .ax-row-tools { display: inline-flex; }
+.ax-row:hover .ax-pill { display: none; }
+.ax-row-tools .pw-view-btn { padding: 3px 5px; }
+.ax-row-tools .pw-view-btn svg { width: 12px; height: 12px; }
+
 /* ── Teams import ─────────────────────────────────────────────────── */
 .dw-teams-cta { width: 100%; justify-content: center; margin-bottom: 12px; }
 
@@ -55,6 +130,102 @@
 .dw-teams-err { font-size: 11.5px; color: #c0463b; margin-top: 3px; }
 .dw-teams-import { padding: 6px 14px; }
 
+/* ── Synthesis Canvas (sc-*) — the During-Workshop workbench ───────── */
+.sc { margin-bottom: 18px; }
+.sc-drop {
+  border: 1.5px dashed #cdc2f7; border-radius: 12px; background: #faf9ff;
+  padding: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  min-height: 64px; transition: background .15s ease, border-color .15s ease;
+}
+.sc-drop.over { background: #f0ecfe; border-color: #6d5ce8; }
+.sc-empty {
+  display: flex; align-items: center; gap: 10px; color: #8a91a8; font-size: 13px;
+  padding: 4px 6px; width: 100%; justify-content: center; flex-wrap: wrap;
+}
+.sc-empty svg { width: 16px; height: 16px; }
+.sc-addall {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  font-size: 12.5px; font-weight: 650; color: #5645c9; text-decoration: underline; padding: 0;
+}
+.sc-addall:disabled { color: #b3b8cb; cursor: default; text-decoration: none; }
+.sc-chip {
+  display: inline-flex; align-items: center; gap: 7px; background: #fff;
+  border: 1px solid #e3e2ee; border-radius: 9px; padding: 5px 8px 5px 6px;
+  font-size: 12px; font-weight: 600; color: #2b2f42; max-width: 260px;
+  box-shadow: 0 1px 3px rgba(40, 30, 90, .07); animation: pw-fade-up .2s ease both;
+}
+.sc-chip.gen { border-color: #cdc2f7; background: #f7f5ff; }
+.sc-chip-ic {
+  width: 20px; height: 20px; border-radius: 5px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #efedfd; color: #6d5ce8;
+}
+.sc-chip-ic svg { width: 11px; height: 11px; }
+.sc-chip-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-chip-x {
+  appearance: none; border: none; background: transparent; cursor: pointer; padding: 2px;
+  color: #a6abc2; display: inline-flex; border-radius: 5px; flex: none;
+}
+.sc-chip-x:hover { background: #f0eef8; color: #c0463b; }
+.sc-chip-x svg { width: 11px; height: 11px; }
+.sc-clear {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  font-size: 11px; font-weight: 650; color: #a6abc2; margin-left: auto; padding: 4px 6px;
+}
+.sc-clear:hover { color: #c0463b; }
+.sc-prompt { margin-top: 10px; }
+.sc-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.sc-actions-lbl {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+  color: #8a91a8; margin-right: 2px;
+}
+/* output toggle chips + the one Run button */
+.sc-out-chip {
+  appearance: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650;
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 20px; padding: 6px 13px;
+  border: 1px solid #ddd9ee; background: #fff; color: #8a91a8;
+  transition: all .15s ease;
+}
+.sc-out-chip svg { width: 13px; height: 13px; }
+.sc-out-chip.on { border-color: #6d5ce8; background: #f3f0fd; color: #5645c9; }
+.sc-out-chip:disabled { opacity: .6; cursor: default; }
+.sc-out-mark { font-size: 11px; min-width: 10px; }
+.sc-run-btn { margin-left: auto; }
+
+/* pipeline steps under the Run button */
+.sc-pipe { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sc-pipe-step {
+  display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: #8a91a8;
+  border-left: 2px solid #e9e6f5; padding: 3px 0 3px 10px;
+}
+.sc-pipe-step.running { color: #3c4157; border-left-color: #6d5ce8; }
+.sc-pipe-step.done { color: #2f8f5b; border-left-color: #7fd0a3; }
+.sc-pipe-step.failed { color: #c0463b; border-left-color: #e8a49d; }
+.sc-pipe-dot { width: 16px; display: inline-flex; justify-content: center; flex: none; }
+.sc-pipe-dot svg { width: 12px; height: 12px; }
+.sc-pipe-lbl { font-weight: 650; }
+.sc-pipe-note { color: #8a91a8; font-size: 11.5px; }
+
+/* a lone panel (e.g. requirements exist but no capmap yet) spans full width */
+.dw-cols:has(> :only-child) { grid-template-columns: 1fr; }
+
+.sc-status {
+  display: flex; align-items: center; gap: 9px; margin-top: 12px; font-size: 12.5px;
+  color: #59617a;
+}
+.sc-status-done { color: #2f8f5b; font-weight: 600; }
+.sc-status-done svg { width: 15px; height: 15px; }
+.sc-open {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 700; color: #5645c9; text-decoration: underline; padding: 0;
+}
+
+/* explorer row's "+ to canvas" */
+.ax-canvas-btn { color: #5645c9; }
+
+/* provenance chip on artifact cards */
+.pw-tag-inputs { background: #f3f0fd; color: #5645c9; cursor: help; }
+
 /* ── Capture banner ───────────────────────────────────────────────── */
 .dw-capture {
   display: flex; align-items: center; gap: 12px; border: 1px solid #e2ddf7;
@@ -76,6 +247,24 @@
   0%, 100% { box-shadow: 0 0 0 0 rgba(109, 92, 232, .45); }
   50% { box-shadow: 0 0 0 7px rgba(109, 92, 232, 0); }
 }
+
+/* ── Side-by-side Requirements | Capability Map (the reference layout) */
+.dw-cols {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px; align-items: start;
+}
+.dw-cols > .pw-panel { min-width: 0; }
+.dw-cols .pw-panel-head { flex-wrap: wrap; row-gap: 8px; }
+@media (max-width: 1220px) { .dw-cols { grid-template-columns: 1fr; } }
+.dw-req-scroll, .dw-cap-scroll { max-height: 620px; overflow-y: auto; padding-right: 4px; }
+.dw-panel-pill { margin-left: 2px; }
+.dw-req-addlink {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  font-size: 12.5px; font-weight: 650; color: #5645c9;
+  display: inline-flex; align-items: center; gap: 6px; padding: 10px 2px 0;
+}
+.dw-req-addlink:hover { text-decoration: underline; }
+.dw-req-addlink svg { width: 13px; height: 13px; }
 
 /* ── Requirements panel ───────────────────────────────────────────── */
 .dw-reqs-actions, .dw-capmap-actions, .dw-flow-actions { display: flex; align-items: center; gap: 8px; }
@@ -140,6 +329,7 @@
 
 /* ── Capability map ───────────────────────────────────────────────── */
 .dw-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #7a8099; margin-right: 4px; }
+.dw-legend-row { margin: 0 0 12px; }
 .dw-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-left: 8px; }
 .dw-legend i:first-child { margin-left: 0; }
 .dw-legend .dw-opp-high { background: #e5544b; }
@@ -214,11 +404,33 @@
   border-radius: 8px 8px 0 0; padding: 5px 13px;
 }
 .dwc-page.on { background: #fff; color: #5645c9; font-weight: 700; }
+.dwc-body { display: flex; flex: 1; min-height: 0; }
+.dwc-rail {
+  width: 42px; flex: none; border-right: 1px solid #edeaf8; background: #fbfaff;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0;
+}
+.dwc-rail-btn {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 7px; color: #8a91a8;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s ease, color .12s ease;
+}
+.dwc-rail-btn svg { width: 15px; height: 15px; }
+.dwc-rail-btn:hover { background: #edeaf8; color: #5645c9; }
+.dwc-rail-btn.on { background: #e7e2fb; color: #5645c9; }
+/* Fixed height inline (fills the viewport only in fullscreen): letting it
+   flex-grow parked a wide, short diagram's vertical center below the fold
+   — the viewer then looked empty. */
 .dwc-host {
-  position: relative; flex: 1; min-height: 460px; background: #fdfdff; cursor: grab;
+  position: relative; flex: 1; height: 440px; background: #fdfdff; cursor: grab;
   touch-action: none; overflow: hidden;
 }
-.dwc-full .dwc-host { min-height: 0; }
+.dwc-full .dwc-host { height: auto; min-height: 0; }
+.dwc-hint {
+  position: absolute; right: 10px; bottom: 8px; z-index: 2; pointer-events: none;
+  font-size: 10.5px; color: #a6abc2; background: rgba(253, 253, 255, .85);
+  border-radius: 8px; padding: 2px 9px;
+}
 .dwc-host:active { cursor: grabbing; }
 .dwc-svg { display: block; user-select: none; }
 .dwc-node { cursor: pointer; animation: dwc-node-in .38s ease both; }

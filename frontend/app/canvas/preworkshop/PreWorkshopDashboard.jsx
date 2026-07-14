@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import { Icon } from '../../lib/icons';
+import { STATUS_LABEL, downloadDrawio, fileType, timeAgo } from '../artifactMeta';
+import ArtifactExplorer from '../ArtifactExplorer';
 import AnalysisModal from './AnalysisModal';
 import DocumentViewer from './DocumentViewer';
 import DrawioViewer from './DrawioViewer';
 import '../../shared.css';
 
-export const STATUS_LABEL = { queued: 'Queued', parsing: 'Parsing', ingested: 'Ingested', failed: 'Failed' };
 const RESEARCH_STEP_ORDER = ['ingest', 'extract', 'queries', 'search', 'synthesize'];
 // The 'analyze' pipeline's steps (see agent_catalog._ANALYSIS_STEPS).
 const ANALYSIS_STEP_ORDER = ['inventory', 'perdoc', 'synth', 'readiness'];
@@ -16,48 +17,6 @@ const ANALYSIS_STEP_LABELS = {
   inventory: 'Inventory documents', perdoc: 'Analyze each document',
   synth: 'Synthesize analysis', readiness: 'Score readiness',
 };
-
-export function timeAgo(unixSeconds) {
-  if (!unixSeconds) return '';
-  const diff = Math.max(0, Date.now() / 1000 - unixSeconds);
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-  return `${Math.floor(diff / 86400)} d ago`;
-}
-
-function extOf(name) {
-  const m = /\.([a-z0-9]+)$/i.exec(name || '');
-  return m ? m[1].toLowerCase() : '';
-}
-
-// One badge label + icon + accent color per file type — "proper icons
-// for each component" extends to per-file-type recognition too, not
-// just section headers.
-const FILE_TYPE = {
-  pdf: { label: 'PDF', icon: 'doc-text', bg: '#fbecea', fg: '#c0463b' },
-  docx: { label: 'DOCX', icon: 'doc-text', bg: '#eaf2fb', fg: '#2f6fb3' },
-  doc: { label: 'DOC', icon: 'doc-text', bg: '#eaf2fb', fg: '#2f6fb3' },
-  xlsx: { label: 'XLSX', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
-  xls: { label: 'XLS', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
-  csv: { label: 'CSV', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
-  pptx: { label: 'PPTX', icon: 'flow', bg: '#faf1e1', fg: '#c9881f' },
-  ppt: { label: 'PPT', icon: 'flow', bg: '#faf1e1', fg: '#c9881f' },
-  txt: { label: 'TXT', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' },
-  md: { label: 'MD', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' },
-  html: { label: 'HTML', icon: 'doc-text', bg: '#efedfd', fg: '#6d5ce8' },
-  zip: { label: 'ZIP', icon: 'folder', bg: '#efedfd', fg: '#6d5ce8' },
-};
-export function fileType(name) {
-  // Imported meeting transcripts (named 'Teams — {subject}' by the
-  // import-transcript route, mirroring the backend's _is_transcript)
-  // get their own source-type identity, not a generic FILE badge.
-  if (/^teams\s*—|^teams\s*--|\.vtt$|transcript/i.test(name || '')) {
-    return { label: 'TRANSCRIPT', icon: 'users', bg: '#efedfd', fg: '#6d5ce8' };
-  }
-  const ext = extOf(name);
-  return FILE_TYPE[ext] || { label: ext ? ext.toUpperCase() : 'FILE', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' };
-}
 
 // One consistent card per sidebar agent: icon + name, an eye button that
 // reveals a plain-language explainer (what it does / reads / produces —
@@ -82,18 +41,6 @@ export function AgentCard({ icon, title, info, children }) {
   );
 }
 
-export function downloadDrawio(diagram, name) {
-  if (!diagram || !diagram.xml) return;
-  const blob = new Blob([diagram.xml], { type: 'application/xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(name || 'workflow').replace(/[^a-z0-9-_]+/gi, '_')}.drawio`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 
 export default function PreWorkshopDashboard({ user, workshopId }) {
   const [docs, setDocs] = useState([]);
@@ -341,7 +288,12 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
 
   return (
     <div className="pw-dash">
-      <SourceArtifactsPanel docs={docs} onAdd={() => fileInputRef.current?.click()} onView={setViewerDocId}
+      <ArtifactExplorer workshopId={workshopId} docs={docs} artifacts={artifacts}
+        activePhase="Pre-Workshop"
+        onAdd={() => fileInputRef.current?.click()}
+        onView={setViewerDocId}
+        onOpenDiagram={setViewerDiagram}
+        onOpenAnalysis={setAnalysisModal}
         onDelete={deleteArtifact} />
       <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleUpload}
             accept=".pdf,.docx,.xlsx,.pptx,.csv,.html,.txt,.md,.zip" />
@@ -429,57 +381,6 @@ export function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }) {
         </div>
       </div>
     </div>
-  );
-}
-
-export function SourceArtifactsPanel({ docs, onAdd, onView, onDelete, extraAction, emptyText }) {
-  const ingestedCount = docs.filter((d) => d.status === 'ingested').length;
-  return (
-    <section className="pw-sources">
-      <div className="pw-panel-head">
-        <div className="pw-panel-ttl">
-          <span className="pw-ic pw-ic-accent"><Icon name="upload" /></span>
-          <div>
-            <div className="pw-h3">Source Artifacts</div>
-            <div className="pw-sub">{ingestedCount}/{docs.length} ingested · grounding the copilot</div>
-          </div>
-        </div>
-        <button className="btn" onClick={onAdd}><Icon name="plus" />Add</button>
-      </div>
-      {extraAction}
-      <div className="pw-dropzone" onClick={onAdd}>
-        <Icon name="upload" />
-        <div className="pw-dz-txt">Drop docs, PDFs, videos, links, transcripts</div>
-        <div className="pw-dz-sub">SharePoint · Teams · Granola · GitHub · draw.io</div>
-      </div>
-      {docs.length === 0 ? (
-        <div className="pw-empty">{emptyText || (<>No sources yet for this phase.<br />Ingest client artifacts to ground the research.</>)}</div>
-      ) : (
-        <ul className="pw-source-list">
-          {docs.map((d) => {
-            const ft = fileType(d.name);
-            return (
-              <li key={d.doc_id} className="pw-source-item">
-                <span className="pw-source-icon" style={{ background: ft.bg, color: ft.fg }}>
-                  <Icon name={ft.icon} />
-                </span>
-                <div className="pw-source-main">
-                  <div className="pw-source-name">{d.name}</div>
-                  <div className="pw-source-meta">{ft.label} · {d.chars} chars</div>
-                </div>
-                <span className={`pw-pill pw-pill-${d.status}`}>{STATUS_LABEL[d.status] || d.status}</span>
-                <button className="pw-view-btn" onClick={() => onView(d.doc_id)} title="View document">
-                  <Icon name="search" />
-                </button>
-                <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(d.doc_id, d.name)} title="Delete document">
-                  <Icon name="trash" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -893,6 +794,12 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
               {a.description && <div className="pw-artifact-desc">{a.description}</div>}
               <div className="pw-artifact-tags">
                 {(a.tags || []).map((t) => <span key={t} className="pw-tag">{t}</span>)}
+                {(a.inputs || []).length > 0 && (
+                  <span className="pw-tag pw-tag-inputs"
+                    title={'Built from: ' + a.inputs.map((i) => i.name).join(', ')}>
+                    from {a.inputs.length} input{a.inputs.length === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
               <div className="pw-artifact-foot">
                 <span>{a.author || 'BA Copilot'} · {timeAgo(a.created_at)}</span>

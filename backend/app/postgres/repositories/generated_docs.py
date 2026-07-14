@@ -18,13 +18,14 @@ def create(session: Session, *, doc_id: str, workshop_id: int, name: str,
           description: Optional[str] = None, category: Optional[str] = None,
           tags: Optional[list] = None, diagram_xml: Optional[str] = None,
           diagram_json: Optional[list] = None, next_steps: Optional[list] = None,
-          analysis_json: Optional[dict] = None, capmap_json: Optional[dict] = None) -> GeneratedDoc:
+          analysis_json: Optional[dict] = None, capmap_json: Optional[dict] = None,
+          inputs_json: Optional[list] = None) -> GeneratedDoc:
     row = GeneratedDoc(doc_id=doc_id, workshop_id=workshop_id, name=name,
                        agent_id=agent_id, chars=chars, status=status,
                        completion_pct=completion_pct, author=author,
                        description=description, category=category, tags=tags or [],
                        diagram_xml=diagram_xml, diagram_json=diagram_json, next_steps=next_steps,
-                       analysis_json=analysis_json, capmap_json=capmap_json)
+                       analysis_json=analysis_json, capmap_json=capmap_json, inputs_json=inputs_json)
     session.add(row)
     session.flush()
     return row

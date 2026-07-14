@@ -61,6 +61,10 @@ class GeneratedDoc(Base):
     # Capability Map panel's data, persisted so the heat map survives a
     # reload exactly like analysis_json does for the scorecard.
     capmap_json:    Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
+    # Synthesis-Canvas provenance: [{kind: 'source'|'generated', doc_id,
+    # name}] — exactly which hand-picked inputs a selection-scoped run
+    # read. Null for whole-workshop runs.
+    inputs_json:    Mapped[Optional[list]] = mapped_column(JSONBColumn, nullable=True)
 
     __table_args__ = (
         Index('ix_generated_docs_workshop', 'workshop_id'),
