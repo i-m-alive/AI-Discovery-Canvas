@@ -30,6 +30,10 @@ class ResearchRun(Base):
     workshop_id: Mapped[int]           = mapped_column(
         BigInteger, ForeignKey('workshops.id', ondelete='CASCADE'), nullable=False,
     )
+    # Which pipeline this run traces — 'deepresearch' (the Research Chain)
+    # or 'analyze' (the Pre-Workshop Analysis progress). Same ledger
+    # mechanics, different step vocabularies; each UI polls its own.
+    agent_id:    Mapped[str]           = mapped_column(String(32), nullable=False, default='deepresearch', server_default='deepresearch')
     status:      Mapped[str]           = mapped_column(String(20), nullable=False, default='running', server_default='running')  # running|done|failed
     steps:       Mapped[list]          = mapped_column(JSONBColumn, nullable=False, default=list, server_default='[]')
     insights:    Mapped[list]          = mapped_column(JSONBColumn, nullable=False, default=list, server_default='[]')

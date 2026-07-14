@@ -27,8 +27,26 @@ Agent routes.
                                 instead of a crashed fetch.
 
     POST /api/agents/chat    AUTH-GATED. Free-form assistant turn.
-                             body: { message, context, workshop_id } -> { ok, reply }
-                             (reply is plain text; frontend escapes it).
+                             body: { message, context, workshop_id } -> { ok, kind,
+                             reply, sources? } (reply is plain text; frontend
+                             escapes it). Automatically pulls recent
+                             conversation history (see copilot/messages
+                             below) into the model call so follow-up
+                             questions resolve correctly.
+
+    GET    /api/agents/copilot/messages?workshop_id=<id>   AUTH-GATED.
+                             -> { ok, messages } — the persisted Copilot
+                             conversation for this workshop (one thread
+                             per workshop, not per user).
+
+    POST   /api/agents/copilot/messages   AUTH-GATED.
+                             body: { workshop_id, message } -> { ok } —
+                             appends one message (called by the frontend
+                             after every user/assistant turn).
+
+    DELETE /api/agents/copilot/messages?workshop_id=<id>   AUTH-GATED.
+                             -> { ok } — clears this workshop's Copilot
+                             conversation.
 
     POST /api/agents/upload  AUTH-GATED. multipart/form-data, fields
                              'file' + 'workshop_id'. Extracts text
@@ -80,7 +98,7 @@ from __future__ import annotations
 
 import re
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from app.auth import auth_required, current_user
 from app.core.logging import log, log_exc
@@ -137,12 +155,22 @@ def run_agent():
         workshop_id = None
     user = current_user() or {}
     author = user.get('name') or user.get('email') or ''
+    options = body.get('options') if isinstance(body.get('options'), dict) else None
     try:
-        draft = agent_catalog.run_agent(agent_id, context, extra=extra, workshop_id=workshop_id, author=author)
+        draft = agent_catalog.run_agent(agent_id, context, extra=extra, workshop_id=workshop_id,
+                                        author=author, options=options)
         return jsonify({'ok': True, 'draft': draft})
     except Exception as e:
         log_exc(f'[AGENTS/RUN/{agent_id}]', e)
         return jsonify({'ok': False, 'error': str(e)}), 200
+
+
+def _user_key() -> str:
+    """Stable per-user key for Copilot threads — the auth subsystem's user
+    id, falling back to email. Empty string only for the (shouldn't
+    happen behind @auth_required) anonymous case."""
+    user = current_user() or {}
+    return str(user.get('id') or user.get('email') or '')
 
 
 @bp.route('/api/agents/chat', methods=['POST'])
@@ -163,16 +191,189 @@ def chat():
     except (TypeError, ValueError):
         workshop_id = None
     try:
-        out = agent_catalog.route_chat(message, context, workshop_id=workshop_id)
+        from app.services import copilot_thread
+        user_key = _user_key()
+        history = copilot_thread.recent_for_model(workshop_id, user_key) if workshop_id else None
+        if workshop_id:
+            # Fold turns that have aged out of the verbatim window into the
+            # rolling summary — on a daemon thread, never in this turn's
+            # latency path.
+            copilot_thread.kickoff_summary_update(workshop_id, user_key)
+        out = agent_catalog.route_chat(message, context, workshop_id=workshop_id, history=history)
         if out['kind'] == 'dispatch':
             return jsonify({'ok': True, 'kind': 'dispatch',
                             'agent_id': out['agent_id'], 'extra': out.get('extra')})
         if not out.get('reply'):
             raise RuntimeError('the model returned an empty reply — try again')
-        return jsonify({'ok': True, 'kind': 'reply', 'reply': out['reply']})
+        return jsonify({'ok': True, 'kind': out.get('kind', 'reply'), 'reply': out['reply'],
+                        'sources': out.get('sources') or []})
     except Exception as e:
         log_exc('[AGENTS/CHAT]', e)
         return jsonify({'ok': False, 'error': str(e)}), 200
+
+
+@bp.route('/api/agents/chat/stream', methods=['POST'])
+@auth_required
+def chat_stream():
+    """Streaming variant of /api/agents/chat — NDJSON frames, one JSON
+    object per line:
+        {"type":"meta", "kind":"dispatch"|"reply", ...}   first frame
+        {"type":"delta", "text":"..."}                    reply text chunks
+        {"type":"done", "reply": "<full text>"}           terminal frame
+        {"type":"error", "error":"..."}                   terminal on failure
+    The frontend falls back to the blocking route if this one fails, so
+    an environment that buffers/breaks streaming loses latency, not
+    functionality."""
+    body = request.get_json(silent=True) or {}
+    message = (body.get('message') or '').strip()
+    if not message:
+        return jsonify({'ok': False, 'error': 'message is required'}), 400
+    context = body.get('context') if isinstance(body.get('context'), dict) else {}
+    workshop_id = body.get('workshop_id')
+    try:
+        workshop_id = int(workshop_id) if workshop_id else None
+    except (TypeError, ValueError):
+        workshop_id = None
+
+    from app.services import copilot_thread
+    user_key = _user_key()
+    history = copilot_thread.recent_for_model(workshop_id, user_key) if workshop_id else None
+    if workshop_id:
+        copilot_thread.kickoff_summary_update(workshop_id, user_key)
+
+    def _frames():
+        import json as _json
+        try:
+            for event, payload in agent_catalog.route_chat_stream(
+                    message, context, workshop_id=workshop_id, history=history):
+                if event == 'meta':
+                    yield _json.dumps({'type': 'meta', **payload}) + '\n'
+                elif event == 'delta':
+                    yield _json.dumps({'type': 'delta', 'text': payload}) + '\n'
+                elif event == 'done':
+                    yield _json.dumps({'type': 'done', **payload}) + '\n'
+        except Exception as e:
+            log_exc('[AGENTS/CHAT/STREAM]', e)
+            yield _json.dumps({'type': 'error', 'error': str(e)}) + '\n'
+
+    resp = Response(stream_with_context(_frames()), mimetype='application/x-ndjson')
+    # Defensive: tell any intermediary (Next.js dev proxy, nginx) not to
+    # buffer the stream into one big flush at the end.
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['X-Accel-Buffering'] = 'no'
+    return resp
+
+
+@bp.route('/api/agents/copilot/messages', methods=['GET'])
+@auth_required
+def get_copilot_history():
+    """Restores CopilotPanel.jsx's thread on open — one conversation per
+    (workshop, signed-in user); see app/services/copilot_thread.py."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import copilot_thread
+    return jsonify({'ok': True, 'messages': copilot_thread.list_messages(workshop_id, _user_key())})
+
+
+@bp.route('/api/agents/copilot/messages', methods=['POST'])
+@auth_required
+def append_copilot_message():
+    """Called by CopilotPanel.jsx after every user/assistant turn so the
+    conversation survives closing the panel or reloading the page."""
+    body = request.get_json(silent=True) or {}
+    workshop_id = body.get('workshop_id')
+    try:
+        workshop_id = int(workshop_id) if workshop_id else None
+    except (TypeError, ValueError):
+        workshop_id = None
+    message = body.get('message')
+    if not workshop_id or not isinstance(message, dict):
+        return jsonify({'ok': False, 'error': 'workshop_id and message are required'}), 400
+    from app.services import copilot_thread
+    copilot_thread.append_message(workshop_id, _user_key(), message)
+    return jsonify({'ok': True})
+
+
+@bp.route('/api/agents/copilot/messages', methods=['DELETE'])
+@auth_required
+def clear_copilot_history():
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import copilot_thread
+    copilot_thread.clear(workshop_id, _user_key())
+    return jsonify({'ok': True})
+
+
+@bp.route('/api/agents/copilot/meta', methods=['GET'])
+@auth_required
+def copilot_meta():
+    """Header/chip data for CopilotPanel: how many source documents ground
+    it, the corpus intent line, and 3 corpus-specific suggested questions.
+    Cache-only (workshop_contexts — kept warm by the post-upload refresh);
+    an empty result just means nothing has been ingested yet."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import workshop_context
+    return jsonify({'ok': True, **workshop_context.get_meta(workshop_id)})
+
+
+@bp.route('/api/agents/search', methods=['GET'])
+@auth_required
+def search_artifacts():
+    """The header search bar: one query across this workshop's source
+    documents AND generated artifacts, two ways at once —
+      * name match (substring, no LLM/embedding cost), and
+      * semantic content match (one query embedding + FAISS lookup over
+        the same scoped index Copilot grounds on).
+    -> {ok, results: [{doc_id, name, origin: 'source'|'generated',
+        match: 'name'|'content', snippet?}]} — name matches first,
+    deduped by doc_id."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    q = (request.args.get('q') or '').strip()
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    if len(q) < 2:
+        return jsonify({'ok': True, 'results': []})
+
+    from app.services import generated_docs
+    results: list[dict] = []
+    seen: set[str] = set()
+    ql = q.lower()
+
+    for d in prepare_docs.list_docs(workshop_id):
+        if ql in (d['name'] or '').lower():
+            results.append({'doc_id': d['doc_id'], 'name': d['name'], 'origin': 'source', 'match': 'name'})
+            seen.add(d['doc_id'])
+    for d in generated_docs.list_docs(workshop_id):
+        if ql in (d['name'] or '').lower():
+            results.append({'doc_id': d['doc_id'], 'name': d['name'], 'origin': 'generated', 'match': 'name'})
+            seen.add(d['doc_id'])
+
+    try:
+        from app.services import rag
+        if rag.is_enabled():
+            for h in rag.retrieve(q, k=6, workflow_id=str(workshop_id), tag='[AGENTS/SEARCH]'):
+                raw_id = h.get('doc_id') or ''
+                if raw_id.startswith('prepare-doc:'):
+                    doc_id, origin = raw_id[len('prepare-doc:'):], 'source'
+                elif raw_id.startswith('gdoc:'):
+                    doc_id, origin = raw_id[len('gdoc:'):], 'generated'
+                else:
+                    continue
+                if doc_id in seen:
+                    continue
+                seen.add(doc_id)
+                meta = h.get('meta') or {}
+                results.append({'doc_id': doc_id, 'name': meta.get('label') or 'document',
+                                'origin': origin, 'match': 'content',
+                                'snippet': (h.get('text') or '')[:140].strip()})
+    except Exception as e:
+        log.info('[AGENTS/SEARCH] semantic search skipped (%s)', e.__class__.__name__)
+
+    return jsonify({'ok': True, 'results': results[:10]})
 
 
 @bp.route('/api/agents/upload', methods=['POST'])
@@ -253,6 +454,16 @@ def upload():
         # down, no Bedrock creds) degrades the doc to 'failed' rather than
         # leaving it stuck on 'parsing' forever, but never raises.
         prepare_docs.set_status(workshop_id, doc_id, 'ingested' if (vector_ok or graph_ok) else 'failed')
+        # Warm the workshop-context cache (per-document distillation +
+        # corpus intent) NOW, on this same background thread's tail, so
+        # deepresearch/workflow/Copilot find it already built instead of
+        # paying the distillation on their first run. Incremental: only
+        # this new document gets an LLM call (see workshop_context.ensure).
+        try:
+            from app.services import workshop_context
+            workshop_context.refresh_async(workshop_id)
+        except Exception as e:
+            log.info('[AGENTS/UPLOAD] workshop-context refresh skipped (%s)', e.__class__.__name__)
 
     prepare_docs.set_status(workshop_id, record['doc_id'], 'parsing')
     import threading
@@ -282,6 +493,44 @@ def list_generated_docs():
         return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
     from app.services import generated_docs
     return jsonify({'ok': True, 'docs': generated_docs.list_docs(workshop_id)})
+
+
+@bp.route('/api/agents/analysis-progress', methods=['GET'])
+@auth_required
+def analysis_progress():
+    """Live step trace for the Pre-Workshop Analysis agent — the 'analyze'
+    counterpart of /research-chain (same research_runs ledger, separated
+    by agent_id so the two progress UIs never clobber each other).
+    Polled by the dashboard while a run is in flight."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.postgres import session_scope
+    from app.postgres.repositories import research_runs as repo
+    with session_scope() as s:
+        if s is None:
+            return jsonify({'ok': True, 'run': None})
+        row = repo.get_latest_for_workshop(s, workshop_id, agent_id='analyze')
+        if row is None:
+            return jsonify({'ok': True, 'run': None})
+        run = {'run_id': row.run_id, 'status': row.status, 'steps': row.steps}
+    return jsonify({'ok': True, 'run': run})
+
+
+@bp.route('/api/agents/document/<doc_id>/analysis', methods=['GET'])
+@auth_required
+def get_generated_doc_analysis(doc_id):
+    """{ok, gaps, readiness, research_topics} for a persisted Pre-Workshop
+    Analysis document — backs the Artifacts grid's scorecard modal after
+    a reload. 404 when this doc has no analysis payload."""
+    workshop_id = request.args.get('workshop_id', type=int)
+    if not workshop_id:
+        return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
+    from app.services import generated_docs
+    payload = generated_docs.get_analysis(workshop_id, doc_id)
+    if payload is None:
+        return jsonify({'ok': False, 'error': 'no analysis for this document'}), 404
+    return jsonify({'ok': True, **payload})
 
 
 @bp.route('/api/agents/document/<doc_id>/diagram', methods=['GET'])
@@ -463,7 +712,8 @@ def delete_prepare_doc(doc_id):
     workshop_id = request.args.get('workshop_id', type=int)
     if not workshop_id:
         return jsonify({'ok': False, 'error': 'workshop_id query param is required'}), 400
-    ok = prepare_docs.delete(workshop_id, doc_id)
+    was_source = prepare_docs.delete(workshop_id, doc_id)
+    ok = was_source
     if not ok:
         from app.services import generated_docs
         ok = generated_docs.delete(workshop_id, doc_id)
@@ -472,6 +722,16 @@ def delete_prepare_doc(doc_id):
         graph_rag.delete_document(board_id=str(workshop_id), doc_id=doc_id)
     except Exception as e:
         log.info('[AGENTS/DOCUMENT/DELETE] graph cleanup skipped (%s)', e.__class__.__name__)
+    if was_source:
+        # A source document left the corpus — refresh the workshop-context
+        # cache so its distillation (and the corpus intent/suggestions)
+        # drop out. Incremental: removal costs no distill calls, only the
+        # small intent/suggestions recompute.
+        try:
+            from app.services import workshop_context
+            workshop_context.refresh_async(workshop_id)
+        except Exception as e:
+            log.info('[AGENTS/DOCUMENT/DELETE] context refresh skipped (%s)', e.__class__.__name__)
     return jsonify({'ok': ok})
 
 

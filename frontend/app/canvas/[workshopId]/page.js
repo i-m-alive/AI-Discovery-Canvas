@@ -5,6 +5,7 @@ import { useAuthedUser } from '../../lib/useAuthedUser';
 import { apiGet } from '../../lib/api';
 import CanvasApp from '../CanvasApp';
 import AppHeader from '../AppHeader';
+import CopilotPanel from '../CopilotPanel';
 import PhaseTabs, { PHASES } from '../PhaseTabs';
 import PreWorkshopDashboard from '../preworkshop/PreWorkshopDashboard';
 import '../preworkshop/preworkshop.css';
@@ -24,6 +25,7 @@ export default function CanvasWorkshopPage({ params }) {
   const [workshop, setWorkshop] = useState(null);
   const [error, setError] = useState(null);
   const [phase, setPhase] = useState('prepare');
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -67,8 +69,12 @@ export default function CanvasWorkshopPage({ params }) {
 
   return (
     <div className="pw-shell">
-      <AppHeader user={user} workshop={workshop} projectId={workshop.project_id} />
+      <AppHeader user={user} workshop={workshop} workshopId={Number(workshopId)}
+        projectId={workshop.project_id} onOpenCopilot={() => setCopilotOpen(true)} />
       <PhaseTabs active={phase} onSelect={setPhase} />
+      <CopilotPanel open={copilotOpen} onClose={() => setCopilotOpen(false)}
+        workshopId={Number(workshopId)} zone={activePhase.label}
+        contextName={workshop.project_name || workshop.name} />
       {activePhase.dashboard ? (
         <PreWorkshopDashboard
           user={user}

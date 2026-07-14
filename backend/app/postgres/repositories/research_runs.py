@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.postgres.models.research_run import ResearchRun
 
 
-def create(session: Session, *, run_id: str, workshop_id: int) -> ResearchRun:
-    row = ResearchRun(run_id=run_id, workshop_id=workshop_id, status='running', steps=[], insights=[])
+def create(session: Session, *, run_id: str, workshop_id: int, agent_id: str = 'deepresearch') -> ResearchRun:
+    row = ResearchRun(run_id=run_id, workshop_id=workshop_id, agent_id=agent_id,
+                      status='running', steps=[], insights=[])
     session.add(row)
     session.flush()
     return row
@@ -21,9 +22,11 @@ def get(session: Session, run_id: str) -> Optional[ResearchRun]:
     return session.get(ResearchRun, run_id)
 
 
-def get_latest_for_workshop(session: Session, workshop_id: int) -> Optional[ResearchRun]:
+def get_latest_for_workshop(session: Session, workshop_id: int,
+                            agent_id: str = 'deepresearch') -> Optional[ResearchRun]:
     return session.execute(
-        select(ResearchRun).where(ResearchRun.workshop_id == workshop_id)
+        select(ResearchRun).where(ResearchRun.workshop_id == workshop_id,
+                                  ResearchRun.agent_id == agent_id)
         .order_by(ResearchRun.created_at.desc()).limit(1)
     ).scalars().first()
 

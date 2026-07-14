@@ -98,6 +98,28 @@ def exists(uri_or_key: str) -> bool:
     return get_bytes(uri_or_key) is not None
 
 
+def delete_key(uri_or_key: str) -> bool:
+    """Remove the key pointer so the content is no longer reachable under
+    this key. The underlying blob is deliberately left in place — the
+    store is content-addressed, so the same blob may back other keys
+    (blob garbage collection is a separate concern). Returns True if a
+    pointer existed."""
+    if not uri_or_key:
+        return False
+    root = _local_root()
+    key = (uri_or_key[len(_URI_LOCAL_PREFIX):]
+           if uri_or_key.startswith(_URI_LOCAL_PREFIX) else _norm_key(uri_or_key))
+    ptr = root / 'keys' / key
+    with _lock:
+        if not ptr.exists():
+            return False
+        try:
+            ptr.unlink()
+            return True
+        except OSError:
+            return False
+
+
 def snapshot_dir(key: str, dir_path: str,
                  exclude: tuple[str, ...] = _DEFAULT_EXCLUDE) -> Optional[str]:
     """tar.gz a directory tree and store it under `key`. Returns the uri, or

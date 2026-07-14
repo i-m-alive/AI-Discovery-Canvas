@@ -26,6 +26,8 @@ const PATHS = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5z"/><path d="M9.5 18.5a2.5 2.5 0 0 0 5 0"/>',
   moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/>',
   chevronDown: '<path d="M6 9l6 6 6-6"/>',
+  send: '<path d="M5 12l15-7-6.5 15-2.5-5.5z"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
 };
 
 export function Icon({ name, ...rest }) {

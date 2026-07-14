@@ -51,6 +51,11 @@ class GeneratedDoc(Base):
     diagram_xml:    Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     diagram_json:   Mapped[Optional[list]] = mapped_column(JSONBColumn, nullable=True)
     next_steps:     Mapped[Optional[list]] = mapped_column(JSONBColumn, nullable=True)
+    # 'analyze' output: {gaps: [...], readiness: [...], research_topics:
+    # [...]} — the machine-readable half of the Pre-Workshop Analysis
+    # (body_html carries the same content as prose), persisted so the
+    # Artifacts grid's scorecard modal survives a reload.
+    analysis_json:  Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
 
     __table_args__ = (
         Index('ix_generated_docs_workshop', 'workshop_id'),

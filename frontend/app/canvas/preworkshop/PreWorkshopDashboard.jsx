@@ -1,14 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import { Icon } from '../../lib/icons';
+import AnalysisModal from './AnalysisModal';
 import DocumentViewer from './DocumentViewer';
 import DrawioViewer from './DrawioViewer';
 import '../../shared.css';
 
 const STATUS_LABEL = { queued: 'Queued', parsing: 'Parsing', ingested: 'Ingested', failed: 'Failed' };
 const RESEARCH_STEP_ORDER = ['ingest', 'extract', 'queries', 'search', 'synthesize'];
+// The 'analyze' pipeline's steps (see agent_catalog._ANALYSIS_STEPS).
+const ANALYSIS_STEP_ORDER = ['inventory', 'perdoc', 'synth', 'readiness'];
+const ANALYSIS_STEP_LABELS = {
+  inventory: 'Inventory documents', perdoc: 'Analyze each document',
+  synth: 'Synthesize analysis', readiness: 'Score readiness',
+};
 
 function timeAgo(unixSeconds) {
   if (!unixSeconds) return '';
@@ -46,6 +53,29 @@ function fileType(name) {
   return FILE_TYPE[ext] || { label: ext ? ext.toUpperCase() : 'FILE', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' };
 }
 
+// One consistent card per sidebar agent: icon + name, an eye button that
+// reveals a plain-language explainer (what it does / reads / produces —
+// for anyone who doesn't know the agent yet), then the agent's own
+// controls as children.
+function AgentCard({ icon, title, info, children }) {
+  const [showInfo, setShowInfo] = useState(false);
+  return (
+    <div className="pw-agent-card">
+      <div className="pw-agent-card-head">
+        <span className="pw-agent-card-ic"><Icon name={icon} /></span>
+        <span className="pw-agent-card-ttl">{title}</span>
+        <button className={'pw-info-btn' + (showInfo ? ' on' : '')}
+          onClick={() => setShowInfo((v) => !v)}
+          title={showInfo ? 'Hide explanation' : 'What does this agent do?'}>
+          <Icon name="eye" />
+        </button>
+      </div>
+      {showInfo && <div className="pw-agent-info">{info}</div>}
+      {children}
+    </div>
+  );
+}
+
 function downloadDrawio(diagram, name) {
   if (!diagram || !diagram.xml) return;
   const blob = new Blob([diagram.xml], { type: 'application/xml' });
@@ -67,10 +97,26 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
   const [runningWorkflow, setRunningWorkflow] = useState(false);
   const [workflowResult, setWorkflowResult] = useState(null);
   const [runningSummary, setRunningSummary] = useState(false);
+  const [runningArtifact, setRunningArtifact] = useState(false);
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
+  // One optional instruction for the sidebar agents — "what specifically
+  // you want" — sent as `extra` to whichever agent gets run (the backend
+  // already threads it into every agent's prompt as EXTRA INPUT).
+  const [agentPrompt, setAgentPrompt] = useState('');
+  // The unified Artifact Analyst card's two toggles: corpus scope
+  // (sources = client uploads only; all = uploads + generated docs) and
+  // mode (answer = cited Q&A via artifact_analyst; assess = readiness
+  // pipeline via analyze). One card, two pipelines underneath.
+  const [analystScope, setAnalystScope] = useState('sources');
+  const [analystMode, setAnalystMode] = useState('answer');
+  const [analysisChain, setAnalysisChain] = useState(null);   // live steps while running
+  const [analysisModal, setAnalysisModal] = useState(null);   // {name, analysis, docId}
   const [instruction, setInstruction] = useState('');
   const [error, setError] = useState('');
   const [viewerDocId, setViewerDocId] = useState(null);
   const [viewerDiagram, setViewerDiagram] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);   // {docId, name} while the dialog is open
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef(null);
 
   const loadDocs = useCallback(async () => {
@@ -135,14 +181,19 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
     }
   }
 
-  async function runResearch() {
+  // `overrideText` lets the analysis scorecard's "Research this" hand a
+  // gap topic straight into the normal deep-research flow. Guarded by a
+  // typeof check because onClick handlers receive the event object.
+  async function runResearch(overrideText) {
+    const text = (typeof overrideText === 'string' ? overrideText : instruction).trim();
+    if (typeof overrideText === 'string') setInstruction(overrideText);
     setRunningResearch(true);
     setError('');
     setRun({ status: 'running', steps: [], insights: [], confidence: null });
     try {
       const res = await apiPost('/api/agents/run', {
         agent_id: 'deepresearch', workshop_id: workshopId, context: { zone: 'Pre-Workshop' },
-        extra: instruction.trim() || undefined,
+        extra: text || undefined,
       });
       if (!res.ok) setError(res.error || 'research failed');
       await loadChain();
@@ -157,9 +208,11 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
   async function runWorkflow() {
     setRunningWorkflow(true);
     setError('');
+    setWorkflowResult(null);
     try {
       const res = await apiPost('/api/agents/run', {
         agent_id: 'workflow', workshop_id: workshopId, context: { zone: 'Pre-Workshop' },
+        extra: agentPrompt.trim() || undefined,
       });
       if (!res.ok) { setError(res.error || 'workflow build failed'); return; }
       setWorkflowResult(res.draft);
@@ -177,6 +230,7 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
     try {
       const res = await apiPost('/api/agents/run', {
         agent_id: 'summarize_docs', workshop_id: workshopId, context: { zone: 'Pre-Workshop' },
+        extra: agentPrompt.trim() || undefined,
       });
       if (!res.ok) { setError(res.error || 'summary failed'); return; }
       loadArtifacts();
@@ -185,6 +239,85 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
       setError(err.message || 'summary failed');
     } finally {
       setRunningSummary(false);
+    }
+  }
+
+  async function runArtifactAnalyst() {
+    setRunningArtifact(true);
+    setError('');
+    try {
+      const res = await apiPost('/api/agents/run', {
+        agent_id: 'artifact_analyst', workshop_id: workshopId, context: { zone: 'Pre-Workshop' },
+        extra: agentPrompt.trim() || undefined,
+        options: { scope: analystScope },
+      });
+      if (!res.ok) { setError(res.error || 'artifact analysis failed'); return; }
+      loadArtifacts();
+      if (res.draft && res.draft.node && res.draft.node.docId) setViewerDocId(res.draft.node.docId);
+    } catch (err) {
+      setError(err.message || 'artifact analysis failed');
+    } finally {
+      setRunningArtifact(false);
+    }
+  }
+
+  async function runAnalyze() {
+    setRunningAnalysis(true);
+    setError('');
+    setAnalysisChain([]);
+    // Live progress: the analyze pipeline logs its steps into the same
+    // ledger the Research Chain uses (agent_id-separated) — poll while
+    // the run is in flight so the sidebar shows real stages, not a spinner.
+    const poll = setInterval(async () => {
+      try {
+        const data = await apiGet(`/api/agents/analysis-progress?workshop_id=${workshopId}`);
+        if (data && data.ok && data.run) setAnalysisChain(data.run.steps || []);
+      } catch { /* transient */ }
+    }, 1500);
+    try {
+      const res = await apiPost('/api/agents/run', {
+        agent_id: 'analyze', workshop_id: workshopId, context: { zone: 'Pre-Workshop' },
+        extra: agentPrompt.trim() || undefined,
+        options: { scope: analystScope },
+      });
+      if (!res.ok) { setError(res.error || 'analysis failed'); return; }
+      loadArtifacts();
+      setAnalysisModal({
+        name: res.draft.title,
+        analysis: res.draft.analysis || { gaps: [], readiness: [], research_topics: [] },
+        docId: res.draft.node && res.draft.node.docId,
+      });
+    } catch (err) {
+      setError(err.message || 'analysis failed');
+    } finally {
+      clearInterval(poll);
+      setAnalysisChain(null);
+      setRunningAnalysis(false);
+    }
+  }
+
+  // Two-step delete: the trash button only opens the confirmation dialog
+  // (a real modal, not window.confirm); performDelete does the work.
+  function deleteArtifact(docId, name) {
+    setConfirmDelete({ docId, name });
+  }
+
+  async function performDelete() {
+    if (!confirmDelete) return;
+    const { docId } = confirmDelete;
+    setDeleting(true);
+    setError('');
+    try {
+      const res = await apiDelete(`/api/agents/document/${docId}?workshop_id=${workshopId}`);
+      if (!res.ok) { setError(res.error || 'delete failed'); return; }
+      if (viewerDocId === docId) setViewerDocId(null);
+      loadDocs();
+      loadArtifacts();
+    } catch (err) {
+      setError(err.message || 'delete failed');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(null);
     }
   }
 
@@ -202,7 +335,8 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
 
   return (
     <div className="pw-dash">
-      <SourceArtifactsPanel docs={docs} onAdd={() => fileInputRef.current?.click()} onView={setViewerDocId} />
+      <SourceArtifactsPanel docs={docs} onAdd={() => fileInputRef.current?.click()} onView={setViewerDocId}
+        onDelete={deleteArtifact} />
       <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleUpload}
             accept=".pdf,.docx,.xlsx,.pptx,.csv,.html,.txt,.md,.zip" />
 
@@ -227,15 +361,17 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
           run={run} onRun={runResearch} running={runningResearch} insights={insights}
           instruction={instruction} onInstructionChange={setInstruction} workshopId={workshopId}
           onViewDiagram={setViewerDiagram}
+          onRunWorkflow={runWorkflow} runningWorkflow={runningWorkflow} workflowResult={workflowResult}
+          onRunSummarize={runSummarize} runningSummary={runningSummary}
+          onRunAnalyze={runAnalyze} runningAnalysis={runningAnalysis} analysisChain={analysisChain}
+          onRunArtifact={runArtifactAnalyst} runningArtifact={runningArtifact}
+          agentPrompt={agentPrompt} onAgentPromptChange={setAgentPrompt}
+          analystScope={analystScope} onScopeChange={setAnalystScope}
+          analystMode={analystMode} onModeChange={setAnalystMode}
         />
 
         <ArtifactsGrid docs={docs} artifacts={artifacts} onView={setViewerDocId} workshopId={workshopId}
-          onViewDiagram={setViewerDiagram} />
-
-        <WorkflowPanel onRun={runWorkflow} running={runningWorkflow} result={workflowResult}
-          onViewDiagram={setViewerDiagram} />
-
-        <SummarizePanel onRun={runSummarize} running={runningSummary} />
+          onViewDiagram={setViewerDiagram} onViewAnalysis={setAnalysisModal} onDelete={deleteArtifact} />
       </div>
 
       {viewerDocId && (
@@ -244,11 +380,52 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
       {viewerDiagram && (
         <DrawioViewer xml={viewerDiagram.xml} title={viewerDiagram.title} onClose={() => setViewerDiagram(null)} />
       )}
+      {analysisModal && (
+        <AnalysisModal
+          name={analysisModal.name}
+          analysis={analysisModal.analysis}
+          onClose={() => setAnalysisModal(null)}
+          onResearch={(topic) => { setAnalysisModal(null); runResearch(topic); }}
+          onOpenDoc={analysisModal.docId ? () => { setAnalysisModal(null); setViewerDocId(analysisModal.docId); } : null}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmDeleteModal
+          name={confirmDelete.name}
+          busy={deleting}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={performDelete}
+        />
+      )}
     </div>
   );
 }
 
-function SourceArtifactsPanel({ docs, onAdd, onView }) {
+// Delete confirmation — a real dialog in the app's own visual language
+// instead of window.confirm: names the document, states exactly what
+// deletion means, and makes Cancel the easy path.
+function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }) {
+  return (
+    <div className="pw-modal-backdrop pw-confirm-backdrop" onClick={busy ? undefined : onCancel}>
+      <div className="pw-confirm" onClick={(e) => e.stopPropagation()}>
+        <div className="pw-confirm-ic"><Icon name="trash" /></div>
+        <div className="pw-confirm-ttl">Delete “{name}”?</div>
+        <div className="pw-confirm-txt">
+          It will be removed from this workshop, from search, and from what grounds
+          Copilot and the agents. This can't be undone.
+        </div>
+        <div className="pw-confirm-actions">
+          <button className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className="btn pw-btn-danger" onClick={onConfirm} disabled={busy}>
+            <Icon name="trash" />{busy ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SourceArtifactsPanel({ docs, onAdd, onView, onDelete }) {
   const ingestedCount = docs.filter((d) => d.status === 'ingested').length;
   return (
     <section className="pw-sources">
@@ -285,6 +462,9 @@ function SourceArtifactsPanel({ docs, onAdd, onView }) {
                 <span className={`pw-pill pw-pill-${d.status}`}>{STATUS_LABEL[d.status] || d.status}</span>
                 <button className="pw-view-btn" onClick={() => onView(d.doc_id)} title="View document">
                   <Icon name="search" />
+                </button>
+                <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(d.doc_id, d.name)} title="Delete document">
+                  <Icon name="trash" />
                 </button>
               </li>
             );
@@ -341,7 +521,13 @@ function AskResearchAgent({ workshopId }) {
   );
 }
 
-function ResearchPanel({ run, onRun, running, insights, instruction, onInstructionChange, workshopId, onViewDiagram }) {
+function ResearchPanel({
+  run, onRun, running, insights, instruction, onInstructionChange, workshopId, onViewDiagram,
+  onRunWorkflow, runningWorkflow, workflowResult, onRunSummarize, runningSummary,
+  onRunAnalyze, runningAnalysis, analysisChain,
+  onRunArtifact, runningArtifact, agentPrompt, onAgentPromptChange,
+  analystScope, onScopeChange, analystMode, onModeChange,
+}) {
   const steps = (run && run.steps) || [];
   const stepByKey = Object.fromEntries(steps.map((s) => [s.step, s]));
   const status = run ? run.status : null;
@@ -352,8 +538,8 @@ function ResearchPanel({ run, onRun, running, insights, instruction, onInstructi
         <div className="pw-panel-ttl">
           <span className="pw-ic pw-ic-accent"><Icon name="globe" /></span>
           <div>
-            <div className="pw-h3">Context-Grounded Web Research</div>
-            <div className="pw-sub">Agentic research chained on the ingested client artifacts</div>
+            <div className="pw-h3">Grounded Web Researcher</div>
+            <div className="pw-sub">Open web, anchored to your artifacts — market, competitor, regulatory and benchmark signal tied to this engagement, never generic</div>
           </div>
         </div>
         {status === 'done' ? (
@@ -457,13 +643,144 @@ function ResearchPanel({ run, onRun, running, insights, instruction, onInstructi
             );
           })}
           <AskResearchAgent workshopId={workshopId} />
+
+          <div className="pw-chain-agents">
+            <div className="pw-chain-agents-ttl">More agents</div>
+
+            <label className="pw-agent-prompt-lbl" htmlFor="pw-agent-prompt">
+              Instruction <span>(optional — applies to whichever agent you run)</span>
+            </label>
+            <textarea
+              id="pw-agent-prompt"
+              className="pw-instruction pw-agent-prompt" rows={2}
+              placeholder='e.g. "compare the two audit findings"'
+              value={agentPrompt}
+              onChange={(e) => onAgentPromptChange(e.target.value)}
+            />
+
+            <AgentCard icon="doc-text" title="Artifact Analyst" info={(
+              <>
+                <div className="pw-agent-info-row"><b>What it does</b>Answers questions about — or assesses the readiness of — this workshop's documents. Type a question in the instruction box above, or run it blank for a full digest.</div>
+                <div className="pw-agent-info-row"><b>Scope</b>“Sources only” reads client uploads exclusively. “All artifacts” also reads AI-generated documents, always cited with a “generated:” prefix so provenance stays visible.</div>
+                <div className="pw-agent-info-row"><b>Mode</b>“Answer” gives a cited reply and refuses anything the documents don't cover. “Assess” finds gaps, scores readiness, and routes each gap to an action.</div>
+                <div className="pw-agent-info-row"><b>Produces</b>A saved, Word-exportable document — plus a scorecard in Assess mode.</div>
+              </>
+            )}>
+              <div className="pw-seg" role="group" aria-label="Corpus scope">
+                <button className={'pw-seg-btn' + (analystScope === 'sources' ? ' on' : '')}
+                  onClick={() => onScopeChange('sources')} title="Client uploads only — nothing we generated">
+                  Sources only
+                </button>
+                <button className={'pw-seg-btn' + (analystScope === 'all' ? ' on' : '')}
+                  onClick={() => onScopeChange('all')} title="Uploads + every generated artifact in this workshop">
+                  All artifacts
+                </button>
+              </div>
+              <div className="pw-seg" role="group" aria-label="Mode">
+                <button className={'pw-seg-btn' + (analystMode === 'answer' ? ' on' : '')}
+                  onClick={() => onModeChange('answer')} title="Q&A / digest — cited, refuses beyond the corpus">
+                  Answer
+                </button>
+                <button className={'pw-seg-btn' + (analystMode === 'assess' ? ' on' : '')}
+                  onClick={() => onModeChange('assess')} title="Readiness assessment — gaps, scorecard, routed actions">
+                  Assess
+                </button>
+              </div>
+              <button className="btn solid pw-chain-agent-btn"
+                onClick={analystMode === 'answer' ? onRunArtifact : onRunAnalyze}
+                disabled={analystMode === 'answer' ? runningArtifact : runningAnalysis}>
+                <Icon name={analystMode === 'answer' ? 'doc-text' : 'target'} />
+                {analystMode === 'answer'
+                  ? (runningArtifact ? 'Answering…' : 'Run Analyst')
+                  : (runningAnalysis ? 'Assessing…' : 'Run Assessment')}
+              </button>
+              <div className="pw-chain-agent-sub">
+                {analystMode === 'answer'
+                  ? (analystScope === 'sources'
+                    ? 'Cited answers, strictly from the uploaded client documents.'
+                    : 'Cited answers from uploads + generated artifacts (provenance-marked).')
+                  : (analystScope === 'sources'
+                    ? 'Gaps, scorecard and routed actions — client corpus alone.'
+                    : 'Gaps, scorecard and routed actions — prior research included as labeled evidence.')}
+              </div>
+              {runningAnalysis && analysisChain && (
+                <ul className="cop-chain pw-mini-chain">
+                  {ANALYSIS_STEP_ORDER.map((key, si) => {
+                    const s = analysisChain.find((x) => x.step === key);
+                    const isCurrent = !s && (si === 0 || analysisChain.find((x) => x.step === ANALYSIS_STEP_ORDER[si - 1]));
+                    return (
+                      <li key={key} className={s ? 'done' : isCurrent ? 'pending' : ''}>
+                        <span className="cop-chain-dot">{s ? <Icon name="check" /> : si + 1}</span>
+                        <div>
+                          <div className="cop-chain-label">{ANALYSIS_STEP_LABELS[key]}</div>
+                          {s && s.detail && <div className="cop-chain-detail">{s.detail}</div>}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </AgentCard>
+
+            <AgentCard icon="flow" title="Build Workflow" info={(
+              <>
+                <div className="pw-agent-info-row"><b>What it does</b>Proposes the process worth automating or streamlining, drawn from everything this workshop knows.</div>
+                <div className="pw-agent-info-row"><b>Reads</b>Every ingested document plus every research document produced so far.</div>
+                <div className="pw-agent-info-row"><b>Produces</b>A swimlane diagram (view/edit in draw.io) and an ordered next-steps checklist, saved to Artifacts.</div>
+              </>
+            )}>
+              <button className="btn solid pw-chain-agent-btn" onClick={onRunWorkflow} disabled={runningWorkflow}>
+                <Icon name="flow" />{runningWorkflow ? 'Building…' : 'Build workflow'}
+              </button>
+              {workflowResult && (
+                <div className="pw-chain-agent-result">
+                  <div className="pw-chain-agent-result-ttl"><Icon name="check-circle" />{workflowResult.title}</div>
+                  {workflowResult.diagram && (
+                    <button className="pw-view-btn" onClick={() => onViewDiagram({ xml: workflowResult.diagram.xml, title: workflowResult.title })}>
+                      <Icon name="flow" />View diagram
+                    </button>
+                  )}
+                  {(workflowResult.next_steps || []).length > 0 && (
+                    <ul className="pw-checklist pw-checklist-compact">
+                      {workflowResult.next_steps.map((s, i) => (
+                        <li key={i}>
+                          <span className="pw-check-box" />
+                          <div>
+                            <div className="pw-check-step">{s.step}</div>
+                            <div className="pw-check-why">{s.why}</div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </AgentCard>
+
+            <AgentCard icon="list" title="Summarize Documents" info={(
+              <>
+                <div className="pw-agent-info-row"><b>What it does</b>Condenses everything into one consolidated summary — key points across all sources, with what's still unknown.</div>
+                <div className="pw-agent-info-row"><b>Reads</b>Every ingested document plus every research document produced so far.</div>
+                <div className="pw-agent-info-row"><b>Produces</b>A saved, Word-exportable summary in Artifacts below.</div>
+              </>
+            )}>
+              <button className="btn solid pw-chain-agent-btn" onClick={onRunSummarize} disabled={runningSummary}>
+                <Icon name="list" />{runningSummary ? 'Summarizing…' : 'Summarize documents'}
+              </button>
+            </AgentCard>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram }) {
+function artifactBucket(a) {
+  return a.category || a.agent_id || 'Other';
+}
+
+function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram, onViewAnalysis, onDelete }) {
+  const [filter, setFilter] = useState('all');
   const isEmpty = docs.length === 0 && artifacts.length === 0;
 
   async function viewDiagram(a) {
@@ -473,14 +790,56 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram }) {
     } catch { /* no diagram, or transient — the button just does nothing */ }
   }
 
+  async function viewAnalysis(a) {
+    try {
+      const data = await apiGet(`/api/agents/document/${a.doc_id}/analysis?workshop_id=${workshopId}`);
+      if (data && data.ok) {
+        onViewAnalysis({
+          name: a.name,
+          analysis: { gaps: data.gaps || [], readiness: data.readiness || [], research_topics: data.research_topics || [] },
+          docId: a.doc_id,
+        });
+      }
+    } catch { /* no analysis, or transient */ }
+  }
+
+  const bucketCounts = {};
+  artifacts.forEach((a) => { const b = artifactBucket(a); bucketCounts[b] = (bucketCounts[b] || 0) + 1; });
+  const buckets = Object.keys(bucketCounts).sort();
+  const filters = [
+    { key: 'all', label: 'All', count: docs.length + artifacts.length },
+    { key: 'source', label: 'Source', count: docs.length },
+    ...buckets.map((b) => ({ key: b, label: b, count: bucketCounts[b] })),
+  ];
+
+  const visibleDocs = filter === 'all' || filter === 'source' ? docs : [];
+  const visibleArtifacts = filter === 'all' ? artifacts
+    : filter === 'source' ? []
+    : artifacts.filter((a) => artifactBucket(a) === filter);
+  const isFilteredEmpty = visibleDocs.length === 0 && visibleArtifacts.length === 0;
+
   return (
     <section className="pw-artifacts">
-      <div className="pw-h3 pw-artifacts-ttl"><Icon name="list" />Pre-Workshop Artifacts</div>
+      <div className="pw-artifacts-head">
+        <div className="pw-h3 pw-artifacts-ttl"><Icon name="list" />Pre-Workshop Artifacts</div>
+        {!isEmpty && (
+          <div className="pw-artifact-filters">
+            {filters.map((f) => (
+              <button key={f.key} className={'pw-filter-chip' + (filter === f.key ? ' on' : '')}
+                onClick={() => setFilter(f.key)}>
+                {f.label}<span className="pw-filter-count">{f.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {isEmpty ? (
         <div className="pw-empty">Nothing here yet — ingest a document or run an agent above.</div>
+      ) : isFilteredEmpty ? (
+        <div className="pw-empty">Nothing matches this filter.</div>
       ) : (
         <div className="pw-artifact-grid">
-          {docs.map((d) => {
+          {visibleDocs.map((d) => {
             const ft = fileType(d.name);
             return (
               <div className="pw-artifact-card" key={`doc-${d.doc_id}`}>
@@ -493,16 +852,21 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram }) {
                 <div className="pw-artifact-desc">{d.chars} characters extracted</div>
                 <div className="pw-artifact-foot">
                   <span>{d.uploaded_by || 'you'} · {timeAgo(d.uploaded_at)}</span>
+                </div>
+                <div className="pw-artifact-actions">
                   <button className="pw-view-btn" onClick={() => onView(d.doc_id)} title="View document"><Icon name="search" />View</button>
+                  <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(d.doc_id, d.name)} title="Delete document"><Icon name="trash" /></button>
                 </div>
               </div>
             );
           })}
-          {artifacts.map((a) => (
+          {visibleArtifacts.map((a) => (
             <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
               <div className="pw-artifact-top">
                 <span className="pw-ic pw-ic-accent">
-                  <Icon name={a.agent_id === 'workflow' ? 'flow' : a.agent_id === 'summarize_docs' ? 'doc-text' : 'search'} />
+                  <Icon name={a.agent_id === 'workflow' ? 'flow'
+                    : (a.agent_id === 'summarize_docs' || a.agent_id === 'artifact_analyst') ? 'doc-text'
+                    : a.agent_id === 'analyze' ? 'target' : 'search'} />
                 </span>
                 <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
               </div>
@@ -526,10 +890,18 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram }) {
                     <Icon name="flow" />Diagram
                   </button>
                 )}
+                {a.has_analysis && (
+                  <button className="pw-view-btn" onClick={() => viewAnalysis(a)} title="Readiness scorecard & routed gaps">
+                    <Icon name="target" />Scorecard
+                  </button>
+                )}
                 <a className="pw-view-btn" href={`/api/agents/document/${a.doc_id}/word?workshop_id=${workshopId}`}
                   download title="Download as Word (.docx)">
                   <Icon name="upload" />Word
                 </a>
+                <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(a.doc_id, a.name)} title="Delete artifact">
+                  <Icon name="trash" />
+                </button>
               </div>
             </div>
           ))}
@@ -539,68 +911,3 @@ function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagram }) {
   );
 }
 
-function WorkflowPanel({ onRun, running, result, onViewDiagram }) {
-  return (
-    <section className="pw-panel pw-workflow">
-      <div className="pw-panel-head">
-        <div className="pw-panel-ttl">
-          <span className="pw-ic pw-ic-indigo"><Icon name="flow" /></span>
-          <div>
-            <div className="pw-h3">Build Workflow</div>
-            <div className="pw-sub">Grounded on every ingested document + every research document produced so far</div>
-          </div>
-        </div>
-      </div>
-      <button className="btn solid pw-run-btn" onClick={onRun} disabled={running}>
-        <Icon name="flow" />{running ? 'Building…' : 'Build workflow'}
-      </button>
-      {result && (
-        <div className="pw-workflow-result">
-          <div className="pw-h3">{result.title}</div>
-          {result.diagram && (
-            <div className="pw-diagram-actions">
-              <button className="btn solid" onClick={() => onViewDiagram({ xml: result.diagram.xml, title: result.title })}>
-                <Icon name="flow" />View diagram
-              </button>
-              <button className="btn" onClick={() => downloadDrawio(result.diagram, result.title)}>
-                <Icon name="upload" />Download .drawio
-              </button>
-            </div>
-          )}
-          {(result.next_steps || []).length > 0 && (
-            <ul className="pw-checklist">
-              {result.next_steps.map((s, i) => (
-                <li key={i}>
-                  <span className="pw-check-box" />
-                  <div>
-                    <div className="pw-check-step">{s.step}</div>
-                    <div className="pw-check-why">{s.why}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function SummarizePanel({ onRun, running }) {
-  return (
-    <section className="pw-panel pw-workflow">
-      <div className="pw-panel-head">
-        <div className="pw-panel-ttl">
-          <span className="pw-ic pw-ic-teal"><Icon name="doc-text" /></span>
-          <div>
-            <div className="pw-h3">Summarize Documents</div>
-            <div className="pw-sub">One consolidated summary of every ingested document + every research document — appears below in Pre-Workshop Artifacts, downloadable as Word</div>
-          </div>
-        </div>
-      </div>
-      <button className="btn solid pw-run-btn" onClick={onRun} disabled={running}>
-        <Icon name="doc-text" />{running ? 'Summarizing…' : 'Summarize documents'}
-      </button>
-    </section>
-  );
-}

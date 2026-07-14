@@ -127,23 +127,44 @@ def get_original_bytes(workshop_id: int, doc_id: str) -> bytes | None:
 
 
 def get_all_texts(workshop_id: int) -> list[dict]:
-    """[{name, text}, ...] for every registered document — what the
-    deep-research pipeline consumes (the full persistent corpus for this
-    workshop, not just whatever happens to be attached in the current
-    browser tab)."""
+    """[{doc_id, name, text}, ...] for every registered document — what
+    the deep-research pipeline and the workshop-context cache consume
+    (the full persistent corpus for this workshop, not just whatever
+    happens to be attached in the current browser tab). doc_id is what
+    lets app.services.workshop_context reuse cached per-document
+    distillations instead of re-analysing unchanged documents."""
     out = []
     for d in list_docs(workshop_id):
         text = get_text(workshop_id, d['doc_id'])
         if text:
-            out.append({'name': d['name'], 'text': text})
+            out.append({'doc_id': d['doc_id'], 'name': d['name'], 'text': text})
     return out
 
 
 def delete(workshop_id: int, doc_id: str) -> bool:
+    """Remove the document EVERYWHERE it lives, not just its Postgres row:
+    the extracted text and original file bytes in the object store, and
+    its vectors in the RAG index (a deleted document must stop surfacing
+    in Copilot answers and header search immediately). Graph cleanup and
+    the workshop-context cache refresh are the route's job — they need
+    imports this module shouldn't own."""
     with session_scope() as s:
         if s is None:
             return False
         row = repo.get(s, doc_id)
         if row is None or row.workshop_id != workshop_id:
             return False
-        return repo.delete(s, doc_id)
+        ok = repo.delete(s, doc_id)
+    if not ok:
+        return False
+    for key in (_obj_key(workshop_id, doc_id), _file_key(workshop_id, doc_id)):
+        try:
+            object_store.delete_key(key)
+        except Exception as e:
+            log.info('[PREPARE_DOCS] object-store cleanup skipped for %s (%s)', key, e.__class__.__name__)
+    try:
+        from app.services import rag
+        rag.delete_document(f'prepare-doc:{doc_id}')
+    except Exception as e:
+        log.info('[PREPARE_DOCS] RAG de-index skipped for %s (%s)', doc_id, e.__class__.__name__)
+    return True
