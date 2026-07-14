@@ -18,25 +18,100 @@ const ANALYSIS_STEP_LABELS = {
   synth: 'Synthesize analysis', readiness: 'Score readiness',
 };
 
+export function timeAgo(unixSeconds) {
+  if (!unixSeconds) return '';
+  const diff = Math.max(0, Date.now() / 1000 - unixSeconds);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  return `${Math.floor(diff / 86400)} d ago`;
+}
+
+function extOf(name) {
+  const m = /\.([a-z0-9]+)$/i.exec(name || '');
+  return m ? m[1].toLowerCase() : '';
+}
+
+// One badge label + icon + accent color per file type — "proper icons
+// for each component" extends to per-file-type recognition too, not
+// just section headers.
+const FILE_TYPE = {
+  pdf: { label: 'PDF', icon: 'doc-text', bg: '#fbecea', fg: '#c0463b' },
+  docx: { label: 'DOCX', icon: 'doc-text', bg: '#eaf2fb', fg: '#2f6fb3' },
+  doc: { label: 'DOC', icon: 'doc-text', bg: '#eaf2fb', fg: '#2f6fb3' },
+  xlsx: { label: 'XLSX', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
+  xls: { label: 'XLS', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
+  csv: { label: 'CSV', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
+  pptx: { label: 'PPTX', icon: 'flow', bg: '#faf1e1', fg: '#c9881f' },
+  ppt: { label: 'PPT', icon: 'flow', bg: '#faf1e1', fg: '#c9881f' },
+  txt: { label: 'TXT', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' },
+  md: { label: 'MD', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' },
+  html: { label: 'HTML', icon: 'doc-text', bg: '#efedfd', fg: '#6d5ce8' },
+  zip: { label: 'ZIP', icon: 'folder', bg: '#efedfd', fg: '#6d5ce8' },
+};
+export function fileType(name) {
+  // Imported meeting transcripts (named 'Teams — {subject}' by the
+  // import-transcript route, mirroring the backend's _is_transcript)
+  // get their own source-type identity, not a generic FILE badge.
+  if (/^teams\s*—|^teams\s*--|\.vtt$|transcript/i.test(name || '')) {
+    return { label: 'TRANSCRIPT', icon: 'users', bg: '#efedfd', fg: '#6d5ce8' };
+  }
+  const ext = extOf(name);
+  return FILE_TYPE[ext] || { label: ext ? ext.toUpperCase() : 'FILE', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' };
+}
+
+// One consistent header for every agent panel below the hero catalogue:
+// icon + name + description, an eye button that reveals a plain-language
+// explainer (what it does / reads / produces), then the agent's own
 // One consistent card per sidebar agent: icon + name, an eye button that
 // reveals a plain-language explainer (what it does / reads / produces —
 // for anyone who doesn't know the agent yet), then the agent's own
 // controls as children.
-export function AgentCard({ icon, title, info, children }) {
-  const [showInfo, setShowInfo] = useState(false);
+function AgentPanelHead({ icon, title, sub, showInfo, onToggleInfo }) {
   return (
-    <div className="pw-agent-card">
-      <div className="pw-agent-card-head">
-        <span className="pw-agent-card-ic"><Icon name={icon} /></span>
-        <span className="pw-agent-card-ttl">{title}</span>
-        <button className={'pw-info-btn' + (showInfo ? ' on' : '')}
-          onClick={() => setShowInfo((v) => !v)}
-          title={showInfo ? 'Hide explanation' : 'What does this agent do?'}>
-          <Icon name="eye" />
-        </button>
+    <div className="pw-panel-head">
+      <div className="pw-panel-ttl">
+        <span className="pw-ic pw-ic-accent"><Icon name={icon} /></span>
+        <div>
+          <div className="pw-h3">{title}</div>
+          <div className="pw-sub">{sub}</div>
+        </div>
       </div>
-      {showInfo && <div className="pw-agent-info">{info}</div>}
-      {children}
+      <button className={'pw-info-btn' + (showInfo ? ' on' : '')}
+        onClick={onToggleInfo}
+        title={showInfo ? 'Hide explanation' : 'What does this agent do?'}>
+        <Icon name="eye" />
+      </button>
+    </div>
+  );
+}
+
+// The catalogue that fronts all 4 pre-workshop agents (hero, right of the
+// stat tiles) — pick one, its own working panel then renders where the
+// research panel below used to live unconditionally.
+const AGENT_CATALOGUE = [
+  { id: 'artifact_analyst', icon: 'doc-text', label: 'Artifact Analyst', desc: 'Cited answers on your documents' },
+  { id: 'workflow', icon: 'flow', label: 'Build Workflow', desc: 'Diagram + next steps' },
+  { id: 'summarize_docs', icon: 'list', label: 'Summarize Documents', desc: 'One consolidated summary' },
+  { id: 'deepresearch', icon: 'globe', label: 'Grounded Web Researcher', desc: 'Cited, grounded web research' },
+];
+
+function AgentCatalogue({ selected, onSelect }) {
+  return (
+    <div className="pw-catalogue">
+      <div className="pw-catalogue-ttl">Agent Catalogue</div>
+      <div className="pw-catalogue-list">
+        {AGENT_CATALOGUE.map((a) => (
+          <button key={a.id} className={'pw-catalogue-btn' + (selected === a.id ? ' on' : '')}
+            onClick={() => onSelect(a.id)}>
+            <span className="pw-catalogue-btn-ic"><Icon name={a.icon} /></span>
+            <span className="pw-catalogue-btn-txt">
+              <span className="pw-catalogue-btn-label">{a.label}</span>
+              <span className="pw-catalogue-btn-desc">{a.desc}</span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -52,6 +127,15 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
   const [runningSummary, setRunningSummary] = useState(false);
   const [runningArtifact, setRunningArtifact] = useState(false);
   const [runningAnalysis, setRunningAnalysis] = useState(false);
+  // Which of the 4 catalogue agents is showing its working panel in the
+  // slot the Grounded Web Researcher used to occupy unconditionally.
+  const [selectedAgent, setSelectedAgent] = useState('deepresearch');
+  // Last completed output for the two agents that don't already have a
+  // dedicated result shape (workflowResult below covers Build Workflow) —
+  // lets their panel show what it produced plus a "Run Again" action
+  // instead of only popping the document viewer.
+  const [artifactResult, setArtifactResult] = useState(null); // {title, docId}
+  const [summaryResult, setSummaryResult] = useState(null);   // {title, docId}
   // One optional instruction for the sidebar agents — "what specifically
   // you want" — sent as `extra` to whichever agent gets run (the backend
   // already threads it into every agent's prompt as EXTRA INPUT).
@@ -187,7 +271,7 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
       });
       if (!res.ok) { setError(res.error || 'summary failed'); return; }
       loadArtifacts();
-      if (res.draft && res.draft.node && res.draft.node.docId) setViewerDocId(res.draft.node.docId);
+      setSummaryResult({ title: res.draft.title, docId: res.draft.node && res.draft.node.docId });
     } catch (err) {
       setError(err.message || 'summary failed');
     } finally {
@@ -206,7 +290,7 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
       });
       if (!res.ok) { setError(res.error || 'artifact analysis failed'); return; }
       loadArtifacts();
-      if (res.draft && res.draft.node && res.draft.node.docId) setViewerDocId(res.draft.node.docId);
+      setArtifactResult({ title: res.draft.title, docId: res.draft.node && res.draft.node.docId });
     } catch (err) {
       setError(err.message || 'artifact analysis failed');
     } finally {
@@ -300,33 +384,55 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
 
       <div className="pw-scroll">
         <header className="pw-hero">
-          <div className="pw-hero-txt">
-            <h1>Pre-Workshop Intelligence</h1>
-            <p>Ingest everything the client shared, internalize it, then run context-grounded web
-              research. The research agent reasons from the ingested artifacts — not generic queries.</p>
+          <div className="pw-hero-main">
+            <div className="pw-hero-txt">
+              <h1>Pre-Workshop Intelligence</h1>
+              <p>Ingest everything the client shared, internalize it, then run context-grounded web
+                research. The research agent reasons from the ingested artifacts — not generic queries.</p>
+            </div>
+            <div className="pw-stats">
+              <div className="pw-stat"><div className="pw-stat-num">{docs.length}</div><div className="pw-stat-lbl">Sources ingested</div></div>
+              <div className="pw-stat"><div className="pw-stat-num">{webCount}</div><div className="pw-stat-lbl">Web sources</div></div>
+              <div className="pw-stat"><div className="pw-stat-num">{confidence != null ? confidence + '%' : '—'}</div><div className="pw-stat-lbl">Research confidence</div></div>
+              <div className="pw-stat"><div className="pw-stat-num">{artifacts.length}</div><div className="pw-stat-lbl">Draft artifacts</div></div>
+            </div>
           </div>
-          <div className="pw-stats">
-            <div className="pw-stat"><div className="pw-stat-num">{docs.length}</div><div className="pw-stat-lbl">Sources ingested</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{webCount}</div><div className="pw-stat-lbl">Web sources</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{confidence != null ? confidence + '%' : '—'}</div><div className="pw-stat-lbl">Research confidence</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{artifacts.length}</div><div className="pw-stat-lbl">Draft artifacts</div></div>
-          </div>
+          <AgentCatalogue selected={selectedAgent} onSelect={setSelectedAgent} />
         </header>
 
         {error && <div className="app-error pw-err">⚠ {error}</div>}
 
-        <ResearchPanel
-          run={run} onRun={runResearch} running={runningResearch} insights={insights}
-          instruction={instruction} onInstructionChange={setInstruction} workshopId={workshopId}
-          onViewDiagram={setViewerDiagram}
-          onRunWorkflow={runWorkflow} runningWorkflow={runningWorkflow} workflowResult={workflowResult}
-          onRunSummarize={runSummarize} runningSummary={runningSummary}
-          onRunAnalyze={runAnalyze} runningAnalysis={runningAnalysis} analysisChain={analysisChain}
-          onRunArtifact={runArtifactAnalyst} runningArtifact={runningArtifact}
-          agentPrompt={agentPrompt} onAgentPromptChange={setAgentPrompt}
-          analystScope={analystScope} onScopeChange={setAnalystScope}
-          analystMode={analystMode} onModeChange={setAnalystMode}
-        />
+        {selectedAgent === 'deepresearch' && (
+          <ResearchPanel
+            run={run} onRun={runResearch} running={runningResearch} insights={insights}
+            instruction={instruction} onInstructionChange={setInstruction} workshopId={workshopId}
+            onViewDiagram={setViewerDiagram}
+          />
+        )}
+        {selectedAgent === 'artifact_analyst' && (
+          <ArtifactAnalystWorkspace
+            analystScope={analystScope} onScopeChange={setAnalystScope}
+            analystMode={analystMode} onModeChange={setAnalystMode}
+            agentPrompt={agentPrompt} onAgentPromptChange={setAgentPrompt}
+            onRunArtifact={runArtifactAnalyst} runningArtifact={runningArtifact} artifactResult={artifactResult}
+            onRunAnalyze={runAnalyze} runningAnalysis={runningAnalysis} analysisChain={analysisChain}
+            onViewDoc={setViewerDocId}
+          />
+        )}
+        {selectedAgent === 'workflow' && (
+          <BuildWorkflowWorkspace
+            agentPrompt={agentPrompt} onAgentPromptChange={setAgentPrompt}
+            onRunWorkflow={runWorkflow} runningWorkflow={runningWorkflow} workflowResult={workflowResult}
+            onViewDiagram={setViewerDiagram}
+          />
+        )}
+        {selectedAgent === 'summarize_docs' && (
+          <SummarizeDocsWorkspace
+            agentPrompt={agentPrompt} onAgentPromptChange={setAgentPrompt}
+            onRunSummarize={runSummarize} runningSummary={runningSummary} summaryResult={summaryResult}
+            onViewDoc={setViewerDocId}
+          />
+        )}
 
         <ArtifactsGrid docs={docs} artifacts={artifacts} onView={setViewerDocId} workshopId={workshopId}
           onViewDiagram={setViewerDiagram} onViewAnalysis={setAnalysisModal} onDelete={deleteArtifact}
@@ -384,6 +490,71 @@ export function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }) {
   );
 }
 
+export function SourceArtifactsPanel({ docs, onAdd, onView, onDelete, extraAction, emptyText }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const ingestedCount = docs.filter((d) => d.status === 'ingested').length;
+  return (
+    <div className={'pw-sources-wrap' + (collapsed ? ' collapsed' : '')}>
+      <button className={'pw-collapse-btn' + (collapsed ? ' flipped' : '')} onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Expand Source Artifacts' : 'Collapse Source Artifacts'}>
+        <Icon name="caretL" />
+      </button>
+      <section className={'pw-sources' + (collapsed ? ' collapsed' : '')}>
+      <div className="pw-panel-head">
+        {!collapsed && (
+          <div className="pw-panel-ttl">
+            <span className="pw-ic pw-ic-accent"><Icon name="upload" /></span>
+            <div>
+              <div className="pw-h3">Source Artifacts</div>
+              <div className="pw-sub">{ingestedCount}/{docs.length} ingested · grounding the copilot</div>
+            </div>
+          </div>
+        )}
+        {collapsed && <span className="pw-ic pw-ic-accent"><Icon name="upload" /></span>}
+        {!collapsed && <button className="btn" onClick={onAdd}><Icon name="plus" />Add</button>}
+      </div>
+      {!collapsed && (
+        <>
+          {extraAction}
+          <div className="pw-dropzone" onClick={onAdd}>
+            <Icon name="upload" />
+            <div className="pw-dz-txt">Drop docs, PDFs, videos, links, transcripts</div>
+            <div className="pw-dz-sub">SharePoint · Teams · Granola · GitHub · draw.io</div>
+          </div>
+          {docs.length === 0 ? (
+            <div className="pw-empty">{emptyText || (<>No sources yet for this phase.<br />Ingest client artifacts to ground the research.</>)}</div>
+          ) : (
+            <ul className="pw-source-list">
+              {docs.map((d) => {
+                const ft = fileType(d.name);
+                return (
+                  <li key={d.doc_id} className="pw-source-item">
+                    <span className="pw-source-icon" style={{ background: ft.bg, color: ft.fg }}>
+                      <Icon name={ft.icon} />
+                    </span>
+                    <div className="pw-source-main">
+                      <div className="pw-source-name">{d.name}</div>
+                      <div className="pw-source-meta">{ft.label} · {d.chars} chars</div>
+                    </div>
+                    <span className={`pw-pill pw-pill-${d.status}`}>{STATUS_LABEL[d.status] || d.status}</span>
+                    <button className="pw-view-btn" onClick={() => onView(d.doc_id)} title="View document">
+                      <Icon name="search" />
+                    </button>
+                    <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(d.doc_id, d.name)} title="Delete document">
+                      <Icon name="trash" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
+      )}
+      </section>
+    </div>
+  );
+}
+
 function AskResearchAgent({ workshopId }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState('');
@@ -432,10 +603,6 @@ function AskResearchAgent({ workshopId }) {
 
 function ResearchPanel({
   run, onRun, running, insights, instruction, onInstructionChange, workshopId, onViewDiagram,
-  onRunWorkflow, runningWorkflow, workflowResult, onRunSummarize, runningSummary,
-  onRunAnalyze, runningAnalysis, analysisChain,
-  onRunArtifact, runningArtifact, agentPrompt, onAgentPromptChange,
-  analystScope, onScopeChange, analystMode, onModeChange,
 }) {
   const steps = (run && run.steps) || [];
   const stepByKey = Object.fromEntries(steps.map((s) => [s.step, s]));
@@ -552,134 +719,232 @@ function ResearchPanel({
             );
           })}
           <AskResearchAgent workshopId={workshopId} />
-
-          <div className="pw-chain-agents">
-            <div className="pw-chain-agents-ttl">More agents</div>
-
-            <label className="pw-agent-prompt-lbl" htmlFor="pw-agent-prompt">
-              Instruction <span>(optional — applies to whichever agent you run)</span>
-            </label>
-            <textarea
-              id="pw-agent-prompt"
-              className="pw-instruction pw-agent-prompt" rows={2}
-              placeholder='e.g. "compare the two audit findings"'
-              value={agentPrompt}
-              onChange={(e) => onAgentPromptChange(e.target.value)}
-            />
-
-            <AgentCard icon="doc-text" title="Artifact Analyst" info={(
-              <>
-                <div className="pw-agent-info-row"><b>What it does</b>Answers questions about — or assesses the readiness of — this workshop's documents. Type a question in the instruction box above, or run it blank for a full digest.</div>
-                <div className="pw-agent-info-row"><b>Scope</b>“Sources only” reads client uploads exclusively. “All artifacts” also reads AI-generated documents, always cited with a “generated:” prefix so provenance stays visible.</div>
-                <div className="pw-agent-info-row"><b>Mode</b>“Answer” gives a cited reply and refuses anything the documents don't cover. “Assess” finds gaps, scores readiness, and routes each gap to an action.</div>
-                <div className="pw-agent-info-row"><b>Produces</b>A saved, Word-exportable document — plus a scorecard in Assess mode.</div>
-              </>
-            )}>
-              <div className="pw-seg" role="group" aria-label="Corpus scope">
-                <button className={'pw-seg-btn' + (analystScope === 'sources' ? ' on' : '')}
-                  onClick={() => onScopeChange('sources')} title="Client uploads only — nothing we generated">
-                  Sources only
-                </button>
-                <button className={'pw-seg-btn' + (analystScope === 'all' ? ' on' : '')}
-                  onClick={() => onScopeChange('all')} title="Uploads + every generated artifact in this workshop">
-                  All artifacts
-                </button>
-              </div>
-              <div className="pw-seg" role="group" aria-label="Mode">
-                <button className={'pw-seg-btn' + (analystMode === 'answer' ? ' on' : '')}
-                  onClick={() => onModeChange('answer')} title="Q&A / digest — cited, refuses beyond the corpus">
-                  Answer
-                </button>
-                <button className={'pw-seg-btn' + (analystMode === 'assess' ? ' on' : '')}
-                  onClick={() => onModeChange('assess')} title="Readiness assessment — gaps, scorecard, routed actions">
-                  Assess
-                </button>
-              </div>
-              <button className="btn solid pw-chain-agent-btn"
-                onClick={analystMode === 'answer' ? onRunArtifact : onRunAnalyze}
-                disabled={analystMode === 'answer' ? runningArtifact : runningAnalysis}>
-                <Icon name={analystMode === 'answer' ? 'doc-text' : 'target'} />
-                {analystMode === 'answer'
-                  ? (runningArtifact ? 'Answering…' : 'Run Analyst')
-                  : (runningAnalysis ? 'Assessing…' : 'Run Assessment')}
-              </button>
-              <div className="pw-chain-agent-sub">
-                {analystMode === 'answer'
-                  ? (analystScope === 'sources'
-                    ? 'Cited answers, strictly from the uploaded client documents.'
-                    : 'Cited answers from uploads + generated artifacts (provenance-marked).')
-                  : (analystScope === 'sources'
-                    ? 'Gaps, scorecard and routed actions — client corpus alone.'
-                    : 'Gaps, scorecard and routed actions — prior research included as labeled evidence.')}
-              </div>
-              {runningAnalysis && analysisChain && (
-                <ul className="cop-chain pw-mini-chain">
-                  {ANALYSIS_STEP_ORDER.map((key, si) => {
-                    const s = analysisChain.find((x) => x.step === key);
-                    const isCurrent = !s && (si === 0 || analysisChain.find((x) => x.step === ANALYSIS_STEP_ORDER[si - 1]));
-                    return (
-                      <li key={key} className={s ? 'done' : isCurrent ? 'pending' : ''}>
-                        <span className="cop-chain-dot">{s ? <Icon name="check" /> : si + 1}</span>
-                        <div>
-                          <div className="cop-chain-label">{ANALYSIS_STEP_LABELS[key]}</div>
-                          {s && s.detail && <div className="cop-chain-detail">{s.detail}</div>}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </AgentCard>
-
-            <AgentCard icon="flow" title="Build Workflow" info={(
-              <>
-                <div className="pw-agent-info-row"><b>What it does</b>Proposes the process worth automating or streamlining, drawn from everything this workshop knows.</div>
-                <div className="pw-agent-info-row"><b>Reads</b>Every ingested document plus every research document produced so far.</div>
-                <div className="pw-agent-info-row"><b>Produces</b>A swimlane diagram (view/edit in draw.io) and an ordered next-steps checklist, saved to Artifacts.</div>
-              </>
-            )}>
-              <button className="btn solid pw-chain-agent-btn" onClick={onRunWorkflow} disabled={runningWorkflow}>
-                <Icon name="flow" />{runningWorkflow ? 'Building…' : 'Build workflow'}
-              </button>
-              {workflowResult && (
-                <div className="pw-chain-agent-result">
-                  <div className="pw-chain-agent-result-ttl"><Icon name="check-circle" />{workflowResult.title}</div>
-                  {workflowResult.diagram && (
-                    <button className="pw-view-btn" onClick={() => onViewDiagram({ xml: workflowResult.diagram.xml, title: workflowResult.title })}>
-                      <Icon name="flow" />View diagram
-                    </button>
-                  )}
-                  {(workflowResult.next_steps || []).length > 0 && (
-                    <ul className="pw-checklist pw-checklist-compact">
-                      {workflowResult.next_steps.map((s, i) => (
-                        <li key={i}>
-                          <span className="pw-check-box" />
-                          <div>
-                            <div className="pw-check-step">{s.step}</div>
-                            <div className="pw-check-why">{s.why}</div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </AgentCard>
-
-            <AgentCard icon="list" title="Summarize Documents" info={(
-              <>
-                <div className="pw-agent-info-row"><b>What it does</b>Condenses everything into one consolidated summary — key points across all sources, with what's still unknown.</div>
-                <div className="pw-agent-info-row"><b>Reads</b>Every ingested document plus every research document produced so far.</div>
-                <div className="pw-agent-info-row"><b>Produces</b>A saved, Word-exportable summary in Artifacts below.</div>
-              </>
-            )}>
-              <button className="btn solid pw-chain-agent-btn" onClick={onRunSummarize} disabled={runningSummary}>
-                <Icon name="list" />{runningSummary ? 'Summarizing…' : 'Summarize documents'}
-              </button>
-            </AgentCard>
-          </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+// Artifact Analyst's own working panel — occupies the same slot as the
+// other 3 catalogue agents once selected. "Answer" runs the cited Q&A
+// pipeline; "Assess" runs the readiness pipeline (its output is the
+// existing AnalysisModal scorecard, opened by the caller).
+function ArtifactAnalystWorkspace({
+  analystScope, onScopeChange, analystMode, onModeChange,
+  agentPrompt, onAgentPromptChange,
+  onRunArtifact, runningArtifact, artifactResult,
+  onRunAnalyze, runningAnalysis, analysisChain,
+  onViewDoc,
+}) {
+  const [showInfo, setShowInfo] = useState(false);
+  return (
+    <section className="pw-panel pw-research">
+      <AgentPanelHead icon="doc-text" title="Artifact Analyst"
+        sub="Answers questions about — or assesses the readiness of — this workshop's documents."
+        showInfo={showInfo} onToggleInfo={() => setShowInfo((v) => !v)} />
+      {showInfo && (
+        <div className="pw-agent-info">
+          <div className="pw-agent-info-row"><b>Scope</b>“Sources only” reads client uploads exclusively. “All artifacts” also reads AI-generated documents, always cited with a “generated:” prefix so provenance stays visible.</div>
+          <div className="pw-agent-info-row"><b>Mode</b>“Answer” gives a cited reply and refuses anything the documents don't cover. “Assess” finds gaps, scores readiness, and routes each gap to an action.</div>
+          <div className="pw-agent-info-row"><b>Produces</b>A saved, Word-exportable document — plus a scorecard in Assess mode.</div>
+        </div>
+      )}
+
+      <div className="pw-seg" role="group" aria-label="Corpus scope">
+        <button className={'pw-seg-btn' + (analystScope === 'sources' ? ' on' : '')}
+          onClick={() => onScopeChange('sources')} title="Client uploads only — nothing we generated">
+          Sources only
+        </button>
+        <button className={'pw-seg-btn' + (analystScope === 'all' ? ' on' : '')}
+          onClick={() => onScopeChange('all')} title="Uploads + every generated artifact in this workshop">
+          All artifacts
+        </button>
+      </div>
+      <div className="pw-seg" role="group" aria-label="Mode">
+        <button className={'pw-seg-btn' + (analystMode === 'answer' ? ' on' : '')}
+          onClick={() => onModeChange('answer')} title="Q&A / digest — cited, refuses beyond the corpus">
+          Answer
+        </button>
+        <button className={'pw-seg-btn' + (analystMode === 'assess' ? ' on' : '')}
+          onClick={() => onModeChange('assess')} title="Readiness assessment — gaps, scorecard, routed actions">
+          Assess
+        </button>
+      </div>
+
+      <label className="pw-instruction-lbl" htmlFor="pw-agent-prompt">
+        Instruction <span>(optional — e.g. a specific question, or leave blank for a full digest)</span>
+      </label>
+      <textarea
+        id="pw-agent-prompt"
+        className="pw-instruction" rows={2}
+        placeholder='e.g. "compare the two audit findings"'
+        value={agentPrompt}
+        onChange={(e) => onAgentPromptChange(e.target.value)}
+      />
+
+      <button className="btn solid pw-run-btn"
+        onClick={analystMode === 'answer' ? onRunArtifact : onRunAnalyze}
+        disabled={analystMode === 'answer' ? runningArtifact : runningAnalysis}>
+        <Icon name={analystMode === 'answer' ? 'doc-text' : 'target'} />
+        {analystMode === 'answer'
+          ? (runningArtifact ? 'Answering…' : 'Run Analyst')
+          : (runningAnalysis ? 'Assessing…' : 'Run Assessment')}
+      </button>
+      <div className="pw-chain-agent-sub">
+        {analystMode === 'answer'
+          ? (analystScope === 'sources'
+            ? 'Cited answers, strictly from the uploaded client documents.'
+            : 'Cited answers from uploads + generated artifacts (provenance-marked).')
+          : (analystScope === 'sources'
+            ? 'Gaps, scorecard and routed actions — client corpus alone.'
+            : 'Gaps, scorecard and routed actions — prior research included as labeled evidence.')}
+      </div>
+      {runningAnalysis && analysisChain && (
+        <ul className="cop-chain pw-mini-chain">
+          {ANALYSIS_STEP_ORDER.map((key, si) => {
+            const s = analysisChain.find((x) => x.step === key);
+            const isCurrent = !s && (si === 0 || analysisChain.find((x) => x.step === ANALYSIS_STEP_ORDER[si - 1]));
+            return (
+              <li key={key} className={s ? 'done' : isCurrent ? 'pending' : ''}>
+                <span className="cop-chain-dot">{s ? <Icon name="check" /> : si + 1}</span>
+                <div>
+                  <div className="cop-chain-label">{ANALYSIS_STEP_LABELS[key]}</div>
+                  {s && s.detail && <div className="cop-chain-detail">{s.detail}</div>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {analystMode === 'answer' && (
+        artifactResult ? (
+          <div className="pw-chain-agent-result">
+            <div className="pw-chain-agent-result-ttl"><Icon name="check-circle" />{artifactResult.title}</div>
+            {artifactResult.docId && (
+              <button className="pw-view-btn" onClick={() => onViewDoc(artifactResult.docId)}>
+                <Icon name="search" />View document
+              </button>
+            )}
+            <button className="btn pw-run-again-btn" onClick={onRunArtifact} disabled={runningArtifact}>
+              <Icon name="refresh" />{runningArtifact ? 'Answering…' : 'Run Again'}
+            </button>
+          </div>
+        ) : (
+          <div className="pw-empty">No answer yet — run the analyst to get a cited reply.</div>
+        )
+      )}
+    </section>
+  );
+}
+
+// Build Workflow's own working panel.
+function BuildWorkflowWorkspace({ agentPrompt, onAgentPromptChange, onRunWorkflow, runningWorkflow, workflowResult, onViewDiagram }) {
+  const [showInfo, setShowInfo] = useState(false);
+  return (
+    <section className="pw-panel pw-research">
+      <AgentPanelHead icon="flow" title="Build Workflow"
+        sub="Proposes the process worth automating or streamlining, drawn from everything this workshop knows."
+        showInfo={showInfo} onToggleInfo={() => setShowInfo((v) => !v)} />
+      {showInfo && (
+        <div className="pw-agent-info">
+          <div className="pw-agent-info-row"><b>Reads</b>Every ingested document plus every research document produced so far.</div>
+          <div className="pw-agent-info-row"><b>Produces</b>A swimlane diagram (view/edit in draw.io) and an ordered next-steps checklist, saved to Artifacts.</div>
+        </div>
+      )}
+
+      <label className="pw-instruction-lbl" htmlFor="pw-agent-prompt">
+        Instruction <span>(optional — e.g. focus on one specific process)</span>
+      </label>
+      <textarea
+        id="pw-agent-prompt"
+        className="pw-instruction" rows={2}
+        placeholder='e.g. "focus on the intake-to-fulfillment process"'
+        value={agentPrompt}
+        onChange={(e) => onAgentPromptChange(e.target.value)}
+      />
+
+      <button className="btn solid pw-run-btn" onClick={onRunWorkflow} disabled={runningWorkflow}>
+        <Icon name="flow" />{runningWorkflow ? 'Building…' : 'Build workflow'}
+      </button>
+
+      {workflowResult ? (
+        <div className="pw-chain-agent-result">
+          <div className="pw-chain-agent-result-ttl"><Icon name="check-circle" />{workflowResult.title}</div>
+          {workflowResult.diagram && (
+            <button className="pw-view-btn" onClick={() => onViewDiagram({ xml: workflowResult.diagram.xml, title: workflowResult.title })}>
+              <Icon name="flow" />View diagram
+            </button>
+          )}
+          {(workflowResult.next_steps || []).length > 0 && (
+            <ul className="pw-checklist pw-checklist-compact">
+              {workflowResult.next_steps.map((s, i) => (
+                <li key={i}>
+                  <span className="pw-check-box" />
+                  <div>
+                    <div className="pw-check-step">{s.step}</div>
+                    <div className="pw-check-why">{s.why}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button className="btn pw-run-again-btn" onClick={onRunWorkflow} disabled={runningWorkflow}>
+            <Icon name="refresh" />{runningWorkflow ? 'Building…' : 'Run Again'}
+          </button>
+        </div>
+      ) : (
+        <div className="pw-empty">No workflow yet — run Build Workflow to generate a swimlane diagram.</div>
+      )}
+    </section>
+  );
+}
+
+// Summarize Documents' own working panel.
+function SummarizeDocsWorkspace({ agentPrompt, onAgentPromptChange, onRunSummarize, runningSummary, summaryResult, onViewDoc }) {
+  const [showInfo, setShowInfo] = useState(false);
+  return (
+    <section className="pw-panel pw-research">
+      <AgentPanelHead icon="list" title="Summarize Documents"
+        sub="Condenses everything into one consolidated summary — key points across all sources, with what's still unknown."
+        showInfo={showInfo} onToggleInfo={() => setShowInfo((v) => !v)} />
+      {showInfo && (
+        <div className="pw-agent-info">
+          <div className="pw-agent-info-row"><b>Reads</b>Every ingested document plus every research document produced so far.</div>
+          <div className="pw-agent-info-row"><b>Produces</b>A saved, Word-exportable summary in Artifacts below.</div>
+        </div>
+      )}
+
+      <label className="pw-instruction-lbl" htmlFor="pw-agent-prompt">
+        Instruction <span>(optional — e.g. what to focus the summary on)</span>
+      </label>
+      <textarea
+        id="pw-agent-prompt"
+        className="pw-instruction" rows={2}
+        placeholder='e.g. "focus on open risks and unresolved questions"'
+        value={agentPrompt}
+        onChange={(e) => onAgentPromptChange(e.target.value)}
+      />
+
+      <button className="btn solid pw-run-btn" onClick={onRunSummarize} disabled={runningSummary}>
+        <Icon name="list" />{runningSummary ? 'Summarizing…' : 'Summarize documents'}
+      </button>
+
+      {summaryResult ? (
+        <div className="pw-chain-agent-result">
+          <div className="pw-chain-agent-result-ttl"><Icon name="check-circle" />{summaryResult.title}</div>
+          {summaryResult.docId && (
+            <button className="pw-view-btn" onClick={() => onViewDoc(summaryResult.docId)}>
+              <Icon name="search" />View document
+            </button>
+          )}
+          <button className="btn pw-run-again-btn" onClick={onRunSummarize} disabled={runningSummary}>
+            <Icon name="refresh" />{runningSummary ? 'Summarizing…' : 'Run Again'}
+          </button>
+        </div>
+      ) : (
+        <div className="pw-empty">No summary yet — run Summarize Documents to generate one.</div>
+      )}
     </section>
   );
 }
@@ -692,6 +957,7 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
                                 onDelete, onViewCapmap, title = 'Pre-Workshop Artifacts',
                                 zone, showSources = true }) {
   const [filter, setFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('grid');   // 'grid' | 'list'
   // `zone` scopes the grid to one engagement phase's generated artifacts
   // (list_docs now carries the producing agent's zone). Legacy rows with
   // no zone stay visible on the Pre-Workshop grid only — that's where
@@ -751,16 +1017,34 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
             ))}
           </div>
         )}
+        {!isEmpty && (
+          <div className="pw-seg pw-view-seg" role="group" aria-label="View">
+            <button className={'pw-seg-btn' + (viewMode === 'grid' ? ' on' : '')}
+              onClick={() => setViewMode('grid')} title="Grid view">
+              <Icon name="grid" />Grid
+            </button>
+            <button className={'pw-seg-btn' + (viewMode === 'list' ? ' on' : '')}
+              onClick={() => setViewMode('list')} title="List view">
+              <Icon name="list" />List
+            </button>
+          </div>
+        )}
       </div>
       {isEmpty ? (
         <div className="pw-empty">Nothing here yet — ingest a document or run an agent above.</div>
       ) : isFilteredEmpty ? (
         <div className="pw-empty">Nothing matches this filter.</div>
       ) : (
-        <div className="pw-artifact-grid">
+        <div className={viewMode === 'grid' ? 'pw-artifact-grid' : 'pw-artifact-list'}>
           {visibleDocs.map((d) => {
             const ft = fileType(d.name);
-            return (
+            const actions = (
+              <>
+                <button className="pw-view-btn" onClick={() => onView(d.doc_id)} title="View document"><Icon name="search" />View</button>
+                <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(d.doc_id, d.name)} title="Delete document"><Icon name="trash" /></button>
+              </>
+            );
+            return viewMode === 'grid' ? (
               <div className="pw-artifact-card" key={`doc-${d.doc_id}`}>
                 <div className="pw-artifact-top">
                   <span className="pw-ic" style={{ background: ft.bg, color: ft.fg }}><Icon name={ft.icon} /></span>
@@ -772,13 +1056,26 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
                 <div className="pw-artifact-foot">
                   <span>{d.uploaded_by || 'you'} · {timeAgo(d.uploaded_at)}</span>
                 </div>
-                <div className="pw-artifact-actions">
-                  <button className="pw-view-btn" onClick={() => onView(d.doc_id)} title="View document"><Icon name="search" />View</button>
-                  <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(d.doc_id, d.name)} title="Delete document"><Icon name="trash" /></button>
+                <div className="pw-artifact-actions">{actions}</div>
+              </div>
+            ) : (
+              <div className="pw-artifact-row" key={`doc-${d.doc_id}`}>
+                <span className="pw-artifact-row-icon" style={{ background: ft.bg, color: ft.fg }}><Icon name={ft.icon} /></span>
+                <div className="pw-artifact-row-main">
+                  <div className="pw-artifact-row-name">{d.name}</div>
+                  <div className="pw-artifact-row-meta">SOURCE · {ft.label} · {d.chars} chars · {d.uploaded_by || 'you'} · {timeAgo(d.uploaded_at)}</div>
                 </div>
+                <span className={`pw-pill pw-pill-${d.status}`}>{STATUS_LABEL[d.status] || d.status}</span>
+                <div className="pw-artifact-row-actions">{actions}</div>
               </div>
             );
           })}
+          {visibleArtifacts.map((a) => {
+            const icon = (a.agent_id === 'workflow' || a.agent_id === 'drawflow') ? 'flow'
+              : (a.agent_id === 'summarize_docs' || a.agent_id === 'artifact_analyst' || a.agent_id === 'brd') ? 'doc-text'
+              : (a.agent_id === 'analyze' || a.agent_id === 'capmap') ? 'target' : 'search';
+            const actions = (
+              <>
           {visibleArtifacts.map((a) => (
             <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
               <div className="pw-artifact-top">
@@ -832,9 +1129,48 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
                 <button className="pw-view-btn pw-del-btn" onClick={() => onDelete(a.doc_id, a.name)} title="Delete artifact">
                   <Icon name="trash" />
                 </button>
+              </>
+            );
+            return viewMode === 'grid' ? (
+              <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
+                <div className="pw-artifact-top">
+                  <span className="pw-ic pw-ic-accent"><Icon name={icon} /></span>
+                  <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
+                </div>
+                <div className="pw-artifact-cat">{(a.category || a.agent_id || '').toUpperCase()}</div>
+                <div className="pw-artifact-name">{a.name}</div>
+                {a.description && <div className="pw-artifact-desc">{a.description}</div>}
+                <div className="pw-artifact-tags">
+                  {(a.tags || []).map((t) => <span key={t} className="pw-tag">{t}</span>)}
+                </div>
+                <div className="pw-artifact-foot">
+                  <span>{a.author || 'BA Copilot'} · {timeAgo(a.created_at)}</span>
+                  <span className="pw-progress">
+                    <span className="pw-progress-track"><span className="pw-progress-fill" style={{ width: `${a.completion_pct || 0}%` }} /></span>
+                    {a.completion_pct || 0}%
+                  </span>
+                </div>
+                <div className="pw-artifact-actions">{actions}</div>
               </div>
-            </div>
-          ))}
+            ) : (
+              <div className="pw-artifact-row" key={`gen-${a.doc_id}`}>
+                <span className="pw-artifact-row-icon pw-ic-accent"><Icon name={icon} /></span>
+                <div className="pw-artifact-row-main">
+                  <div className="pw-artifact-row-name">{a.name}</div>
+                  <div className="pw-artifact-row-meta">
+                    {(a.category || a.agent_id || '').toUpperCase()} · {a.author || 'BA Copilot'} · {timeAgo(a.created_at)}
+                    {(a.tags || []).length > 0 && <> · {a.tags.join(', ')}</>}
+                  </div>
+                </div>
+                <span className="pw-progress pw-artifact-row-progress">
+                  <span className="pw-progress-track"><span className="pw-progress-fill" style={{ width: `${a.completion_pct || 0}%` }} /></span>
+                  {a.completion_pct || 0}%
+                </span>
+                <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
+                <div className="pw-artifact-row-actions">{actions}</div>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
