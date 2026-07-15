@@ -1,20 +1,95 @@
+/* ── Design tokens — the single source of truth for both themes ────────
+   Light is the default; dark is activated by data-theme="dark" on <html>
+   (set pre-paint by the inline script in app/layout.js, toggled by
+   lib/theme.js). html[data-theme="dark"] (0,1,1) deliberately outranks
+   the :root re-declarations still living in shared.css / canvas.css
+   (0,1,0), so the dark values win everywhere without touching import
+   order. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* surfaces */
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --panel-2: #f8f9fb;   /* subtle inset blocks (chain rail, result boxes) */
+  --panel-3: #f1f3f6;   /* chips, segmented controls, hover fills */
+
+  /* text */
+  --ink: #1f2733;
+  --ink-2: #3a4350;
+  --muted: #6b7280;
+  --faint: #9aa3ad;
+
+  /* strokes */
+  --line: #e4e8ee;
+  --line2: #cfd6df;
+
+  /* brand — the purple identity used by the workshop dashboards, now
+     shared by login/projects/canvas too (previously a mismatched blue) */
+  --accent: #6d5ce8;
+  --accent-2: #5645c9;        /* pressed / hover-darken */
+  --accent-weak: #efedfd;     /* tinted fills behind accent content */
+  --accent-grad: linear-gradient(135deg, #6d5ce8, #9b8cf0);
+
+  /* status hues + their tinted fills */
+  --green: #2f8f5b;  --green-weak: #eaf6f0;
+  --amber: #c9881f;  --amber-weak: #faf1e1;
+  --red: #c0463b;    --red-weak: #fbecea;
+  --teal: #1b9384;   --teal-weak: #e9f6f3;
+  --blue: #2f6fb3;   --blue-weak: #eaf2fb;
+
+  /* elevation */
+  --shadow: 0 6px 22px rgba(24, 39, 64, .12);
+  --shadow-sm: 0 2px 8px rgba(24, 39, 64, .08);
+  --shadow-lg: 0 24px 70px rgba(24, 39, 64, .35);
+
+  /* the dark chrome strip (topbar) — near-identical in both themes */
+  --chrome-bg: #131120;
+  --chrome-bg2: #1c1a30;
+  --chrome-line: #2a2745;
+  --chrome-ink: #cfcbe8;
+  --chrome-muted: #8b87ad;
+
+  --background: var(--bg);
+  --foreground: var(--ink);
 }
 
-/* This app (login/projects/canvas/Pre-Workshop dashboard) is designed as
-   a single light theme throughout — none of shared.css/canvas.css/
-   preworkshop.css have a dark-mode variant. create-next-app's default
-   dark-mode flip (removed here, along with its `color-scheme: dark`
-   companion below) used to silently override --foreground to a
-   near-white color whenever the OS/browser was in dark mode, while every
-   card/panel in the app keeps a hardcoded white background — the result
-   was headings/labels that don't set their own explicit color (and
-   instead correctly inherit from body, as CSS intends) rendering as
-   near-invisible light-gray-on-white. This is a bug fix, not a design
-   preference — re-add real dark-mode support only once the rest of the
-   app's stylesheets actually have matching dark variants. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f0e1b;
+  --panel: #171528;
+  --panel-2: #1d1b30;
+  --panel-3: #252239;
+
+  --ink: #eceaf6;
+  --ink-2: #c9c6de;
+  --muted: #948fb0;
+  --faint: #6e6a8a;
+
+  --line: #272440;
+  --line2: #38335c;
+
+  --accent: #8577ec;
+  --accent-2: #9b8cf0;
+  --accent-weak: rgba(133, 119, 236, .15);
+  --accent-grad: linear-gradient(135deg, #7a6aec, #a294f2);
+
+  --green: #4fbd85;  --green-weak: rgba(79, 189, 133, .14);
+  --amber: #dfa94e;  --amber-weak: rgba(223, 169, 78, .13);
+  --red: #e06a5e;    --red-weak: rgba(224, 106, 94, .14);
+  --teal: #3fb3a5;   --teal-weak: rgba(63, 179, 165, .13);
+  --blue: #6ea4dd;   --blue-weak: rgba(110, 164, 221, .13);
+
+  --shadow: 0 6px 22px rgba(0, 0, 0, .45);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, .35);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, .6);
+
+  --chrome-bg: #0c0b16;
+  --chrome-bg2: #16142a;
+  --chrome-line: #262343;
+}
 
 html {
   height: 100%;
@@ -47,3 +122,75 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Shared motion vocabulary ──────────────────────────────────────────
+   (preworkshop.css keeps its own pw-fade-up/pw-pop for back-compat;
+   these are for the pages that don't load that file.) */
+@keyframes aidc-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes aidc-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes aidc-pop {
+  from { opacity: 0; transform: scale(.95) translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Brief cross-fade when the theme flips (lib/theme.js adds .theme-anim
+   for ~350ms around the toggle — scoping the heavy `*` transition to
+   that window keeps normal interactions snappy). */
+html.theme-anim,
+html.theme-anim body,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition: background-color .28s ease, border-color .28s ease,
+    color .28s ease, box-shadow .28s ease, fill .28s ease, stroke .28s ease !important;
+}
+
+/* One global guard instead of per-file exceptions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── User menu (lib/UserMenu.jsx) — avatar dropdown with identity +
+   theme + sign-out; used on the dark topbar of every shell page. ────── */
+.um { position: relative; display: flex; }
+.um-trigger { cursor: pointer; border: none; background: none; padding: 0; font: inherit; }
+.um-trigger:hover .pw-avatar, .um-trigger:hover .av { filter: brightness(1.1); }
+.um-menu {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 130;
+  min-width: 230px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  animation: aidc-pop .16s ease both; transform-origin: top right;
+}
+.um-id { padding: 10px 12px 11px; border-bottom: 1px solid var(--line); margin-bottom: 5px; }
+.um-name { font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-email { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: none; background: none; cursor: pointer; font: inherit;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  padding: 9px 12px; border-radius: 9px;
+  transition: background .13s ease, color .13s ease;
+}
+.um-item:hover { background: var(--accent-weak); color: var(--accent); }
+.um-item .ic { display: inline-flex; }
+.um-item .ic svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.um-item-hint { margin-left: auto; font-size: 10px; color: var(--faint); font-weight: 600; }
+.um-item.danger:hover { background: var(--red-weak); color: var(--red); }
+.um-sep { height: 1px; background: var(--line); margin: 5px 4px; }

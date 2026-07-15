@@ -1,23 +1,11 @@
 /* Shared design system for the "app shell" pages (login, projects list,
-   project detail) — extracted from app/canvas/canvas.css so the rest of
-   the product LOOKS like the same app as the canvas, not a bootstrap-y
-   afterthought bolted on around it. Same color tokens, same button/chip/
-   card shapes, same icon style (24x24 stroke line icons).
+   project detail) — same purple identity, dark chrome topbar and motion
+   language as the workshop dashboards (preworkshop.css), so the whole
+   product reads as ONE app from the first screen.
 
-   Deliberately its own file (not merged into canvas.css, which stays
-   scoped under .aidc-canvas-root and is imported only by the canvas
-   page) and its own unscoped classes — imported directly by the pages
-   that need it (login, projects, projects/[projectId]), not globally
-   in app/layout.js, so it never has to reason about interaction with
-   canvas.css's scoped rules. */
-
-:root {
-  --ink: #1f2733; --muted: #6b7280; --line: #e4e8ee; --line2: #cfd6df;
-  --bg: #f5f7fa; --accent: #2f6fb3; --accent-weak: #eaf2fb;
-  --teal: #1b9384; --amber: #c9881f; --red: #c0463b; --green: #2f8f5b;
-  --shadow: 0 6px 22px rgba(24, 39, 64, .12);
-  --shadow-sm: 0 2px 8px rgba(24, 39, 64, .08);
-}
+   All colors come from the token set in app/globals.css (light + dark) —
+   this file declares no palette of its own, which is what makes the
+   theme toggle work here for free. */
 
 .app-shell {
   min-height: 100vh;
@@ -26,80 +14,157 @@
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 .app-shell * { box-sizing: border-box; }
-.app-shell button { font: inherit; cursor: pointer; }
+/* Full button reset — with color-scheme:dark the UA default chrome is a
+   gray box, so never let it bleed through; .btn etc. re-declare theirs. */
+.app-shell button { font: inherit; cursor: pointer; appearance: none; background: none; border: none; color: inherit; }
 .app-shell .ic { display: inline-flex; align-items: center; justify-content: center; }
 .app-shell .ic svg { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-/* Top bar — same branddot + wordmark as canvas.css's .menubar, plus a
-   user avatar circle matching canvas's .av. */
+/* ── Top bar — the same dark chrome as the workshop topbar (.pw-topbar),
+   scaled down: gradient brand mark, wordmark + tag, avatar menu. ────── */
 .app-topbar {
-  display: flex; align-items: center; gap: 10px;
-  background: #fff; border-bottom: 1px solid var(--line); color: var(--ink);
-  padding: 0 20px; height: 54px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--chrome-bg); border-bottom: 1px solid var(--chrome-line);
+  color: #fff; padding: 0 20px; height: 58px; flex: none;
 }
-.app-topbar .branddot { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); flex: none; }
-.app-topbar .brand { font-weight: 700; font-size: 14.5px; }
+.app-topbar .brandmark {
+  width: 30px; height: 30px; border-radius: 9px; flex: none; font-size: 15px;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  background: var(--accent-grad);
+}
+.app-topbar .brand { font-weight: 700; font-size: 14.5px; line-height: 1.2; }
+.app-topbar .brandtag { font-size: 9px; color: var(--chrome-muted); letter-spacing: .06em; margin-top: 1px; }
 .app-topbar .spacer { flex: 1; }
+.app-topbar .topbar-icon-btn {
+  width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  color: var(--chrome-ink); background: var(--chrome-bg2); border: 1px solid var(--chrome-line);
+  transition: border-color .15s ease, color .15s ease;
+}
+.app-topbar .topbar-icon-btn:hover { border-color: var(--accent); color: #fff; }
 .app-topbar .av {
-  width: 27px; height: 27px; border-radius: 50%; background: #dfe5ec; color: #46505d;
-  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 1px var(--line);
+  width: 30px; height: 30px; border-radius: 50%; color: #fff;
+  font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  background: var(--accent-grad); flex: none;
 }
 
 /* Workshop breadcrumb (see AppHeader.jsx) — sits inline in .app-topbar,
    right after the brand wordmark, before the spacer. */
-.aidc-crumb { display: flex; align-items: center; gap: 6px; margin-left: 18px; font-size: 12.5px; color: var(--muted); min-width: 0; }
-.aidc-crumb-sep { color: #cfd6df; }
-.aidc-crumb-cur { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aidc-crumb { display: flex; align-items: center; gap: 6px; margin-left: 18px; font-size: 12.5px; color: var(--chrome-muted); min-width: 0; }
+.aidc-crumb-sep { color: var(--chrome-line); }
+.aidc-crumb-cur { color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.app-main { max-width: 760px; margin: 0 auto; padding: 40px 24px 80px; }
+.app-main { max-width: 760px; width: 100%; margin: 0 auto; padding: 40px 24px 80px; animation: aidc-rise .35s ease both; }
 .app-h1 { font-size: 21px; font-weight: 700; margin-bottom: 4px; }
 .app-sub { color: var(--muted); font-size: 13.5px; margin-bottom: 26px; }
 .app-crumb { font-size: 12.5px; color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 .app-crumb:hover { text-decoration: underline; }
 
-/* Buttons — identical shape to canvas.css's .btn / .btn.solid */
+/* Buttons — same shape as the dashboards' .btn */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--line2); border-radius: 8px; padding: 8px 15px;
-  background: #fff; font-size: 13px; color: #3a4350;
+  background: var(--panel); font-size: 13px; color: var(--ink-2);
+  transition: border-color .15s ease, color .15s ease, background .15s ease,
+    box-shadow .15s ease, transform .12s ease;
 }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:active { transform: scale(.97); }
 .btn.solid { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn.solid:hover { background: #2a629f; color: #fff; }
-.btn:disabled { opacity: .55; cursor: default; }
-.btn:disabled:hover { border-color: var(--line2); color: #3a4350; }
-.btn.solid:disabled:hover { border-color: var(--accent); color: #fff; }
+.btn.solid:hover { background: var(--accent-2); border-color: var(--accent-2); color: #fff; box-shadow: 0 4px 14px rgba(109, 92, 232, .3); }
+.btn:disabled { opacity: .55; cursor: default; transform: none; }
+.btn:disabled:hover { border-color: var(--line2); color: var(--ink-2); box-shadow: none; }
+.btn.solid:disabled:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* Inputs — identical shape to canvas.css's .searchbox / .composer textarea */
+/* Inputs */
 .field {
   border: 1px solid var(--line2); border-radius: 8px; padding: 9px 12px;
-  font: inherit; font-size: 13px; background: #fff; outline: none; color: var(--ink);
+  font: inherit; font-size: 13px; background: var(--panel); outline: none; color: var(--ink);
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.field:focus { border-color: var(--accent); }
-.field::placeholder { color: #9aa3ad; }
+.field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.field::placeholder { color: var(--faint); }
 
-/* List rows — same card language as canvas.css's .node.card (left color
-   bar + title/meta stack) and .card2 (border/shadow/radius). */
+/* List rows — cards with a staggered entrance and a hover lift. */
 .row-card {
   display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--line2); border-left: 4px solid var(--amber);
-  border-radius: 10px; box-shadow: var(--shadow-sm); background: #fff;
+  border: 1px solid var(--line2); border-left: 4px solid var(--accent);
+  border-radius: 10px; box-shadow: var(--shadow-sm); background: var(--panel);
   padding: 13px 15px;
+  animation: aidc-rise .3s ease both;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
 }
-.row-card:hover { border-color: #9fb6d4; }
+.row-card:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: var(--shadow); }
 .row-card > a { flex: 1; text-decoration: none; color: inherit; min-width: 0; }
 .row-card .rtitle { font-weight: 700; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.row-card .rtitle .ic { color: var(--accent); }
 .row-card .rmeta { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
-.row-card .rdel { color: #aab2bd; font-size: 12px; padding: 4px 6px; border-radius: 6px; flex: none; }
-.row-card .rdel:hover { color: var(--red); background: #fbecea; }
+.row-card .rdel {
+  color: var(--faint); font-size: 12px; padding: 4px 6px; border-radius: 6px; flex: none;
+  transition: color .13s ease, background .13s ease;
+}
+.row-card .rdel:hover { color: var(--red); background: var(--red-weak); }
+
+/* Stagger the first few rows so the list settles in, not slams in. */
+.app-list > .row-card:nth-child(1) { animation-delay: .03s; }
+.app-list > .row-card:nth-child(2) { animation-delay: .08s; }
+.app-list > .row-card:nth-child(3) { animation-delay: .13s; }
+.app-list > .row-card:nth-child(4) { animation-delay: .18s; }
+.app-list > .row-card:nth-child(5) { animation-delay: .23s; }
+.app-list > .row-card:nth-child(n+6) { animation-delay: .28s; }
 
 .app-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
 .app-form .field { flex: 1 1 200px; }
 
 .app-error {
   color: var(--red); font-size: 12.5px; margin-bottom: 14px;
-  background: #fbecea; border: 1px solid #e7c3bf; border-radius: 8px; padding: 8px 12px;
+  background: var(--red-weak); border: 1px solid var(--red); border-radius: 8px; padding: 8px 12px;
+  animation: aidc-rise .25s ease both;
 }
 .app-empty { color: var(--muted); font-size: 13.5px; }
 .app-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Login page ──────────────────────────────────────────────────────── */
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden; padding: 24px;
+}
+/* A quiet ambient glow behind the card — brand-colored, both themes. */
+.login-wrap::before {
+  content: ''; position: absolute; width: 620px; height: 620px; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-weak) 0%, transparent 65%);
+  top: -180px; right: -120px; pointer-events: none;
+}
+.login-wrap::after {
+  content: ''; position: absolute; width: 520px; height: 520px; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-weak) 0%, transparent 68%);
+  bottom: -200px; left: -140px; pointer-events: none;
+}
+.login-theme-btn {
+  position: absolute; top: 18px; right: 20px; z-index: 2;
+  width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  background: var(--panel); border: 1px solid var(--line2); color: var(--muted);
+  transition: border-color .15s ease, color .15s ease;
+}
+.login-theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+.login-card {
+  position: relative; z-index: 1;
+  width: min(390px, 92vw); background: var(--panel); border: 1px solid var(--line2);
+  border-radius: 16px; box-shadow: var(--shadow); padding: 30px 28px;
+  animation: aidc-rise .4s ease both;
+}
+.login-brand { display: flex; align-items: center; gap: 11px; margin-bottom: 6px; }
+.login-mark {
+  width: 38px; height: 38px; border-radius: 11px; flex: none; font-size: 18px;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  background: var(--accent-grad); box-shadow: 0 4px 14px rgba(109, 92, 232, .35);
+}
+.login-brand h1 { font-size: 17px; font-weight: 700; line-height: 1.25; }
+.login-tag { font-size: 9.5px; color: var(--muted); letter-spacing: .07em; margin-top: 1px; }
+.login-welcome { color: var(--muted); font-size: 12.5px; margin: 14px 0 18px; line-height: 1.55; }
+.login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-ms-btn { width: 100%; justify-content: center; padding: 10px 14px; font-size: 13.5px; }
+.login-or {
+  display: flex; align-items: center; gap: 10px; margin: 16px 0;
+  color: var(--muted); font-size: 12px;
+}
+.login-or i { flex: 1; height: 1px; background: var(--line); }

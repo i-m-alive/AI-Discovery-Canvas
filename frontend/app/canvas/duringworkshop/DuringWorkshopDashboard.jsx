@@ -436,27 +436,6 @@ function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract,
 
       {err && <div className="app-error pw-err">⚠ {err}</div>}
 
-      {adding && (
-        <div className="dw-req-add">
-          <textarea className="pw-instruction" rows={2} placeholder='e.g. "The system shall auto-assign GMP-qualified staff to open shifts."'
-            value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
-          <div className="dw-req-add-row">
-            <select className="dw-select" value={draft.category}
-              onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
-              {REQ_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select className="dw-select" value={draft.moscow}
-              onChange={(e) => setDraft({ ...draft, moscow: e.target.value })}>
-              {Object.entries(MOSCOW_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <button className="btn solid" onClick={addOne} disabled={busy || !draft.text.trim()}>
-              {busy ? 'Adding…' : 'Add'}
-            </button>
-            <button className="btn" onClick={() => setAdding(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
-
       {reqs.length === 0 ? (
         <div className="pw-empty">
           No requirements yet — import a transcript and run <b>Extract</b>, or add one manually below.
@@ -521,9 +500,34 @@ function RequirementsPanel({ workshopId, reqs, onChanged, extracting, onExtract,
         ))}
         </div>
       )}
-      <button className="dw-req-addlink" onClick={() => { setAdding((a) => !a); setEditing(null); }}>
-        <Icon name="plus" />Add requirement
-      </button>
+      {/* The form opens HERE, in place of the trigger — opening it at the
+          top of the panel put it off-screen behind the scroll list, which
+          read as the button doing nothing. */}
+      {adding ? (
+        <div className="dw-req-add">
+          <textarea className="pw-instruction" rows={2} autoFocus
+            placeholder='e.g. "The system shall auto-assign GMP-qualified staff to open shifts."'
+            value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
+          <div className="dw-req-add-row">
+            <select className="dw-select" value={draft.category}
+              onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
+              {REQ_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select className="dw-select" value={draft.moscow}
+              onChange={(e) => setDraft({ ...draft, moscow: e.target.value })}>
+              {Object.entries(MOSCOW_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <button className="btn solid" onClick={addOne} disabled={busy || !draft.text.trim()}>
+              {busy ? 'Adding…' : 'Add'}
+            </button>
+            <button className="btn" onClick={() => setAdding(false)} disabled={busy}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button className="dw-req-addlink" onClick={() => { setAdding(true); setEditing(null); }}>
+          <Icon name="plus" />Add requirement
+        </button>
+      )}
     </section>
   );
 }

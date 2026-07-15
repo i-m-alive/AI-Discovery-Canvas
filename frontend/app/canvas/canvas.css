@@ -10,7 +10,7 @@
    (login page uses inline styles only, no classes/ids in common). */
 :root{
  --ink:#1f2733;--muted:#6b7280;--line:#e4e8ee;--line2:#cfd6df;--chrome:#fff;--bg:#f5f7fa;--canvas:#fbfcfd;
- --accent:#2f6fb3;--accent-weak:#eaf2fb;--teal:#1b9384;--teal-weak:#e9f6f3;--indigo:#3f4d8c;
+ --accent:#6d5ce8;--accent-weak:#efedfd;--teal:#1b9384;--teal-weak:#e9f6f3;--indigo:#3f4d8c;
  --amber:#c9881f;--red:#c0463b;--green:#2f8f5b;--slate:#5b6b80;--slate-weak:#e7ebf1;
  --shadow:0 6px 22px rgba(24,39,64,.12);--shadow-sm:0 2px 8px rgba(24,39,64,.08);
 }
@@ -40,7 +40,7 @@
 .aidc-canvas-root .menubar .spacer{flex:1}.aidc-canvas-root .menubar .right{display:flex;align-items:center;gap:8px}
 .aidc-canvas-root .avatars{display:flex;align-items:center}.aidc-canvas-root .av{width:21px;height:21px;border-radius:50%;border:1.5px solid #fff;background:#dfe5ec;color:#46505d;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:-5px;box-shadow:0 0 0 1px var(--line)}
 .aidc-canvas-root .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:8px;padding:5px 10px;background:#fff;font-size:12px;color:#3a4350}
-.aidc-canvas-root .btn:hover{border-color:var(--accent);color:var(--accent)}.aidc-canvas-root .btn.solid{background:var(--accent);color:#fff;border-color:var(--accent)}.aidc-canvas-root .btn.solid:hover{background:#2a629f}.aidc-canvas-root .btn .ic{font-size:14px}
+.aidc-canvas-root .btn:hover{border-color:var(--accent);color:var(--accent)}.aidc-canvas-root .btn.solid{background:var(--accent);color:#fff;border-color:var(--accent)}.aidc-canvas-root .btn.solid:hover{background:var(--accent-2,#5645c9)}.aidc-canvas-root .btn .ic{font-size:14px}
 
 .aidc-canvas-root .toolbar{display:flex;align-items:center;gap:12px;background:var(--chrome);border-bottom:1px solid var(--line);padding:0 14px}
 .aidc-canvas-root .boardname{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}.aidc-canvas-root .boardname .dot{width:13px;height:13px;border-radius:50%;border:2px solid var(--accent)}
@@ -172,7 +172,7 @@
 .aidc-canvas-root .ctxchip{display:inline-flex;align-items:center;gap:5px;background:var(--accent-weak);color:var(--accent);border:1px solid #cfe0f3;border-radius:14px;padding:3px 8px;font-size:11px}.aidc-canvas-root .ctxchip .ic{font-size:13px}.aidc-canvas-root .ctxchip button{color:var(--accent);display:inline-flex;font-size:12px;opacity:.7}.aidc-canvas-root .ctxchip.file{background:#f1f3f7;color:#46505d;border-color:var(--line2)}.aidc-canvas-root .ctxchip.web{background:var(--teal-weak);color:var(--teal);border-color:#bfe6df}
 .aidc-canvas-root .composer{border-top:1px solid var(--line);padding:10px 12px}.aidc-canvas-root .composer .row{display:flex;align-items:flex-end;gap:8px}.aidc-canvas-root .composer textarea{flex:1;resize:none;border:1px solid var(--line2);border-radius:10px;padding:9px 11px;font:inherit;font-size:12.5px;height:40px;max-height:120px;outline:none}.aidc-canvas-root .composer textarea:focus{border-color:var(--accent)}
 .aidc-canvas-root .composer .tools{display:flex;align-items:center;gap:2px;margin-top:7px}.aidc-canvas-root .composer .tbtn{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:11.5px;padding:4px 7px;border-radius:7px}.aidc-canvas-root .composer .tbtn:hover{background:#eef1f5;color:#3a4350}.aidc-canvas-root .composer .tbtn.on{color:var(--teal);background:var(--teal-weak)}
-.aidc-canvas-root .composer .send{width:40px;height:40px;border-radius:10px;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:17px}.aidc-canvas-root .composer .send:hover{background:#2a629f}
+.aidc-canvas-root .composer .send{width:40px;height:40px;border-radius:10px;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:17px}.aidc-canvas-root .composer .send:hover{background:var(--accent-2,#5645c9)}
 .aidc-canvas-root .hint{font-size:10.5px;color:#9aa3ad;margin-top:6px}.aidc-canvas-root .hint kbd{background:#eef1f5;border:1px solid var(--line2);border-radius:4px;padding:0 5px;font-family:ui-monospace,monospace;font-size:10px}
 
 .aidc-canvas-root #slash{position:fixed;z-index:60;width:330px;background:#fff;border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;display:none;max-height:340px;overflow-y:auto}
@@ -190,3 +190,85 @@
 .aidc-canvas-root #tooltip{position:fixed;z-index:90;background:#1f2733;color:#fff;font-size:11.5px;padding:6px 9px;border-radius:7px;max-width:240px;box-shadow:var(--shadow);pointer-events:none;display:none;line-height:1.4}
 .aidc-canvas-root #popover{position:fixed;z-index:90;background:#fff;color:#28303b;font-size:12px;padding:11px 13px;border-radius:10px;max-width:300px;box-shadow:var(--shadow);border:1px solid var(--line2);display:none;line-height:1.5}.aidc-canvas-root #popover .pt{font-weight:800;font-size:12px;margin-bottom:5px;display:flex;align-items:center;gap:6px}.aidc-canvas-root #popover .pt .ic{color:var(--accent)}
 .aidc-canvas-root #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%) translateY(20px);z-index:95;background:#1f2733;color:#fff;font-size:12.5px;padding:10px 16px;border-radius:10px;box-shadow:var(--shadow);display:flex;align-items:center;gap:9px;opacity:0;transition:.25s;pointer-events:none}.aidc-canvas-root #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.aidc-canvas-root #toast .ic{color:#7fdca6}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Dark theme for the board view (During-Workshop "Board view" toggle +
+   Post-Workshop / Proposal phases). The board's own token names (--ink,
+   --line, --accent, ...) are already flipped by globals.css's
+   html[data-theme="dark"] block; this section covers the values the
+   ported prototype hardcoded, plus the board-only --chrome/--canvas
+   tokens (re-declared on the root element itself so they beat the :root
+   light values above). Sticky-note / shape fills stay their authored
+   colors — colored paper on a dark board is the intended look.
+   ══════════════════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .aidc-canvas-root { --chrome: #171528; --canvas: #131120; }
+html[data-theme="dark"] .aidc-canvas-root .menubar { background: var(--panel-2); }
+html[data-theme="dark"] .aidc-canvas-root .menubar .mi { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .menubar .mi:hover, html[data-theme="dark"] .aidc-canvas-root .menubar .mi.open { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root .menudrop { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .menudrop .mitem { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .menudrop .mshortcut { color: var(--faint); }
+html[data-theme="dark"] .aidc-canvas-root .av { background: var(--panel-3); color: var(--ink-2); border-color: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .btn { background: var(--panel); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .btn.solid { color: #fff; }
+html[data-theme="dark"] .aidc-canvas-root .session { background: var(--panel-2); }
+html[data-theme="dark"] .aidc-canvas-root .session b { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .searchbox { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .toggle { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root .toggle button.on { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .chip { background: var(--panel); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .chip.rec.on { background: var(--red-weak); }
+html[data-theme="dark"] .aidc-canvas-root .lens.on { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .lens:hover { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .dotgrid { background-image: radial-gradient(#2b2842 1.2px, transparent 1.2px); }
+html[data-theme="dark"] .aidc-canvas-root .region { border-color: #38335c; background: rgba(255, 255, 255, .02); }
+html[data-theme="dark"] .aidc-canvas-root .region.active { border-color: var(--accent); background: rgba(133, 119, 236, .06); }
+html[data-theme="dark"] .aidc-canvas-root .rlabel { background: var(--panel); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .node .body { background: var(--panel-2); }
+html[data-theme="dark"] .aidc-canvas-root .node:hover .body { border-color: var(--accent); }
+html[data-theme="dark"] .aidc-canvas-root .node.card .body { background: var(--panel-2); }
+html[data-theme="dark"] .aidc-canvas-root .node.frame .body { background: rgba(255, 255, 255, .03); border-color: #3a3660; }
+html[data-theme="dark"] .aidc-canvas-root .node.frame .flabel { background: var(--panel); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .rz { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .flownode { background: var(--panel-2); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root #nodeBar { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root #nodeBar .nb { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root #nodeBar .nb:hover { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root #nodeBar .nb.del:hover { background: var(--red-weak); }
+html[data-theme="dark"] .aidc-canvas-root #zoombar { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root #zoombar button { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root #zoombar button:hover { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root .zval { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root #minimap { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .mmreg { border-color: var(--line2); background: var(--panel-3); color: var(--muted); }
+html[data-theme="dark"] .aidc-canvas-root #transcript { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root #transcript .tbody { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root #askHandle { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .drawer { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .folder { border-color: var(--line); }
+html[data-theme="dark"] .aidc-canvas-root .folderhead { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .folderhead:hover { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root .folderhead .cnt { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root .fitem { color: var(--muted); }
+html[data-theme="dark"] .aidc-canvas-root .fitem:hover { background: var(--panel-3); color: var(--ink); }
+html[data-theme="dark"] .aidc-canvas-root .msg.bot { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .card2 .chead { background: var(--panel-2); }
+html[data-theme="dark"] .aidc-canvas-root .card2 .cbody { color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .mini { background: var(--panel); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .quick button:hover { background: rgba(133, 119, 236, .26); }
+html[data-theme="dark"] .aidc-canvas-root .suggest { background: var(--panel-2); }
+html[data-theme="dark"] .aidc-canvas-root .sugg button { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .sugg button .ic { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root .ctxchip { border-color: var(--line2); }
+html[data-theme="dark"] .aidc-canvas-root .ctxchip.file { background: var(--panel-3); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .composer textarea { background: var(--panel-2); color: var(--ink); }
+html[data-theme="dark"] .aidc-canvas-root .composer .tbtn:hover { background: var(--panel-3); color: var(--ink-2); }
+html[data-theme="dark"] .aidc-canvas-root .hint kbd { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root #slash { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root #slash .sitem .ic { background: var(--panel-3); }
+html[data-theme="dark"] .aidc-canvas-root #modalWrap, html[data-theme="dark"] .aidc-canvas-root #graphModalWrap { background: rgba(4, 3, 12, .62); }
+html[data-theme="dark"] .aidc-canvas-root .modal { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .gchip { background: var(--panel); }
+html[data-theme="dark"] .aidc-canvas-root .gnav input[type=text] { background: var(--panel-2); color: var(--ink); }
+html[data-theme="dark"] .aidc-canvas-root .cl.ph2 .cb { background: var(--panel-3); color: var(--faint); }
+html[data-theme="dark"] .aidc-canvas-root #popover { background: var(--panel); color: var(--ink-2); }

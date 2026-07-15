@@ -788,3 +788,142 @@
   margin-top: 9px; line-height: 1.4;
 }
 .cop-grounding-note .ic { flex: none; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Motion pass — entrance + hover choreography (appended so the rules
+   above stay byte-identical; later rules of equal specificity win).
+   The global prefers-reduced-motion guard lives in globals.css.
+   ══════════════════════════════════════════════════════════════════════ */
+.pw-hero { animation: pw-fade-up .35s ease both; }
+.pw-panel { animation: pw-fade-up .35s ease both; }
+.pw-stat { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.pw-stat:hover { transform: translateY(-2px); border-color: var(--pw-purple-weak, #dcd6fa); box-shadow: var(--shadow-sm, 0 2px 8px rgba(24,39,64,.08)); }
+.pw-catalogue-btn { animation: pw-fade-up .3s ease both; }
+.pw-catalogue-list .pw-catalogue-btn:nth-child(1) { animation-delay: .05s; }
+.pw-catalogue-list .pw-catalogue-btn:nth-child(2) { animation-delay: .1s; }
+.pw-catalogue-list .pw-catalogue-btn:nth-child(3) { animation-delay: .15s; }
+.pw-catalogue-list .pw-catalogue-btn:nth-child(4) { animation-delay: .2s; }
+.pw-insight-card { animation: pw-fade-up .3s ease both; transition: border-color .15s ease, box-shadow .15s ease; }
+.pw-insight-card:hover { border-color: var(--pw-purple, #6d5ce8); box-shadow: var(--shadow-sm, 0 2px 8px rgba(24,39,64,.08)); }
+.pw-source-item { transition: background .13s ease; border-radius: 8px; }
+.pw-source-item:hover { background: var(--panel-2, #f8f9fb); }
+.pw-modal-backdrop { animation: aidc-fade .18s ease both; }
+.pw-modal { animation: pw-pop .2s ease both; }
+.cop-backdrop { animation: aidc-fade .18s ease both; }
+.cop-panel { animation: cop-slide .26s cubic-bezier(.25, .8, .3, 1) both; }
+@keyframes cop-slide {
+  from { transform: translateX(60px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.pw-search-drop { animation: aidc-pop .16s ease both; transform-origin: top center; }
+.pw-icon-btn { transition: border-color .15s ease, color .15s ease; }
+.pw-icon-btn:not(:disabled):hover { border-color: var(--pw-purple, #6d5ce8); color: #fff; }
+.pw-pill { transition: background .15s ease, color .15s ease; }
+.btn { transition: border-color .15s ease, color .15s ease, background .15s ease, box-shadow .15s ease, transform .12s ease; }
+.btn:active { transform: scale(.97); }
+.btn:disabled { transform: none; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Dark theme — html[data-theme="dark"] (see globals.css for tokens).
+   Only rules whose light value was hardcoded need re-declaring; anything
+   already on var(--...) flips automatically.
+   ══════════════════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .pw-shell {
+  --pw-purple: #8577ec;
+  --pw-purple-dark: #9b8cf0;
+  --pw-purple-weak: rgba(133, 119, 236, .16);
+  --pw-dark-bg: #0c0b16; --pw-dark-bg2: #16142a; --pw-dark-line: #262343;
+}
+
+/* phase stepper */
+html[data-theme="dark"] .phasetabs { background: var(--panel); }
+html[data-theme="dark"] .ptab { background: var(--panel); }
+html[data-theme="dark"] .pnum { background: var(--panel-3); border-color: var(--line2); }
+html[data-theme="dark"] .ptab.on { box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+
+/* header search dropdown */
+html[data-theme="dark"] .pw-search-drop { background: var(--panel); border-color: var(--line2); box-shadow: var(--shadow-lg); }
+html[data-theme="dark"] .pw-search-ic-source { background: var(--blue-weak); color: var(--blue); }
+
+/* hero / panels / sidebar */
+html[data-theme="dark"] .pw-hero,
+html[data-theme="dark"] .pw-stat,
+html[data-theme="dark"] .pw-panel,
+html[data-theme="dark"] .pw-sources,
+html[data-theme="dark"] .pw-collapse-btn,
+html[data-theme="dark"] .pw-artifact-card,
+html[data-theme="dark"] .pw-artifact-row { background: var(--panel); }
+html[data-theme="dark"] .pw-catalogue-btn { background: var(--panel-2); }
+html[data-theme="dark"] .pw-catalogue-btn:hover { background: var(--panel-3); box-shadow: 0 6px 14px rgba(0, 0, 0, .3); }
+html[data-theme="dark"] .pw-catalogue-btn-ic { background: var(--panel-3); box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+html[data-theme="dark"] .pw-ic-teal { background: var(--teal-weak); color: var(--teal); }
+html[data-theme="dark"] .pw-ic-indigo { background: var(--accent-weak); color: var(--accent); }
+html[data-theme="dark"] .pw-dz-sub { color: var(--faint); }
+
+/* status pills */
+html[data-theme="dark"] .pw-pill-queued { color: var(--muted); background: var(--panel-3); }
+html[data-theme="dark"] .pw-pill-parsing, html[data-theme="dark"] .pw-pill-in_review { color: var(--amber); background: var(--amber-weak); }
+html[data-theme="dark"] .pw-pill-ingested, html[data-theme="dark"] .pw-pill-final { color: var(--green); background: var(--green-weak); }
+html[data-theme="dark"] .pw-pill-failed { color: var(--red); background: var(--red-weak); }
+html[data-theme="dark"] .pw-status-done { color: var(--green); background: var(--green-weak); }
+
+/* delete-confirm + generic modals */
+html[data-theme="dark"] .pw-confirm { background: var(--panel); }
+html[data-theme="dark"] .pw-confirm-ic { background: var(--red-weak); color: var(--red); }
+html[data-theme="dark"] .pw-del-btn:hover { background: var(--red-weak) !important; }
+html[data-theme="dark"] .pw-modal { background: var(--panel); box-shadow: var(--shadow-lg); }
+html[data-theme="dark"] .pw-modal-close:hover { background: var(--panel-3); }
+html[data-theme="dark"] .pw-modal-backdrop { background: rgba(4, 3, 12, .62); }
+
+/* inputs */
+html[data-theme="dark"] .pw-instruction { background: var(--panel-2); }
+html[data-theme="dark"] .pw-instruction::placeholder { color: var(--faint); }
+
+/* research / citations / chain */
+html[data-theme="dark"] .pw-insight-desc, html[data-theme="dark"] .pw-artifact-desc,
+html[data-theme="dark"] .pw-agent-info-row, html[data-theme="dark"] .pw-gap-desc { color: var(--ink-2); }
+html[data-theme="dark"] .pw-cite { color: var(--ink-2); }
+html[data-theme="dark"] .pw-cite-web { background: var(--blue-weak); border-color: var(--line2); color: var(--pw-purple); }
+html[data-theme="dark"] .pw-cite-client_artifact { background: var(--panel-3); }
+html[data-theme="dark"] .pw-chain { background: var(--panel-2); }
+html[data-theme="dark"] .pw-chain-step.pending .pw-chain-dot,
+html[data-theme="dark"] .pw-chain-step:not(.done):not(.pending) .pw-chain-dot { background: var(--panel); }
+html[data-theme="dark"] .pw-ask-btn:hover { background: rgba(133, 119, 236, .26); }
+html[data-theme="dark"] .pw-ask-reply { background: var(--panel-2); }
+html[data-theme="dark"] .pw-agent-info { background: var(--panel-2); border-color: var(--line); }
+html[data-theme="dark"] .pw-agent-info-row b { color: var(--pw-purple); }
+
+/* segmented toggles / filter chips / tags */
+html[data-theme="dark"] .pw-seg { background: var(--panel-3); }
+html[data-theme="dark"] .pw-seg-btn.on { background: var(--panel); color: var(--pw-purple); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+html[data-theme="dark"] .pw-filter-chip { background: var(--panel-3); }
+html[data-theme="dark"] .pw-filter-chip:hover { background: var(--line); }
+html[data-theme="dark"] .pw-filter-chip.on { background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .pw-filter-count { background: rgba(255, 255, 255, .1); }
+html[data-theme="dark"] .pw-tag { background: var(--panel-3); color: var(--ink-2); }
+html[data-theme="dark"] .pw-progress-track { background: var(--panel-3); }
+html[data-theme="dark"] .pw-score-track { background: var(--panel-3); }
+
+/* drawio viewer chrome */
+html[data-theme="dark"] .pw-drawio-filebar { background: var(--panel-2); }
+
+/* copilot */
+html[data-theme="dark"] .cop-panel { background: var(--panel); }
+html[data-theme="dark"] .cop-head { background: var(--panel-2); }
+html[data-theme="dark"] .cop-clear:hover, html[data-theme="dark"] .cop-close:hover { background: var(--panel-3); }
+html[data-theme="dark"] .cop-msg-assistant .cop-msg-body { background: var(--panel-2); }
+html[data-theme="dark"] .cop-online { border-color: var(--panel); }
+html[data-theme="dark"] .cop-mode-pill { background: var(--panel-2); }
+html[data-theme="dark"] .cop-source-chip { background: var(--panel-3); }
+html[data-theme="dark"] .cop-source-chip:hover { background: var(--accent-weak); }
+html[data-theme="dark"] .cop-draft-html { background: var(--panel-2); }
+html[data-theme="dark"] .cop-diagram-proc { background: var(--panel-2); }
+html[data-theme="dark"] .cop-chip { background: var(--panel-3); color: var(--ink-2); border-color: var(--line2); }
+html[data-theme="dark"] .cop-chip-decision { background: var(--amber-weak); border-color: var(--amber); color: var(--amber); }
+html[data-theme="dark"] .cop-chip-data { background: var(--green-weak); border-color: var(--green); color: var(--green); }
+html[data-theme="dark"] .cop-chip-start, html[data-theme="dark"] .cop-chip-end { background: var(--accent-weak); border-color: var(--pw-purple); color: var(--pw-purple); }
+html[data-theme="dark"] .cop-suggestion { background: var(--panel-3); color: var(--ink); }
+html[data-theme="dark"] .cop-suggestion:hover { background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .cop-input-wrap { background: var(--panel-2); }
+html[data-theme="dark"] .cop-chain li.pending .cop-chain-dot,
+html[data-theme="dark"] .cop-chain li:not(.done):not(.pending) .cop-chain-dot { background: var(--panel); }

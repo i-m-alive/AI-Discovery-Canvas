@@ -1,6 +1,8 @@
 'use client';
 
 import { Icon } from '../lib/icons';
+import { toggleTheme, useTheme } from '../lib/theme';
+import UserMenu from '../lib/UserMenu';
 import HeaderSearch from './HeaderSearch';
 
 // The one shared identity bar across ALL 4 phases — dark, purple-accented
@@ -11,15 +13,13 @@ import HeaderSearch from './HeaderSearch';
 // search-canvas, zoom, REC/Teams/Present) is untouched and stays
 // canvas-specific, nested below this.
 //
-// Notifications / theme toggle are deliberately STUBBED (disabled, with
-// a tooltip saying so) — same honest-stub convention already used
-// elsewhere in this app (canvas.css's Share/Vote buttons). Search and
-// Copilot are real: HeaderSearch queries this workshop's documents by
-// name AND content (⌘K to focus), and `onOpenCopilot` (passed by
-// [workshopId]/page.js) opens CopilotPanel.jsx, a context-grounded
-// assistant available on every phase.
+// Notifications stay deliberately STUBBED (disabled, tooltip says so) —
+// same honest-stub convention as canvas.css's Share/Vote buttons. The
+// theme toggle and avatar are REAL now: the toggle flips the app-wide
+// light/dark theme (lib/theme.js), the avatar opens UserMenu (identity,
+// theme, sign out). Search and Copilot were already real.
 export default function AppHeader({ user, workshop, workshopId, projectId, onOpenCopilot }) {
-  const initials = ((user && (user.name || user.email)) || '?').trim().slice(0, 1).toUpperCase();
+  const theme = useTheme();
   const projectInitial = ((workshop && workshop.project_name) || 'P').trim().slice(0, 1).toUpperCase();
 
   return (
@@ -49,11 +49,16 @@ export default function AppHeader({ user, workshop, workshopId, projectId, onOpe
         <button className="pw-icon-btn" disabled title="Notifications — not built yet">
           <Icon name="bell" /><span className="pw-dot" />
         </button>
-        <button className="pw-icon-btn" disabled title="Theme toggle — not built yet"><Icon name="moon" /></button>
+        <button
+          className="pw-icon-btn" onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
         <button className="pw-copilot-btn" onClick={onOpenCopilot} title="Ask Copilot — the assistant, grounded in this engagement">
           <Icon name="sparkles" />Copilot
         </button>
-        {user && <div className="pw-avatar" title={user.name || user.email}>{initials}</div>}
+        <UserMenu user={user} avatarClassName="pw-avatar" />
       </div>
     </div>
   );

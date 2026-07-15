@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuthedUser } from '../lib/useAuthedUser';
 import { apiGet, apiPost, apiDelete } from '../lib/api';
 import { Icon } from '../lib/icons';
+import { toggleTheme, useTheme } from '../lib/theme';
+import UserMenu from '../lib/UserMenu';
 import '../shared.css';
 
 // BA -> Projects -> Workshops (see app/routes/projects.py). Landing page
@@ -67,15 +69,24 @@ export default function ProjectsPage() {
     }
   }
 
-  const initials = ((user && (user.name || user.email)) || '?').trim().slice(0, 1).toUpperCase();
+  const theme = useTheme();
 
   return (
     <div className="app-shell">
       <div className="app-topbar">
-        <span className="branddot" />
-        <span className="brand">AI Discovery Canvas</span>
+        <span className="brandmark"><Icon name="sparkles" /></span>
+        <div>
+          <div className="brand">AI Discovery Canvas</div>
+          <div className="brandtag">ENGAGEMENT INTELLIGENCE</div>
+        </div>
         <div className="spacer" />
-        {user && <div className="av" title={user.name || user.email}>{initials}</div>}
+        <button
+          className="topbar-icon-btn" onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
+        <UserMenu user={user} avatarClassName="av" />
       </div>
 
       {!user ? (

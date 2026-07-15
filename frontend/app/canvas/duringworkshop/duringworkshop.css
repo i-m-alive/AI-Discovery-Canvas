@@ -2,15 +2,20 @@
    (same panels, pills, buttons); everything new is dw-* (page) or dwc-*
    (the native diagram canvas). */
 
-/* ── Board-view toggle (hero) ─────────────────────────────────────── */
+/* ── Board-view toggle (hero) — accent ghost chip. (Its original
+   white-translucent styling assumed a purple hero this dashboard no
+   longer has, which made it literally invisible on the white panel.) ── */
 .dw-board-toggle {
-  appearance: none; border: 1px solid rgba(255, 255, 255, .45); background: rgba(255, 255, 255, .14);
-  color: #fff; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600;
+  appearance: none; border: 1px solid var(--pw-purple, #6d5ce8); background: var(--pw-purple-weak, #efedfd);
+  color: var(--pw-purple-dark, #5645c9); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600;
   display: inline-flex; align-items: center; gap: 7px; border-radius: 9px;
-  padding: 7px 14px; margin-top: 14px; transition: background .15s ease;
+  padding: 7px 14px; margin-top: 14px;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
-.dw-board-toggle:hover { background: rgba(255, 255, 255, .26); }
+.dw-board-toggle:hover { background: var(--pw-purple, #6d5ce8); color: #fff; box-shadow: 0 4px 14px rgba(109, 92, 232, .3); }
 .dw-board-toggle svg { width: 14px; height: 14px; }
+html[data-theme="dark"] .dw-board-toggle { color: var(--pw-purple); }
+html[data-theme="dark"] .dw-board-toggle:hover { color: #fff; }
 
 /* Return-to-dashboard chip shown over the canvas in board view — the
    wrap gets its positioning context here (it has none in preworkshop.css) */
@@ -470,3 +475,136 @@
   .dw-capture-dot { animation: none; }
   .dw-cap-card:hover { transform: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Motion pass — appended; the global reduced-motion guard is in
+   globals.css.
+   ══════════════════════════════════════════════════════════════════════ */
+.ax-row { transition: background .13s ease, border-color .13s ease; }
+.dw-teams-item { transition: border-color .15s ease, box-shadow .15s ease; }
+.dw-teams-item:hover { border-color: var(--pw-purple, #6d5ce8); box-shadow: var(--shadow-sm, 0 2px 8px rgba(24,39,64,.08)); }
+.dwc { animation: pw-fade-up .35s ease both; }
+.sc-drop.over { box-shadow: 0 0 0 4px var(--accent-weak, #efedfd); }
+.sc-run-btn:not(:disabled):hover { box-shadow: 0 4px 16px rgba(109, 92, 232, .35); }
+.dw-back-dash { animation: aidc-pop .25s ease both; transition: background .15s ease, box-shadow .15s ease; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Dark theme — mirrors the hardcoded light values above onto the token
+   set (globals.css). The diagram DRAWING SURFACE (.dwc-host) stays light
+   on purpose: the generated SVG uses draw.io's light fills + dark labels,
+   so a light page inside dark chrome (draw.io's own dark-mode look) is
+   the readable, intentional treatment.
+   ══════════════════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .dw-back-dash { background: var(--panel); color: var(--pw-purple); border-color: var(--line2); }
+html[data-theme="dark"] .dw-back-dash:hover { background: var(--panel-3); }
+
+/* artifact explorer */
+html[data-theme="dark"] .ax-filter { border-color: var(--line2); background: var(--panel-2); color: var(--muted); }
+html[data-theme="dark"] .ax-filter input { color: var(--ink); }
+html[data-theme="dark"] .ax-filter-x { color: var(--faint); }
+html[data-theme="dark"] .ax-filter-x:hover { background: var(--panel-3); }
+html[data-theme="dark"] .ax-group-hd { color: var(--ink-2); }
+html[data-theme="dark"] .ax-group-hd:hover:not(:disabled) { background: var(--panel-3); }
+html[data-theme="dark"] .ax-dim .ax-group-hd { color: var(--faint); }
+html[data-theme="dark"] .ax-chev { color: var(--faint); }
+html[data-theme="dark"] .ax-count { background: var(--panel-3); color: var(--muted); }
+html[data-theme="dark"] .ax-dim .ax-count { background: var(--panel-2); color: var(--faint); }
+html[data-theme="dark"] .ax-empty, html[data-theme="dark"] .ax-sub-hd { color: var(--faint); }
+html[data-theme="dark"] .ax-row { border-left-color: var(--line); }
+html[data-theme="dark"] .ax-row:hover { background: var(--panel-2); border-left-color: var(--pw-purple); }
+html[data-theme="dark"] .ax-ic-gen { background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .ax-row-name { color: var(--ink); }
+html[data-theme="dark"] .ax-row-name:hover { color: var(--pw-purple); }
+html[data-theme="dark"] .ax-canvas-btn { color: var(--pw-purple); }
+
+/* teams import modal */
+html[data-theme="dark"] .dw-teams-modal, html[data-theme="dark"] .dw-capmap-modal,
+html[data-theme="dark"] .dw-diagram-modal { background: var(--panel); }
+html[data-theme="dark"] .dw-teams-connect { color: var(--ink-2); }
+html[data-theme="dark"] .dw-teams-code { color: var(--pw-purple); background: var(--accent-weak); border-color: var(--line2); }
+html[data-theme="dark"] .dw-teams-item { border-color: var(--line); background: var(--panel-2); }
+html[data-theme="dark"] .dw-teams-subj { color: var(--ink); }
+html[data-theme="dark"] .dw-teams-meta { color: var(--muted); }
+
+/* synthesis canvas */
+html[data-theme="dark"] .sc-drop { border-color: var(--line2); background: var(--panel-2); }
+html[data-theme="dark"] .sc-drop.over { background: var(--accent-weak); border-color: var(--pw-purple); }
+html[data-theme="dark"] .sc-empty { color: var(--muted); }
+html[data-theme="dark"] .sc-addall { color: var(--pw-purple); }
+html[data-theme="dark"] .sc-addall:disabled { color: var(--faint); }
+html[data-theme="dark"] .sc-chip { background: var(--panel-3); border-color: var(--line2); color: var(--ink); box-shadow: none; }
+html[data-theme="dark"] .sc-chip.gen { background: var(--accent-weak); border-color: var(--line2); }
+html[data-theme="dark"] .sc-chip-ic { background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .sc-chip-x { color: var(--faint); }
+html[data-theme="dark"] .sc-chip-x:hover { background: var(--panel-2); color: var(--red); }
+html[data-theme="dark"] .sc-clear { color: var(--faint); }
+html[data-theme="dark"] .sc-actions-lbl { color: var(--muted); }
+html[data-theme="dark"] .sc-out-chip { border-color: var(--line2); background: var(--panel-2); color: var(--muted); }
+html[data-theme="dark"] .sc-out-chip.on { border-color: var(--pw-purple); background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .sc-pipe-step { color: var(--muted); border-left-color: var(--line); }
+html[data-theme="dark"] .sc-pipe-step.running { color: var(--ink-2); border-left-color: var(--pw-purple); }
+html[data-theme="dark"] .sc-pipe-step.done { color: var(--green); border-left-color: var(--green); }
+html[data-theme="dark"] .sc-pipe-step.failed { color: var(--red); border-left-color: var(--red); }
+html[data-theme="dark"] .sc-pipe-note { color: var(--muted); }
+html[data-theme="dark"] .sc-status { color: var(--muted); }
+html[data-theme="dark"] .sc-status-done { color: var(--green); }
+html[data-theme="dark"] .sc-open { color: var(--pw-purple); }
+html[data-theme="dark"] .pw-tag-inputs { background: var(--accent-weak); color: var(--pw-purple); }
+
+/* capture banner */
+html[data-theme="dark"] .dw-capture { border-color: var(--line); background: var(--panel-2); color: var(--ink-2); }
+html[data-theme="dark"] .dw-capture-note { color: var(--pw-purple); }
+html[data-theme="dark"] .dw-capture-empty { background: var(--panel-2); }
+html[data-theme="dark"] .dw-capture-busy { border-color: var(--line2); }
+
+/* requirements panel */
+html[data-theme="dark"] .dw-req-addlink { color: var(--pw-purple); }
+html[data-theme="dark"] .dw-req-add { border-color: var(--line2); background: var(--panel-2); }
+html[data-theme="dark"] .dw-select { border-color: var(--line2); background: var(--panel-2); color: var(--ink-2); }
+html[data-theme="dark"] .dw-req-group-hd { color: var(--muted); }
+html[data-theme="dark"] .dw-req-group-n { background: var(--panel-3); color: var(--muted); }
+html[data-theme="dark"] .dw-req-row { border-color: var(--line); border-left-color: var(--line2); background: var(--panel-2); }
+html[data-theme="dark"] .dw-req-row:hover { border-left-color: var(--pw-purple); box-shadow: 0 4px 14px rgba(0, 0, 0, .3); }
+html[data-theme="dark"] .dw-req-id { color: var(--pw-purple); background: var(--accent-weak); }
+html[data-theme="dark"] .dw-req-cat { color: var(--blue); background: var(--blue-weak); }
+html[data-theme="dark"] .dw-moscow-must { background: var(--red-weak); color: var(--red); }
+html[data-theme="dark"] .dw-moscow-should { background: var(--amber-weak); color: var(--amber); }
+html[data-theme="dark"] .dw-moscow-could { background: var(--teal-weak); color: var(--teal); }
+html[data-theme="dark"] .dw-moscow-wont { background: var(--panel-3); color: var(--muted); }
+html[data-theme="dark"] .dw-req-status { border-color: var(--line2); background: var(--panel-3); color: var(--muted); }
+html[data-theme="dark"] .dw-req-status.ok { background: var(--green-weak); border-color: var(--green); color: var(--green); }
+html[data-theme="dark"] .dw-req-text { color: var(--ink); }
+html[data-theme="dark"] .dw-req-quote { color: var(--muted); border-left-color: var(--line2); }
+
+/* capability map */
+html[data-theme="dark"] .dw-legend { color: var(--muted); }
+html[data-theme="dark"] .dw-cap-domain-hd { color: var(--ink-2); }
+html[data-theme="dark"] .dw-cap-card { border-color: var(--line); border-top-width: 3px; background: var(--panel-2); }
+html[data-theme="dark"] .dw-cap-card:hover { box-shadow: 0 8px 20px rgba(0, 0, 0, .35); }
+html[data-theme="dark"] .dw-cap-card.dw-opp-high { background: var(--panel-2); }
+html[data-theme="dark"] .dw-cap-card.dw-opp-medium { background: var(--panel-2); }
+html[data-theme="dark"] .dw-cap-card.dw-opp-low { background: var(--panel-2); }
+html[data-theme="dark"] .dw-cap-name { color: var(--ink); }
+html[data-theme="dark"] .dw-cap-note { color: var(--muted); }
+html[data-theme="dark"] .dw-maturity i { background: var(--panel-3); }
+html[data-theme="dark"] .dw-maturity i.on { background: var(--pw-purple); }
+html[data-theme="dark"] .dw-opp-badge.dw-opp-high { background: var(--red-weak); color: var(--red); }
+html[data-theme="dark"] .dw-opp-badge.dw-opp-medium { background: var(--amber-weak); color: var(--amber); }
+html[data-theme="dark"] .dw-opp-badge.dw-opp-low { background: var(--green-weak); color: var(--green); }
+
+/* native diagram canvas — dark chrome, light drawing surface */
+html[data-theme="dark"] .dwc { border-color: var(--line); background: var(--panel); box-shadow: 0 6px 24px rgba(0, 0, 0, .4); }
+html[data-theme="dark"] .dwc-chrome { border-color: var(--line); background: var(--panel-2); }
+html[data-theme="dark"] .dwc-file { color: var(--ink-2); }
+html[data-theme="dark"] .dwc-badge { background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .dwc-tool { color: var(--muted); }
+html[data-theme="dark"] .dwc-tool:hover { background: var(--panel-3); color: var(--ink); }
+html[data-theme="dark"] .dwc-edit { color: var(--pw-purple); }
+html[data-theme="dark"] .dwc-pages { background: var(--panel-2); }
+html[data-theme="dark"] .dwc-page { border-color: var(--line); background: var(--panel-3); color: var(--muted); }
+html[data-theme="dark"] .dwc-page.on { background: var(--panel); color: var(--pw-purple); }
+html[data-theme="dark"] .dwc-rail { border-color: var(--line); background: var(--panel-2); }
+html[data-theme="dark"] .dwc-rail-btn { color: var(--muted); }
+html[data-theme="dark"] .dwc-rail-btn:hover { background: var(--panel-3); color: var(--pw-purple); }
+html[data-theme="dark"] .dwc-rail-btn.on { background: var(--accent-weak); color: var(--pw-purple); }
+html[data-theme="dark"] .dwc-summary { border-color: var(--line); background: var(--panel-2); color: var(--muted); }

@@ -56,7 +56,7 @@ export default function CanvasWorkshopPage({ params }) {
 
   if (!user || (!workshop && !error)) {
     return (
-      <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif', color: '#6b7280', fontSize: 14 }}>
+      <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif', color: 'var(--muted)', fontSize: 14 }}>
         Loading workshop…
       </main>
     );
@@ -65,8 +65,8 @@ export default function CanvasWorkshopPage({ params }) {
   if (error) {
     return (
       <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif', fontSize: 14 }}>
-        <p style={{ color: '#b91c1c', marginBottom: 12 }}>⚠ {error}</p>
-        <a href="/projects" style={{ color: '#2563eb' }}>‹ Back to Projects</a>
+        <p style={{ color: 'var(--red)', marginBottom: 12 }}>⚠ {error}</p>
+        <a href="/projects" style={{ color: 'var(--accent)' }}>‹ Back to Projects</a>
       </main>
     );
   }

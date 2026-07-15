@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiGet, apiPost } from '../lib/api';
 import { getMsalInstance, loginRequest, isAzureConfigured } from '../lib/msalConfig';
+import { Icon } from '../lib/icons';
+import { toggleTheme, useTheme } from '../lib/theme';
 import '../shared.css';
 
 // Two sign-in paths, both landing on the same backend session cookie:
@@ -104,17 +106,28 @@ export default function LoginPage() {
     }
   }
 
+  const theme = useTheme();
+
   return (
-    <div className="app-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{
-        width: 'min(380px, 92vw)', background: '#fff', border: '1px solid var(--line2)',
-        borderRadius: 14, boxShadow: 'var(--shadow)', padding: '28px 26px',
-      }}
+    <div className="app-shell login-wrap">
+      <button
+        type="button" className="login-theme-btn ic" onClick={toggleTheme}
+        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 22 }}>
-          <span style={{ width: 16, height: 16, borderRadius: 5, background: 'var(--accent)' }} />
-          <h1 style={{ fontSize: 17, fontWeight: 700 }}>AI Discovery Canvas</h1>
+        <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+      </button>
+
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="login-mark ic"><Icon name="sparkles" /></span>
+          <div>
+            <h1>AI Discovery Canvas</h1>
+            <div className="login-tag">ENGAGEMENT INTELLIGENCE</div>
+          </div>
         </div>
+        <p className="login-welcome">
+          Welcome back — sign in to pick up your projects and workshops where you left them.
+        </p>
 
         {azureReady && (
           <>
@@ -122,8 +135,7 @@ export default function LoginPage() {
               type="button"
               onClick={handleMicrosoftSignIn}
               disabled={msBusy}
-              className="btn"
-              style={{ width: '100%', justifyContent: 'center', padding: '10px 14px', fontSize: 13.5 }}
+              className="btn login-ms-btn"
             >
               <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true">
                 <rect x="1" y="1" width="9" height="9" fill="#f25022" />
@@ -133,18 +145,14 @@ export default function LoginPage() {
               </svg>
               {msBusy ? 'Signing in…' : 'Sign in with Microsoft'}
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--muted)', fontSize: 12 }}>
-              <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-              or
-              <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-            </div>
+            <div className="login-or"><i />or<i /></div>
           </>
         )}
 
-        <p style={{ color: 'var(--muted)', fontSize: 12.5, marginBottom: 12 }}>
+        <p className="login-welcome" style={{ margin: '0 0 12px' }}>
           Sign in (mock auth — dev only, any name/email works).
         </p>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <form onSubmit={handleSubmit} className="login-form">
           <input
             type="text"
             value={name}
