@@ -53,6 +53,7 @@ export default function ArtifactExplorer({
     typeof window === 'undefined' ? { sources: true, [activePhase]: true }
       : loadExpanded(workshopId, activePhase));
   const [filter, setFilter] = useState('');
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     try { window.localStorage.setItem(`aidc-explorer-${workshopId}`, JSON.stringify(expanded)); }
@@ -185,17 +186,27 @@ export default function ArtifactExplorer({
   }
 
   return (
-    <section className="pw-sources ax">
+    <div className={'pw-sources-wrap' + (collapsed ? ' collapsed' : '')}>
+      <button className={'pw-collapse-btn' + (collapsed ? ' flipped' : '')} onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Expand Artifacts' : 'Collapse Artifacts'}>
+        <Icon name="caretL" />
+      </button>
+      <section className={'pw-sources ax' + (collapsed ? ' collapsed' : '')}>
       <div className="pw-panel-head">
-        <div className="pw-panel-ttl">
-          <span className="pw-ic pw-ic-accent"><Icon name="folder" /></span>
-          <div>
-            <div className="pw-h3">Artifacts</div>
-            <div className="pw-sub">{docs.length} source{docs.length === 1 ? '' : 's'} · {artifacts.length} generated</div>
+        {!collapsed && (
+          <div className="pw-panel-ttl">
+            <span className="pw-ic pw-ic-accent"><Icon name="folder" /></span>
+            <div>
+              <div className="pw-h3">Artifacts</div>
+              <div className="pw-sub">{docs.length} source{docs.length === 1 ? '' : 's'} · {artifacts.length} generated</div>
+            </div>
           </div>
-        </div>
-        {onAdd && <button className="btn" onClick={onAdd}><Icon name="plus" />Add</button>}
+        )}
+        {collapsed && <span className="pw-ic pw-ic-accent"><Icon name="folder" /></span>}
+        {!collapsed && onAdd && <button className="btn" onClick={onAdd}><Icon name="plus" />Add</button>}
       </div>
+      {!collapsed && (
+        <>
       {extraAction}
       {onAdd && (
         <div className="pw-dropzone ax-drop" onClick={onAdd}>
@@ -265,6 +276,9 @@ export default function ArtifactExplorer({
           );
         })}
       </div>
-    </section>
+        </>
+      )}
+      </section>
+    </div>
   );
 }

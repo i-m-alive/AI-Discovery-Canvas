@@ -9,9 +9,11 @@ import CopilotPanel from '../CopilotPanel';
 import PhaseTabs, { PHASES } from '../PhaseTabs';
 import PreWorkshopDashboard from '../preworkshop/PreWorkshopDashboard';
 import DuringWorkshopDashboard from '../duringworkshop/DuringWorkshopDashboard';
+import PostWorkshopDashboard from '../postworkshop/PostWorkshopDashboard';
 import { Icon } from '../../lib/icons';
 import '../preworkshop/preworkshop.css';
 import '../duringworkshop/duringworkshop.css';
+import '../postworkshop/postworkshop.css';
 
 // A Workshop IS the canvas board (see app/routes/projects.py +
 // app/routes/canvas.py) — this page resolves :workshopId to its owning
@@ -21,9 +23,9 @@ import '../duringworkshop/duringworkshop.css';
 // as every other top-level page (see useAuthedUser). Pre-Workshop and
 // During Workshop are dashboards now; During Workshop additionally
 // keeps a "Board view" toggle back to its canvas (explicit product
-// decision — the canvas isn't retired for that phase, it's one toggle
-// away). Post-Workshop/Proposal & Planning still render the canvas,
-// scoped via `initialLens`.
+// decision — the canvas isn't retired for those phases, it's one toggle
+// away; same pattern for Post-Workshop). Proposal & Planning still
+// renders the canvas, scoped via `initialLens`.
 export default function CanvasWorkshopPage({ params }) {
   const { workshopId } = use(params);
   const user = useAuthedUser();
@@ -32,6 +34,7 @@ export default function CanvasWorkshopPage({ params }) {
   const [phase, setPhase] = useState('prepare');
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [runBoardView, setRunBoardView] = useState(false);
+  const [synthBoardView, setSynthBoardView] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -92,11 +95,23 @@ export default function CanvasWorkshopPage({ params }) {
           workshopId={Number(workshopId)}
           onBoardView={() => setRunBoardView(true)}
         />
+      ) : phase === 'synthesize' && !synthBoardView ? (
+        <PostWorkshopDashboard
+          user={user}
+          workshopId={Number(workshopId)}
+          onBoardView={() => setSynthBoardView(true)}
+        />
       ) : (
         <div className="pw-canvas-wrap">
           {phase === 'run' && (
             <button className="dw-back-dash" onClick={() => setRunBoardView(false)}
               title="Back to the During-Workshop dashboard">
+              <Icon name="list" />Dashboard view
+            </button>
+          )}
+          {phase === 'synthesize' && (
+            <button className="dw-back-dash" onClick={() => setSynthBoardView(false)}
+              title="Back to the Post-Workshop dashboard">
               <Icon name="list" />Dashboard view
             </button>
           )}

@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Post-Workshop Phase — Implementation Plan</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --panel:#ffffff; --ink:#1c2030; --ink2:#4a5164; --muted:#7b8296;
+    --line:#e4e8ee; --accent:#6d5ce8; --accent-weak:#efedfd;
+    --green:#2f8f5b; --green-weak:#eaf6f0;
+    --amber:#c9881f; --amber-weak:#faf1e1;
+    --red:#c0463b; --red-weak:#fbecea;
+    --code-bg:#f1f0fa; --shadow:0 2px 10px rgba(24,39,64,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14151f; --panel:#1b1c29; --ink:#eef0f6; --ink2:#c3c7d6; --muted:#8c93a8;
+      --line:#2c2e40; --accent:#9b8cf5; --accent-weak:#2a2650;
+      --green:#4fbf85; --green-weak:#173327;
+      --amber:#e0ac4c; --amber-weak:#3a2f16;
+      --red:#e07b6f; --red-weak:#3a1e1c;
+      --code-bg:#232437; --shadow:0 2px 14px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14151f; --panel:#1b1c29; --ink:#eef0f6; --ink2:#c3c7d6; --muted:#8c93a8;
+    --line:#2c2e40; --accent:#9b8cf5; --accent-weak:#2a2650;
+    --green:#4fbf85; --green-weak:#173327;
+    --amber:#e0ac4c; --amber-weak:#3a2f16;
+    --red:#e07b6f; --red-weak:#3a1e1c;
+    --code-bg:#232437; --shadow:0 2px 14px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f7fb; --panel:#ffffff; --ink:#1c2030; --ink2:#4a5164; --muted:#7b8296;
+    --line:#e4e8ee; --accent:#6d5ce8; --accent-weak:#efedfd;
+    --green:#2f8f5b; --green-weak:#eaf6f0;
+    --amber:#c9881f; --amber-weak:#faf1e1;
+    --red:#c0463b; --red-weak:#fbecea;
+    --code-bg:#f1f0fa; --shadow:0 2px 10px rgba(24,39,64,.06);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    line-height:1.55; font-size:14.5px;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:28px 24px 80px}
+  header.hero{
+    background:linear-gradient(135deg,var(--accent) 0%,#5645c9 100%); color:#fff;
+    border-radius:16px; padding:30px 32px; margin-bottom:22px; box-shadow:var(--shadow);
+  }
+  header.hero h1{margin:0 0 6px; font-size:24px}
+  header.hero p{margin:0; opacity:.92; font-size:13.5px; max-width:760px}
+  header.hero .tag{
+    display:inline-block; background:rgba(255,255,255,.18); border-radius:999px;
+    padding:3px 11px; font-size:11px; font-weight:700; letter-spacing:.03em; margin-bottom:10px;
+  }
+  nav.toc{
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:26px; position:sticky; top:0;
+    background:var(--bg); padding:10px 0; z-index:5; border-bottom:1px solid var(--line);
+  }
+  nav.toc a{
+    font-size:11.5px; font-weight:600; color:var(--ink2); text-decoration:none;
+    border:1px solid var(--line); border-radius:999px; padding:5px 11px; background:var(--panel);
+    white-space:nowrap;
+  }
+  nav.toc a:hover{border-color:var(--accent); color:var(--accent)}
+  section{margin-bottom:34px}
+  h2{font-size:18px; margin:0 0 4px; display:flex; align-items:center; gap:8px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+    border-radius:7px; background:var(--accent-weak); color:var(--accent); font-size:12px; font-weight:800;
+  }
+  .lede{color:var(--muted); font-size:13px; margin:0 0 16px; max-width:820px}
+  h3{font-size:14.5px; margin:20px 0 8px; color:var(--ink)}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+    box-shadow:var(--shadow); margin-bottom:14px;
+  }
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  @media (max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+  .qcard h4{margin:0 0 6px; font-size:13.5px; display:flex; gap:8px; align-items:flex-start}
+  .qcard .qn{
+    flex:none; width:20px; height:20px; border-radius:6px; background:var(--accent); color:#fff;
+    font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; margin-top:1px;
+  }
+  .qcard p{margin:0; font-size:13px; color:var(--ink2)}
+  table{width:100%; border-collapse:collapse; font-size:12.8px}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  .pill{
+    display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:700;
+    border-radius:999px; padding:3px 9px; white-space:nowrap;
+  }
+  .pill-exists{color:var(--green); background:var(--green-weak)}
+  .pill-partial{color:var(--amber); background:var(--amber-weak)}
+  .pill-new{color:var(--red); background:var(--red-weak)}
+  .pill-reuse{color:var(--accent); background:var(--accent-weak)}
+  code, .mono{
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; background:var(--code-bg);
+    border-radius:5px; padding:1px 6px;
+  }
+  pre{
+    background:var(--code-bg); border-radius:10px; padding:14px 16px; overflow-x:auto;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.6; margin:8px 0;
+  }
+  ul{margin:6px 0; padding-left:20px}
+  li{margin:4px 0}
+  .callout{
+    border-left:3px solid var(--accent); background:var(--accent-weak); border-radius:0 10px 10px 0;
+    padding:12px 16px; font-size:13px; margin:10px 0;
+  }
+  .callout.warn{border-color:var(--amber); background:var(--amber-weak)}
+  .callout strong{display:block; margin-bottom:3px; font-size:12px; text-transform:uppercase; letter-spacing:.02em}
+  .phase-roadmap{border-left:2px solid var(--line); margin-left:10px; padding-left:22px}
+  .phase-step{position:relative; padding-bottom:22px}
+  .phase-step:last-child{padding-bottom:0}
+  .phase-step::before{
+    content:''; position:absolute; left:-27px; top:3px; width:11px; height:11px; border-radius:50%;
+    background:var(--accent); border:2px solid var(--panel); box-shadow:0 0 0 2px var(--accent);
+  }
+  .phase-step h4{margin:0 0 4px; font-size:14px}
+  .phase-step .eff{
+    display:inline-block; margin-left:8px; font-size:10px; font-weight:700; padding:1px 8px; border-radius:999px;
+  }
+  .eff-s{background:var(--green-weak); color:var(--green)}
+  .eff-m{background:var(--amber-weak); color:var(--amber)}
+  .eff-l{background:var(--red-weak); color:var(--red)}
+  .badge-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px}
+  .stat-tiles{display:flex; gap:10px; flex-wrap:wrap; margin:10px 0}
+  .stat-tile{
+    border:1px solid var(--line); border-radius:12px; padding:10px 16px; min-width:90px; text-align:center;
+    background:var(--panel);
+  }
+  .stat-tile b{display:block; font-size:20px; color:var(--accent)}
+  .stat-tile span{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em}
+  footer{color:var(--muted); font-size:11.5px; text-align:center; padding-top:24px; border-top:1px solid var(--line)}
+  .col-files td:first-child{white-space:nowrap; font-family:ui-monospace,Menlo,monospace; font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="tag">ENGAGEMENT · PHASE 3 OF 4</span>
+    <h1>Post-Workshop — Implementation Plan</h1>
+    <p>Backlog · Opportunities · Minutes of Meeting · Azure DevOps/Jira sync. This plan inventories what already
+      exists in the codebase versus what's net-new, then lays out a concrete build order for both the frontend
+      dashboard and the backend generation/storage/sync it needs.</p>
+  </header>
+
+  <nav class="toc">
+    <a href="#answers">Your questions, answered</a>
+    <a href="#state">Current state</a>
+    <a href="#ia">Page layout</a>
+    <a href="#data">Data model</a>
+    <a href="#pipeline">Generation pipeline</a>
+    <a href="#api">API surface</a>
+    <a href="#sync">ADO / Jira sync</a>
+    <a href="#roadmap">Build roadmap</a>
+    <a href="#decisions">Decisions needed</a>
+  </nav>
+
+  <section id="answers">
+    <h2><span class="num">1</span>Your six questions, answered directly</h2>
+    <p class="lede">Before the deep-dive, here's the short answer to each thing you asked about.</p>
+    <div class="grid2">
+      <div class="card qcard">
+        <h4><span class="qn">1</span>Source Artifacts panel (left side)</h4>
+        <p><span class="pill pill-reuse">Reuse as-is</span> Same <code>ArtifactExplorer.jsx</code> component
+          Pre-Workshop and During-Workshop already use. It already has a "Post-Workshop" zone bucket wired in —
+          just mount it with <code>activePhase="Post-Workshop"</code>. No component changes needed.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">2</span>Product Backlog section</h4>
+        <p><span class="pill pill-new">Net-new</span> Epics → Features → Stories with acceptance criteria doesn't
+          exist as a hierarchy anywhere. The backend has a flat, disconnected "stories" generator and a separate
+          "acceptance criteria" generator, but no grouping and no persistence beyond a chat-card. Needs new tables,
+          a new generation agent, and a new UI component.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">3</span>Future Opportunities Register</h4>
+        <p><span class="pill pill-partial">Partial</span> An "opportunities" LLM generator already exists and
+          produces real content, but it's a one-shot narrative list with nothing structured saved — not a
+          trackable register with Horizon/Size/Priority per item. Needs a proper table + status workflow.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">4</span>Minutes of Meeting — is it from the imported transcript?</h4>
+        <p><span class="pill pill-partial">Partial</span> Yes — that's the right model, and a real "mom" generator
+          already exists and is closest to reuse-as-is. It should read the Teams transcripts imported in
+          During-Workshop (built in an earlier round of this conversation) plus Granola notes and manual BA notes.
+          It needs restructuring into Decisions / Actions / Open Questions sections plus a confidence score, matching
+          your reference design.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">5</span>Acceptance criteria</h4>
+        <p><span class="pill pill-partial">Partial</span> Not a standalone section — it's a property of each user
+          story ("Given / When / Then", nested under the story it belongs to). The generator for this exists today
+          but runs as its own disconnected draft rather than attached per-story. It needs to be folded into backlog
+          generation, not built separately.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">6</span>User stories — same as Product Backlog, or separate?</h4>
+        <p><span class="pill pill-reuse">Same thing</span> User stories are the leaf level of the Product Backlog
+          tree (Epic → Feature → Story) — not a separate page. Your reference screenshot shows exactly this: each
+          Feature card contains its stories as bullet points with an "Acceptance criteria generated" tag underneath.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="state">
+    <h2><span class="num">2</span>Current state — what exists vs. what's net-new</h2>
+    <p class="lede">Investigated directly against this repo (not the reference site). Two things worth knowing
+      up front: there is <strong>no <code>postworkshop/</code> folder</strong> in the frontend yet — the phase
+      currently falls through to the old vanilla-JS canvas, scoped to a "synthesize" region — and there is
+      <strong>no phase/stage column in Postgres at all</strong>; "which phase produced this" is inferred at read
+      time from which agent generated a document, not stored as workshop state.</p>
+
+    <h3>Frontend</h3>
+    <table>
+      <tr><th>Piece</th><th>Status</th><th>Notes</th></tr>
+      <tr>
+        <td>4-phase tab config</td><td><span class="pill pill-reuse">Reuse</span></td>
+        <td><code>PhaseTabs.jsx</code>'s <code>PHASES</code> array already lists Post-Workshop
+          (id <code>synthesize</code>) with subtitle "Backlog · Opportunities · MoM" — but flags <code>dashboard:
+          false</code>, and <code>page.js</code> doesn't read that flag at all; the branch is hardcoded.</td>
+      </tr>
+      <tr>
+        <td>Phase routing (<code>[workshopId]/page.js</code>)</td><td><span class="pill pill-new">Net-new branch</span></td>
+        <td>Only 2 real branches exist today (<code>prepare</code> → dashboard, <code>run</code> → dashboard);
+          everything else (including <code>synthesize</code>) falls through to the same old <code>CanvasApp</code>.
+          Needs a new <code>phase === 'synthesize'</code> branch mirroring the <code>run</code> branch's pattern.</td>
+      </tr>
+      <tr>
+        <td>Source Artifacts panel</td><td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>ArtifactExplorer.jsx</code> — phase-agnostic, all callback props optional, already zone-buckets
+          "Post-Workshop". Drop in with <code>activePhase="Post-Workshop"</code>.</td>
+      </tr>
+      <tr>
+        <td>"X/Y ingested" counter copy</td><td><span class="pill pill-partial">Small gap</span></td>
+        <td>That literal phrasing only exists on a currently <em>dead, unused</em> component
+          (<code>SourceArtifactsPanel</code> in <code>PreWorkshopDashboard.jsx</code>). The live
+          <code>ArtifactExplorer</code> shows "X source(s) · Y generated" instead. Cosmetic — decide which copy to
+          standardize on (see Decisions Needed).</td>
+      </tr>
+      <tr>
+        <td>Generation trigger UI (dropzone → chips → run → status pills)</td>
+        <td><span class="pill pill-partial">Pattern reusable, not the component</span></td>
+        <td><code>SynthesisCanvas.jsx</code>'s interaction pattern is exactly right, but its <code>GENERATORS</code>
+          array is a hardcoded module constant tied to During-Workshop's 4 generators. Needs a small refactor to
+          accept <code>generators</code> as a prop so Post-Workshop can supply its own set — not a rebuild.</td>
+      </tr>
+      <tr>
+        <td>Stat-tile row (Epics/Features/Stories/Opportunities counts)</td><td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>.pw-stats</code> / <code>.pw-stat</code> / <code>.pw-stat-num</code> / <code>.pw-stat-lbl</code>
+          CSS + markup pattern already used identically in both live dashboards.</td>
+      </tr>
+      <tr>
+        <td>Draft/status badges</td><td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>.pw-pill.pw-pill-draft/in_review/final</code> — already themed for dark mode, already the exact
+          shape shown in your reference screenshot's "Draft" tags.</td>
+      </tr>
+      <tr>
+        <td>"Post-Workshop Artifacts" card grid</td><td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>ArtifactsGrid</code> (exported from <code>PreWorkshopDashboard.jsx</code>) already takes a
+          <code>zone</code> prop and filters by it — <code>&lt;ArtifactsGrid zone="Post-Workshop" .../&gt;</code>
+          works with zero changes.</td>
+      </tr>
+      <tr>
+        <td>Product Backlog tree UI (Epic → Feature → Story cards)</td><td><span class="pill pill-new">Net-new</span></td>
+        <td>No equivalent component exists. Build <code>BacklogBoard.jsx</code>.</td>
+      </tr>
+      <tr>
+        <td>Future Opportunities Register grid</td><td><span class="pill pill-new">Net-new</span></td>
+        <td>Build <code>OpportunitiesRegister.jsx</code> (Horizon/Size/Priority badge cards).</td>
+      </tr>
+      <tr>
+        <td>Minutes of Meeting card</td><td><span class="pill pill-new">Net-new UI</span></td>
+        <td>Backend content mostly exists (see below); the Decisions/Actions/Open-Questions card layout with a
+          confidence badge is new. Build <code>MomCard.jsx</code>.</td>
+      </tr>
+      <tr>
+        <td>Azure DevOps / Jira sync buttons + status</td><td><span class="pill pill-new">100% net-new</span></td>
+        <td>Zero UI exists. The old canvas's "Handoff" checklist literally lists "ADO-importable JSON" as an
+          italicized, unchecked <em>"(Phase 2)"</em> placeholder.</td>
+      </tr>
+    </table>
+
+    <h3>Backend</h3>
+    <table>
+      <tr><th>Piece</th><th>Status</th><th>Notes</th></tr>
+      <tr>
+        <td>Requirements table (<code>requirements</code>)</td><td><span class="pill pill-reuse">Reuse as input</span></td>
+        <td>Has <code>req_id</code> ("REQ-01"), <code>text</code>, <code>moscow</code> priority, <code>status</code>,
+          full provenance — the natural seed corpus for backlog generation. No epic/feature grouping column, so it
+          doesn't become the backlog itself.</td>
+      </tr>
+      <tr>
+        <td>Generic LLM agent pipeline (<code>agent_catalog.py::run_agent</code>)</td><td><span class="pill pill-reuse">Reuse the pattern</span></td>
+        <td>Prompt → JSON → sanitize/coerce → persist. This is the right pattern to extend for every new generator
+          below — no new LLM plumbing needed, <code>llm_service.py</code> stays untouched.</td>
+      </tr>
+      <tr>
+        <td>"stories" agent</td><td><span class="pill pill-partial">Exists, needs rework</span></td>
+        <td>Zone-tagged <code>Post-Workshop</code> already. Produces 4-6 flat stories, no epic/feature hierarchy,
+          <code>doc: False</code> (no structured JSON persisted).</td>
+      </tr>
+      <tr>
+        <td>"bdd" (acceptance criteria) agent</td><td><span class="pill pill-partial">Exists, needs merging</span></td>
+        <td>Runs as its own separate draft, disconnected from any specific story. Needs folding into the new
+          backlog generator so criteria attach to the story they belong to.</td>
+      </tr>
+      <tr>
+        <td>"opportunities" agent</td><td><span class="pill pill-partial">Exists, needs structuring</span></td>
+        <td><code>doc: False</code> — no persisted structured register today, just narrative bullets.</td>
+      </tr>
+      <tr>
+        <td>"mom" agent</td><td><span class="pill pill-partial">Closest to reuse-as-is</span></td>
+        <td>Already <code>doc: True</code> (persisted, exportable) — the best-positioned existing piece. Needs its
+          task prompt/output reshaped into Decisions/Actions/Open-Questions + confidence, and its input context
+          confirmed to include imported Teams transcripts + Granola + manual notes.</td>
+      </tr>
+      <tr>
+        <td>Structured JSON storage on <code>generated_docs</code></td><td><span class="pill pill-partial">Exists, narrow</span></td>
+        <td>Typed-per-feature columns exist (<code>capmap_json</code>, <code>analysis_json</code>, etc.) — no
+          generic tree column. Fine for MoM (add <code>mom_json</code>); not a good fit for backlog/opportunities,
+          which need per-item edit + per-item sync-state tracking (see Data Model).</td>
+      </tr>
+      <tr>
+        <td>Epic / Feature / Backlog concept</td><td><span class="pill pill-new">Does not exist</span></td>
+        <td>No table, no agent key, no task prompt anywhere in the backend.</td>
+      </tr>
+      <tr>
+        <td>Workshop phase/stage state</td><td><span class="pill pill-new">Does not exist</span></td>
+        <td>No column in Postgres. Not a blocker — phase is already inferred client-side from agent zone, and that
+          pattern extends fine to the new agents below.</td>
+      </tr>
+      <tr>
+        <td>Azure DevOps integration</td><td><span class="pill pill-partial">Wrong-shaped stub exists</span></td>
+        <td><code>source_oauth.py</code> has a real ADO OAuth entry, but it's scoped for cloning a client's git
+          repo as a RAG source — not for pushing Work Items to Boards. The OAuth token-exchange scaffolding is
+          reusable; the actual Work Item REST client is not there.</td>
+      </tr>
+      <tr>
+        <td>Jira integration</td><td><span class="pill pill-new">100% net-new</span></td>
+        <td>Zero existing code beyond incidental string matches (a regex comment, a RAG source-type mention).</td>
+      </tr>
+      <tr>
+        <td>ADO-importable JSON export</td><td><span class="pill pill-new">100% net-new</span></td>
+        <td><code>export.py</code> only supports <code>docx</code>/<code>md</code>, both hardcoded to a fixed
+          folder order. No JSON export mode of any kind exists.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="ia">
+    <h2><span class="num">3</span>Target page layout</h2>
+    <p class="lede">Matches your reference screenshots, annotated with which piece is reused vs. built.</p>
+    <div class="card">
+      <div class="stat-tiles">
+        <div class="stat-tile"><b>5</b><span>Epics</span></div>
+        <div class="stat-tile"><b>18</b><span>Features</span></div>
+        <div class="stat-tile"><b>63</b><span>Stories</span></div>
+        <div class="stat-tile"><b>9</b><span>Opportunities</span></div>
+      </div>
+      <ul>
+        <li><strong>Left rail — Source Artifacts</strong> <span class="pill pill-reuse">reuse</span> — same
+          <code>ArtifactExplorer</code>, <code>activePhase="Post-Workshop"</code>. Sources here are typically the
+          approved requirements/capability map from During-Workshop plus any extra docs dropped for this phase.</li>
+        <li><strong>Header stat tiles</strong> <span class="pill pill-reuse">reuse CSS</span> — counts driven by
+          <code>GET /api/backlog/&lt;workshop_id&gt;</code> and <code>GET /api/opportunities/&lt;workshop_id&gt;</code>.</li>
+        <li><strong>Product Backlog panel</strong> <span class="pill pill-new">new: <code>BacklogBoard.jsx</code></span>
+          — "Sync to Azure DevOps" / "Sync to Jira" buttons in the panel header, epic cards containing feature
+          sub-cards containing story bullets, each with an "Acceptance criteria generated" tag once the story has
+          criteria attached.</li>
+        <li><strong>Future Opportunities Register</strong> <span class="pill pill-new">new: <code>OpportunitiesRegister.jsx</code></span>
+          — card grid, each with Horizon (Phase 1/2/3/Explore), Size (S/M/L), and priority (high/med/low) badges.</li>
+        <li><strong>Minutes of Meeting card</strong> <span class="pill pill-new">new: <code>MomCard.jsx</code></span>
+          — confidence badge, Decisions / Actions (owner + due) / Open Questions sections, sourced from imported
+          transcripts + notes.</li>
+        <li><strong>"Two-way sync" banner + "Push N items" button</strong> <span class="pill pill-new">new</span>
+          — see <a href="#sync">ADO / Jira sync</a> for why "two-way" is a scope decision, not a given.</li>
+        <li><strong>Post-Workshop Artifacts grid</strong> <span class="pill pill-reuse">reuse</span> —
+          <code>ArtifactsGrid zone="Post-Workshop"</code>, unchanged component.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="data">
+    <h2><span class="num">4</span>Data model — new tables</h2>
+    <p class="lede">Backlog and opportunities need normalized, per-item rows (not a single JSON blob) because the
+      facilitator must edit individual stories and the sync integration must track per-item external IDs. Minutes
+      of Meeting doesn't need per-item tracking, so it reuses the existing typed-JSON-column pattern instead.</p>
+
+    <h3><code>backlog_epics</code></h3>
+    <pre>id            PK
+workshop_id   FK -> workshops.id
+epic_id       "EPIC-01" (stable, server-assigned, unique per workshop — mirrors requirements.req_id)
+title
+description
+sort
+status        draft | approved
+created_at</pre>
+
+    <h3><code>backlog_features</code></h3>
+    <pre>id            PK
+workshop_id   FK -> workshops.id
+epic_id       FK -> backlog_epics.id
+feature_id    "FEAT-01"
+title
+sort
+created_at</pre>
+
+    <h3><code>backlog_stories</code></h3>
+    <pre>id                  PK
+workshop_id         FK -> workshops.id
+feature_id          FK -> backlog_features.id
+story_id            "US-01"
+text                "As a &lt;persona&gt;, I want &lt;capability&gt; so that &lt;outcome&gt;"
+acceptance_criteria JSONB list of {given, when, then}
+source_req_ids      JSONB list — provenance back to requirements.req_id
+status              draft | approved
+sort
+created_at</pre>
+
+    <h3><code>opportunities</code></h3>
+    <pre>id             PK
+workshop_id    FK -> workshops.id
+opp_id         "OPP-01"
+title
+description
+horizon        phase_1 | phase_2 | phase_3 | explore
+size           S | M | L
+priority       high | med | low
+status         open | flagged_for_pruning | accepted | rejected
+source_req_ids JSONB list — provenance
+created_at</pre>
+
+    <h3><code>backlog_sync_links</code> <span class="pill pill-new">needed for sync</span></h3>
+    <pre>id              PK
+workshop_id     FK -> workshops.id
+item_type       epic | feature | story
+item_id         FK into the matching backlog_* table
+provider        azure_devops | jira
+external_id     the ADO work item ID / Jira issue key
+external_url    deep link back into the client's board
+content_hash    hash of the fields last pushed — lets "Push N items" show only what changed
+last_synced_at</pre>
+
+    <h3><code>generated_docs</code> — one additive column</h3>
+    <pre>mom_json   JSONB: { decisions: [...], actions: [{owner, text, due}],
+                     open_questions: [...], confidence_pct }</pre>
+    <div class="callout">
+      <strong>Why normalized tables for backlog/opportunities but a JSON column for MoM</strong>
+      Backlog items need individual edit, individual approve/reject, and individual sync-state — a single blob
+      makes all of that awkward. MoM is read mostly as a whole card with no per-line editing or external sync, so
+      it fits the existing <code>capmap_json</code>/<code>analysis_json</code> pattern with zero new tables.
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <h2><span class="num">5</span>Generation pipeline</h2>
+    <p class="lede">Extends the existing <code>agent_catalog.py::run_agent</code> pattern — no new LLM plumbing.</p>
+    <div class="grid2">
+      <div class="card">
+        <h4>New agent: <code>backlog</code></h4>
+        <ul>
+          <li>Reads: approved <code>requirements</code> rows + capability map (<code>capmap_json</code>) if present.</li>
+          <li>One structured LLM call, JSON schema: <code>{ epics: [{ title, features: [{ title, stories: [{ text, acceptance_criteria }] }] }] }</code>
+            — same shape/coercion approach as <code>capmap</code>'s domains→capabilities nesting.</li>
+          <li>Sanitize → replace-on-regenerate into <code>backlog_epics</code>/<code>backlog_features</code>/<code>backlog_stories</code>
+            (delete-and-reinsert per workshop, matching how other regenerable docs behave), assigning stable
+            <code>EPIC-*</code>/<code>FEAT-*</code>/<code>US-*</code> ids.</li>
+          <li>Retires the old flat <code>stories</code> and <code>bdd</code> agents' role in Post-Workshop — their
+            prompts get merged into this one generator rather than running as three disconnected drafts.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Reshaped agent: <code>opportunities</code></h4>
+        <ul>
+          <li>Reads: requirements + any explicit "pain point"/"parking lot" tagged content from the During-Workshop capture.</li>
+          <li>Structured output: <code>{ opportunities: [{ title, description, horizon, size, priority }] }</code>.</li>
+          <li>Flip <code>doc: False → True</code>-equivalent by persisting rows into the new <code>opportunities</code> table.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Reshaped agent: <code>mom</code></h4>
+        <ul>
+          <li>Context builder extended to include imported Teams transcripts (from During-Workshop's transcript
+            import, already built) + Granola notes + manually-added BA notes.</li>
+          <li>Output reshaped to <code>{ decisions: [...], actions: [{owner, text, due}], open_questions: [...], confidence_pct }</code>,
+            persisted to the new <code>mom_json</code> column.</li>
+          <li>Confidence score: derive from source coverage (e.g. % of discussion segments with a matched
+            transcript timestamp) rather than asking the model to self-rate — self-rated confidence is unreliable.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Frontend generation trigger</h4>
+        <ul>
+          <li>Refactor <code>SynthesisCanvas.jsx</code> to accept a <code>generators</code> prop instead of importing
+            the module-level <code>GENERATORS</code> constant — small, low-risk change, and During-Workshop keeps
+            working unchanged by passing its existing array explicitly.</li>
+          <li>Post-Workshop passes <code>[{id:'backlog',...},{id:'opportunities',...},{id:'mom',...}]</code> and
+            reuses the same dropzone → chips → run → pipeline-status-pills → result-banner interaction.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="api">
+    <h2><span class="num">6</span>New API surface</h2>
+    <table>
+      <tr><th>Endpoint</th><th>Purpose</th></tr>
+      <tr><td class="mono">POST /api/backlog/&lt;workshop_id&gt;/generate</td><td>Run the backlog agent, replace existing epics/features/stories for this workshop.</td></tr>
+      <tr><td class="mono">GET /api/backlog/&lt;workshop_id&gt;</td><td>Full epic → feature → story tree + counts for the stat tiles.</td></tr>
+      <tr><td class="mono">PATCH /api/backlog/story/&lt;id&gt;</td><td>Facilitator edits story text or acceptance criteria before sync.</td></tr>
+      <tr><td class="mono">DELETE /api/backlog/{epic|feature|story}/&lt;id&gt;</td><td>Prune an item out of the backlog.</td></tr>
+      <tr><td class="mono">POST /api/opportunities/&lt;workshop_id&gt;/generate</td><td>Run the opportunities agent.</td></tr>
+      <tr><td class="mono">GET /api/opportunities/&lt;workshop_id&gt;</td><td>List the register.</td></tr>
+      <tr><td class="mono">PATCH /api/opportunities/&lt;id&gt;</td><td>Change status (accept / flag for pruning / reject) or edit fields.</td></tr>
+      <tr><td class="mono">POST /api/agents/run <span class="mono" style="opacity:.7">{agent_id:'mom'}</span></td><td>Existing endpoint, reshaped output — no new route needed.</td></tr>
+      <tr><td class="mono">POST /api/backlog/&lt;workshop_id&gt;/sync/azure-devops</td><td>Push unsynced/changed items as ADO Work Items.</td></tr>
+      <tr><td class="mono">POST /api/backlog/&lt;workshop_id&gt;/sync/jira</td><td>Push unsynced/changed items as Jira issues.</td></tr>
+      <tr><td class="mono">GET /api/backlog/&lt;workshop_id&gt;/sync/status</td><td>Per-item synced/pending state, drives the "Push N items" count.</td></tr>
+    </table>
+  </section>
+
+  <section id="sync">
+    <h2><span class="num">7</span>Azure DevOps / Jira sync</h2>
+    <div class="callout warn">
+      <strong>Scope call needed</strong>
+      Your reference design's banner says <em>"Two-way sync keeps this backlog aligned with your board"</em> — true
+      two-way sync (pulling back edits made on the client's actual ADO/Jira board, resolving conflicts) is a
+      significantly bigger lift than one-way push (create/update work items from this app). Recommend building
+      <strong>one-way push first</strong> and treating true bidirectional sync as a later phase — see
+      <a href="#decisions">Decisions Needed</a>.
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h4>Azure DevOps</h4>
+        <ul>
+          <li>Auth: the existing <code>source_oauth.py</code> ADO OAuth entry already requests the correct resource
+            scope (<code>499b84ac-1321-427f-aa17-267ca6975798/.default</code>, the Azure DevOps resource ID) — the
+            token-exchange plumbing is reusable even though it was built for git cloning, not Work Items.</li>
+          <li>Push via <code>PATCH https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$&lt;type&gt;?api-version=7.1</code>
+            (JSON Patch body) — Epic → work item type <code>Epic</code>, Feature → <code>Feature</code>,
+            Story → <code>User Story</code> (or <code>Product Backlog Item</code>, depends on the client's process
+            template — needs to be configurable per workshop/project).</li>
+          <li>Parent-child links via the <code>System.LinkTypes.Hierarchy-Reverse</code> relation field.</li>
+          <li>Acceptance criteria go into the story's <code>Microsoft.VSTS.Common.AcceptanceCriteria</code> field.</li>
+          <li>New service: <code>backend/app/services/ado_workitems.py</code>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Jira</h4>
+        <ul>
+          <li>Auth: simplest viable v1 is Jira Cloud API token + email (HTTP Basic) rather than 3-legged OAuth —
+            faster to ship, fine for a single connected account per engagement.</li>
+          <li>Push via <code>POST /rest/api/3/issue</code> — Epic → issue type <code>Epic</code>, Feature → mapped
+            to a custom issue type or a labeled Story (Jira's default scheme has no native "Feature" level — needs
+            a per-client mapping decision), Story → <code>Story</code>, linked to its epic via
+            <code>fields.parent</code>.</li>
+          <li>Acceptance criteria go into the issue description or a custom field, depending on the client's Jira
+            configuration.</li>
+          <li>New service: <code>backend/app/services/jira_workitems.py</code>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Idempotent re-push</h4>
+      <p>Every pushed item gets a row in <code>backlog_sync_links</code> with a <code>content_hash</code> of the
+        fields last sent. "Push N items" only counts items that are new or whose hash changed since last sync —
+        this is what makes repeated pushes safe rather than creating duplicate work items every time.</p>
+    </div>
+  </section>
+
+  <section id="roadmap">
+    <h2><span class="num">8</span>Build roadmap</h2>
+    <div class="phase-roadmap">
+      <div class="phase-step">
+        <h4>A. Foundation — wire the phase in <span class="eff eff-s">S</span></h4>
+        <p>Add <code>PostWorkshopDashboard.jsx</code>, wire <code>phase === 'synthesize'</code> in <code>page.js</code>,
+          flip <code>dashboard: true</code> in <code>PhaseTabs.jsx</code>. Mount <code>ArtifactExplorer</code> and
+          <code>ArtifactsGrid</code> (zero new components — pure reuse) so the page isn't empty on day one.</p>
+      </div>
+      <div class="phase-step">
+        <h4>B. Product Backlog <span class="eff eff-l">L</span></h4>
+        <p>New tables (<code>backlog_epics/features/stories</code>), new <code>backlog</code> agent replacing the
+          flat stories+bdd generators, new routes, new <code>BacklogBoard.jsx</code> UI, refactor
+          <code>SynthesisCanvas</code> to accept a <code>generators</code> prop.</p>
+      </div>
+      <div class="phase-step">
+        <h4>C. Future Opportunities Register <span class="eff eff-m">M</span></h4>
+        <p>New <code>opportunities</code> table, reshape the existing agent's output, new routes, new
+          <code>OpportunitiesRegister.jsx</code> grid with status actions (accept/flag/reject).</p>
+      </div>
+      <div class="phase-step">
+        <h4>D. Minutes of Meeting <span class="eff eff-s">S</span></h4>
+        <p>Add <code>mom_json</code> column, reshape the <code>mom</code> agent's prompt/output, confirm its context
+          builder pulls in Teams transcripts + Granola + manual notes, build <code>MomCard.jsx</code>.</p>
+      </div>
+      <div class="phase-step">
+        <h4>E. Azure DevOps / Jira sync <span class="eff eff-l">L</span></h4>
+        <p><code>backlog_sync_links</code> table, <code>ado_workitems.py</code> + <code>jira_workitems.py</code>
+          services, a connection-settings UI (org/project or site/email/API-token), sync routes, "Push N items"
+          button wired to real pending-count logic. One-way push only for v1 (see Decisions Needed).</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2><span class="num">9</span>Decisions needed from you</h2>
+    <div class="card">
+      <ul>
+        <li><strong>Sync direction:</strong> ship one-way push first (recommended) and label the UI accordingly,
+          or commit to true two-way sync from the start (bigger scope: webhooks, conflict resolution)?</li>
+        <li><strong>ADO auth:</strong> reuse OAuth (better UX, more setup) or a simpler Personal Access Token field
+          per project for v1?</li>
+        <li><strong>Jira auth:</strong> API token + email (fast to ship) or full OAuth 2.0 3-legged flow?</li>
+        <li><strong>Jira Feature mapping:</strong> Jira has no native "Feature" level between Epic and Story by
+          default — map Features to a custom issue type, or flatten Epic → Story and drop the Feature tier for
+          Jira pushes specifically?</li>
+        <li><strong>Multi-day workshops:</strong> your reference shows "Minutes of Meeting — Day 1" — do engagements
+          commonly span multiple workshop days needing separate MoM cards per day, or is one consolidated MoM per
+          workshop enough for now?</li>
+        <li><strong>Facilitator editing:</strong> should generated backlog items be editable in place before sync
+          (recommended — LLM output should get a human pass before hitting a real board), or generate-and-push
+          directly?</li>
+        <li><strong>"X/Y ingested" counter copy:</strong> keep <code>ArtifactExplorer</code>'s current "X source(s)
+          · Y generated" phrasing, or restore the "ingested" ratio wording from the dead
+          <code>SourceArtifactsPanel</code> component to match your reference screenshot exactly?</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    Planning document — no code changes made. Generated from a live audit of this repository plus the two
+    reference screenshots provided.
+  </footer>
+</div>
+</body>
+</html>

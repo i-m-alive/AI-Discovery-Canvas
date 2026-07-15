@@ -8,7 +8,7 @@
 export const PHASES = [
   { id: 'prepare', label: 'Pre-Workshop', sub: 'Ingest · Internalize · Research', dashboard: true },
   { id: 'run', label: 'During Workshop', sub: 'Capture · Synthesize · Generate', dashboard: true },
-  { id: 'synthesize', label: 'Post-Workshop', sub: 'Backlog · Opportunities · MoM', dashboard: false },
+  { id: 'synthesize', label: 'Post-Workshop', sub: 'Backlog · Opportunities · MoM', dashboard: true },
   { id: 'project', label: 'Proposal & Planning', sub: 'SOW · ROI · Risk · Team', dashboard: false },
 ];
 

@@ -56,7 +56,8 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
             description: str = '', category: str = '', tags: list | None = None,
             diagram_xml: str | None = None, diagram_json: list | None = None,
             next_steps: list | None = None, analysis_json: dict | None = None,
-            capmap_json: dict | None = None, inputs_json: list | None = None) -> dict:
+            capmap_json: dict | None = None, inputs_json: list | None = None,
+            mom_json: dict | None = None) -> dict:
     """Store the draft's sanitised body_html in the object store, record
     metadata in Postgres, return the record. Returns an empty dict if
     Postgres isn't reachable — the caller (agent_catalog.run_agent)
@@ -79,7 +80,8 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
                           description=(description or '')[:500] or None,
                           category=category or None, tags=tags or [],
                           diagram_xml=diagram_xml, diagram_json=diagram_json, next_steps=next_steps,
-                          analysis_json=analysis_json, capmap_json=capmap_json, inputs_json=inputs_json)
+                          analysis_json=analysis_json, capmap_json=capmap_json, inputs_json=inputs_json,
+                          mom_json=mom_json)
         record = {'doc_id': row.doc_id, 'name': row.name, 'agent_id': row.agent_id, 'chars': row.chars,
                   'status': row.status, 'completion_pct': row.completion_pct, 'author': row.author,
                   'description': row.description, 'category': row.category, 'tags': row.tags,
@@ -114,6 +116,7 @@ def list_docs(workshop_id: int) -> list[dict]:
                  'created_at': int(d.created_at.timestamp()),
                  'has_diagram': bool(d.diagram_xml), 'next_steps': d.next_steps or [],
                  'has_analysis': bool(d.analysis_json), 'has_capmap': bool(d.capmap_json),
+                 'has_mom': bool(d.mom_json),
                  'zone': zones.get(d.agent_id, ''), 'inputs': d.inputs_json or []}
                 for d in rows]
 
@@ -156,6 +159,21 @@ def latest_capmap(workshop_id: int) -> dict | None:
         d = rows[-1]   # list_for_workshop orders by created_at asc
         return {'doc_id': d.doc_id, 'name': d.name,
                 'created_at': int(d.created_at.timestamp()), **dict(d.capmap_json)}
+
+
+def latest_mom(workshop_id: int) -> dict | None:
+    """The newest persisted Minutes of Meeting for this workshop (the
+    Post-Workshop MoM card renders the latest) — {doc_id, name,
+    created_at, **mom_json} or None."""
+    with session_scope() as s:
+        if s is None:
+            return None
+        rows = [d for d in repo.list_for_workshop(s, workshop_id) if d.mom_json]
+        if not rows:
+            return None
+        d = rows[-1]   # list_for_workshop orders by created_at asc
+        return {'doc_id': d.doc_id, 'name': d.name,
+                'created_at': int(d.created_at.timestamp()), **dict(d.mom_json)}
 
 
 def count_capmaps(workshop_id: int) -> int:

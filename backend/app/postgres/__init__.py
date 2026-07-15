@@ -80,6 +80,24 @@ def bootstrap_postgres() -> None:
                   'Workshops disabled until fixed.')
         return
 
+    # create_all() only creates missing TABLES — columns added to an
+    # existing table after its first deploy need an explicit ALTER (this
+    # project deliberately has no Alembic; see module docstring). One
+    # line per additive column, idempotent via IF NOT EXISTS.
+    _ADDITIVE_COLUMNS = (
+        ('generated_docs', 'mom_json', 'JSONB'),   # Post-Workshop Minutes of Meeting
+    )
+    try:
+        from sqlalchemy import text as sa_text
+        with eng.begin() as conn:
+            for table, column, ddl_type in _ADDITIVE_COLUMNS:
+                conn.execute(sa_text(
+                    f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl_type}'))
+    except Exception as e:
+        log_exc('[POSTGRES/ALTER]', e)
+        log.error('[POSTGRES] additive column migration failed — features '
+                  'depending on the new columns will degrade until fixed.')
+
     try:
         insp = inspect(eng)
         present = set(insp.get_table_names(schema='public'))

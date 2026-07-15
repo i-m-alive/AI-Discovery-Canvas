@@ -39,18 +39,26 @@ export default function SynthesisCanvas({
   workshopId, items, onItemsChange, docs, artifacts,
   pipeline,             // [{id, label, status: 'pending'|'running'|'done'|'failed', note}] | null
   onGenerate,           // (agentIds[], prompt) -> Promise — runs the pipeline
-  onImportTeams,
+  onImportTeams,        // optional — the Teams-import button renders only when given
   lastResult,           // {label, docId?} | null — one-line outcome of the last run
   onOpenResult,         // (docId) -> open viewer
   transcriptsCount,
+  // Per-phase customization: During-Workshop uses the defaults; the
+  // Post-Workshop dashboard passes its own generator set + copy.
+  generators = GENERATORS,
+  title = 'Synthesis Canvas',
+  subtitle,             // overrides the default drag-hint line when given
+  emptyOk = false,      // Post-Workshop: generation may run with an empty
+                        // canvas (the requirements table + capability map
+                        // ride along server-side regardless of selection)
 }) {
   const [prompt, setPrompt] = useState('');
   const [over, setOver] = useState(false);
   // Which outputs the Run button generates — all on by default ("run the
   // whole workshop"), individually toggleable for a narrower run.
-  const [wanted, setWanted] = useState(() => Object.fromEntries(GENERATORS.map((g) => [g.id, true])));
+  const [wanted, setWanted] = useState(() => Object.fromEntries(generators.map((g) => [g.id, true])));
   const running = !!pipeline && pipeline.some((s) => s.status === 'running' || s.status === 'pending');
-  const wantedIds = GENERATORS.filter((g) => wanted[g.id]).map((g) => g.id);
+  const wantedIds = generators.filter((g) => wanted[g.id]).map((g) => g.id);
   // NOTE: persistence lives in the parent (DuringWorkshopDashboard), not
   // here — a save-effect in this child would fire on first mount with the
   // empty initial list and wipe the stored set before the parent's
@@ -88,14 +96,20 @@ export default function SynthesisCanvas({
         <div className="pw-panel-ttl">
           <span className="pw-ic pw-ic-accent"><Icon name="sparkles" /></span>
           <div>
-            <div className="pw-h3">Synthesis Canvas</div>
+            <div className="pw-h3">{title}</div>
             <div className="pw-sub">
-              Drag artifacts from the left panel — generation reads only what's here.
-              {transcriptsCount === 0 && ' No transcripts imported yet.'}
+              {subtitle || (
+                <>
+                  Drag artifacts from the left panel — generation reads only what's here.
+                  {transcriptsCount === 0 && ' No transcripts imported yet.'}
+                </>
+              )}
             </div>
           </div>
         </div>
-        <button className="btn" onClick={onImportTeams}><Icon name="users" />Import from Teams</button>
+        {onImportTeams && (
+          <button className="btn" onClick={onImportTeams}><Icon name="users" />Import from Teams</button>
+        )}
       </div>
 
       <div className={'sc-drop' + (over ? ' over' : '') + (empty ? ' empty' : '')}
@@ -139,7 +153,7 @@ export default function SynthesisCanvas({
 
       <div className="sc-actions">
         <span className="sc-actions-lbl">Outputs</span>
-        {GENERATORS.map((g) => (
+        {generators.map((g) => (
           <button key={g.id}
             className={'sc-out-chip' + (wanted[g.id] ? ' on' : '')}
             disabled={running}
@@ -151,13 +165,15 @@ export default function SynthesisCanvas({
           </button>
         ))}
         <button className="btn solid sc-run-btn"
-          disabled={empty || running || wantedIds.length === 0}
-          title={empty ? 'Drag documents onto the canvas first'
+          disabled={(empty && !emptyOk) || running || wantedIds.length === 0}
+          title={empty && !emptyOk ? 'Drag documents onto the canvas first'
             : wantedIds.length === 0 ? 'Select at least one output'
-            : `Generate ${wantedIds.length} output${wantedIds.length === 1 ? '' : 's'} from ${items.length} input${items.length === 1 ? '' : 's'}`}
+            : empty
+              ? `Generate ${wantedIds.length} output${wantedIds.length === 1 ? '' : 's'} from the whole workshop`
+              : `Generate ${wantedIds.length} output${wantedIds.length === 1 ? '' : 's'} from ${items.length} input${items.length === 1 ? '' : 's'}`}
           onClick={() => onGenerate(wantedIds, prompt)}>
           <Icon name="sparkles" />
-          {running ? 'Running…' : wantedIds.length === GENERATORS.length ? 'Run all' : `Generate (${wantedIds.length})`}
+          {running ? 'Running…' : wantedIds.length === generators.length ? 'Run all' : `Generate (${wantedIds.length})`}
         </button>
       </div>
 

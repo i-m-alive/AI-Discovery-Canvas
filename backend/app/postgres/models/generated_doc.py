@@ -65,6 +65,12 @@ class GeneratedDoc(Base):
     # name}] — exactly which hand-picked inputs a selection-scoped run
     # read. Null for whole-workshop runs.
     inputs_json:    Mapped[Optional[list]] = mapped_column(JSONBColumn, nullable=True)
+    # 'mom' output: {decisions: [...], actions: [{owner, text, due}],
+    # open_questions: [...], confidence} — the Post-Workshop Minutes of
+    # Meeting card's structured data, persisted so the card survives a
+    # reload exactly like capmap_json does for the heat map (body_html
+    # carries the same content as prose for the generic doc viewer).
+    mom_json:       Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
 
     __table_args__ = (
         Index('ix_generated_docs_workshop', 'workshop_id'),

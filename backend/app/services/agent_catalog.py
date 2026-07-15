@@ -160,6 +160,53 @@ _CAPMAP_FIELD = (
 )
 
 
+# ── 'backlog' (Post-Workshop) structured contract ─────────────────────
+# The Product Backlog tree: Epic → Feature → Story, each story carrying
+# its own Given-When-Then acceptance criteria and REQ-ID provenance.
+# One structured call replaces the old flat stories + disconnected bdd
+# pair — criteria are generated WITH the story they verify.
+_BACKLOG_FIELD = (
+    'Also include "epics": an array of 2-8 objects {"title": "capability-level epic name", '
+    '"description": "1-2 sentences on the business outcome", "features": [{"title": "shippable '
+    'feature name", "stories": [{"text": "As a <persona>, I want <capability> so that '
+    '<outcome>" — one dev-ready story, "acceptance_criteria": [{"given": "...", "when": "...", '
+    '"then": "..."}] (1-4 scenarios, using the real thresholds/deadlines from the material), '
+    '"source_req_ids": ["REQ-01"] (the captured requirement ids this story implements)}]}]} — '
+    '1-6 features per epic, 1-8 stories per feature. Personas must be the real roles from this '
+    'engagement; every story must trace to at least one captured requirement via '
+    'source_req_ids; never invent epics the requirements don\'t support.'
+)
+
+# ── 'opportunities' (Post-Workshop) structured contract ───────────────
+_OPP_HORIZONS = ('phase_1', 'phase_2', 'phase_3', 'explore')
+_OPP_SIZES = ('S', 'M', 'L')
+_OPP_PRIORITIES = ('high', 'med', 'low')
+_OPPORTUNITIES_FIELD = (
+    'Also include "opportunities": an array of 3-9 objects {"title": "short opportunity name", '
+    '"description": "1-2 sentences: what to do, the friction it removes, expected effect", '
+    '"horizon": "phase_1"|"phase_2"|"phase_3"|"explore" (phase_1 = belongs in the immediate '
+    'next delivery phase, explore = needs a spike/feasibility check first), "size": "S"|"M"|"L" '
+    '(rough delivery size), "priority": "high"|"med"|"low" (business impact), '
+    '"source_req_ids": ["REQ-01"] (captured requirement ids it relates to, [] if none)} — '
+    'each grounded in a real pain point or gap in the material; adjacent scope beyond the '
+    'current engagement is exactly what belongs here, invented generic ideas are not. '
+    'If an EXISTING OPPORTUNITIES list is supplied, return ONLY genuinely new ones.'
+)
+
+# ── 'mom' (Post-Workshop) structured contract ─────────────────────────
+_MOM_FIELD = (
+    'Also include "decisions": an array of 2-8 short strings — the decisions actually made in '
+    'the session, one line each. Also include "actions": an array of 2-8 objects {"owner": '
+    '"the real person/team named, or \'unassigned\'", "text": "the action", "due": "the stated '
+    'deadline, or \'\' if none was said"} — never invent owners or deadlines. Also include '
+    '"open_questions": an array of 1-6 short strings — questions raised but not resolved. '
+    'Also include "confidence": an integer 0-100 — your honest confidence that these minutes '
+    'are complete and correctly attributed given the sources actually available (transcripts '
+    'present and clearly attributed = high; sparse notes only = low, never a charitable '
+    'default).'
+)
+
+
 # ── deepresearch: intent-driven document type + optional workflow ─────
 # The facilitator's own instruction (the "What should the research agent
 # focus on?" box) can ask for more than a generic brief — a risk
@@ -570,22 +617,64 @@ AGENT_SPECS: dict[str, dict] = {
             'persona. Concise — this is the skeleton the team fills in.'
         ),
     },
-    'opportunities': {
-        'zone': 'Post-Workshop', 'folder': 'Issues & decisions', 'icon': 'target', 'doc': False,
-        'name': 'Find opportunities',
+    'backlog': {
+        'zone': 'Post-Workshop', 'folder': 'Requirements', 'icon': 'list', 'doc': True,
+        'name': 'Product Backlog',
+        # The Post-Workshop backlog tree's producer. The structured
+        # "epics" array is the real output — persisted into the
+        # backlog_epics/features/stories tables (replace-on-regenerate,
+        # see services/backlog_service.py) with stable EPIC/FEAT/US ids;
+        # body_html carries a narrative summary for the document card.
+        # Supersedes the flat 'stories' + disconnected 'bdd' pair for
+        # this phase: acceptance criteria are generated WITH each story.
+        # Context: the captured requirements table + capability map +
+        # corpus distillations (_engagement_context, include_capmap).
+        'extra_fields': _BACKLOG_FIELD,
         'task': (
-            'Identify 3-5 improvement/automation opportunities grounded in the pain points on '
-            'the board: what to automate, the friction it removes, expected effect. '
-            'node_label "Opportunities (N)".'
+            'Build the PRODUCT BACKLOG for this engagement from the captured requirements '
+            '(primary source — the REQ-IDs and MoSCoW priorities in the context), the business '
+            'capability map (epics usually align to capability domains), and the workshop '
+            'material. body_html: <b>Backlog overview</b> — 2-4 sentences on how the epics '
+            'partition the scope, then one line per epic naming what it delivers. The '
+            'structured "epics" array is the real output — the backlog board renders from it. '
+            'node_label "Product Backlog".'
+        ),
+    },
+    'opportunities': {
+        'zone': 'Post-Workshop', 'folder': 'Issues & decisions', 'icon': 'target', 'doc': True,
+        'name': 'Future opportunities',
+        # The Future Opportunities Register's producer. Structured rows
+        # land in the opportunities table (add-with-dedup, so the
+        # facilitator's accept/prune/reject triage survives re-runs —
+        # see services/opportunities_service.py); body_html carries the
+        # narrative for the document card.
+        'extra_fields': _OPPORTUNITIES_FIELD,
+        'task': (
+            'Identify the FUTURE OPPORTUNITIES adjacent to this engagement — improvement and '
+            'automation scope surfaced in discovery but beyond the current phase: what to do, '
+            'the friction it removes, the expected effect, sized and prioritised honestly from '
+            'the material. body_html: <b>Register overview</b> — one short paragraph, then one '
+            'line per opportunity. The structured "opportunities" array is the real output — '
+            'the register renders from it. node_label "Opportunities (N)".'
         ),
     },
     'mom': {
         'zone': 'Post-Workshop', 'folder': 'Meeting notes', 'icon': 'summarize', 'doc': True,
         'name': 'Minutes of Meeting',
+        # The MoM card's producer: structured decisions/actions/open
+        # questions land in generated_docs.mom_json (survives reload);
+        # body_html carries the full prose minutes for the doc viewer.
+        # Context: imported transcripts at focused full text — decisions
+        # and owners live in the verbatim wording (_mom_context).
+        'extra_fields': _MOM_FIELD,
         'task': (
-            'Assemble Minutes of Meeting from the session: attendees line (from context if '
-            'known), key discussion points, decisions, action items with owners, open questions, '
-            'next steps. Compact — headings as <b>, lists as <ul>.'
+            'Assemble MINUTES OF MEETING from the workshop session capture in the context '
+            '(imported Teams transcripts are the primary source; meeting notes and documents '
+            'support). body_html: attendees line (only people actually named), <b>Key '
+            'discussion points</b>, <b>Decisions</b>, <b>Actions</b> (owner — action — due), '
+            '<b>Open questions</b>, <b>Next steps</b> — compact, headings as <b>, lists as '
+            '<ul>. The structured decisions/actions/open_questions arrays are what the MoM '
+            'card renders — they must match the prose. node_label "Minutes of Meeting".'
         ),
     },
     # ---- Proposal & Planning ----
@@ -1640,6 +1729,161 @@ def _coerce_capmap(raw_domains) -> list[dict]:
     return out
 
 
+def _coerce_backlog(raw_epics) -> list[dict]:
+    """Clamp/validate the 'epics' tree (see _BACKLOG_FIELD) into what
+    services/backlog_service.replace_tree expects — never trusts the
+    model's structure. Drops any epic left with no usable features and
+    any feature left with no usable stories."""
+    def _req_ids(raw) -> list[str]:
+        out = []
+        for r in (raw or [])[:8]:
+            rid = _clip(r, 16).upper()
+            if re.fullmatch(r'REQ-\d{1,4}', rid):
+                out.append(rid)
+        return out
+
+    epics: list[dict] = []
+    for e in (raw_epics or [])[:8]:
+        if not isinstance(e, dict):
+            continue
+        title = _clip(e.get('title'), 200)
+        if not title:
+            continue
+        features: list[dict] = []
+        for f in (e.get('features') or [])[:6]:
+            if not isinstance(f, dict):
+                continue
+            ftitle = _clip(f.get('title'), 200)
+            if not ftitle:
+                continue
+            stories: list[dict] = []
+            for st in (f.get('stories') or [])[:8]:
+                if not isinstance(st, dict):
+                    continue
+                text = _clip(st.get('text'), 2000)
+                if not text:
+                    continue
+                criteria: list[dict] = []
+                for c in (st.get('acceptance_criteria') or [])[:4]:
+                    if not isinstance(c, dict):
+                        continue
+                    given = _clip(c.get('given'), 300)
+                    when = _clip(c.get('when'), 300)
+                    then = _clip(c.get('then'), 300)
+                    if given or when or then:
+                        criteria.append({'given': given, 'when': when, 'then': then})
+                stories.append({'text': text, 'acceptance_criteria': criteria,
+                                'source_req_ids': _req_ids(st.get('source_req_ids'))})
+            if stories:
+                features.append({'title': ftitle, 'stories': stories})
+        if features:
+            epics.append({'title': title, 'description': _clip(e.get('description'), 500),
+                          'features': features})
+    return epics
+
+
+def _coerce_opportunities(raw_opps) -> list[dict]:
+    """Clamp/validate the 'opportunities' array (see _OPPORTUNITIES_FIELD)
+    into what services/opportunities_service.add_generated expects —
+    never trusts the model's enums."""
+    out: list[dict] = []
+    for o in (raw_opps or [])[:12]:
+        if not isinstance(o, dict):
+            continue
+        title = _clip(o.get('title'), 200)
+        if not title:
+            continue
+        horizon = str(o.get('horizon') or 'explore').lower()
+        size = str(o.get('size') or 'M').upper()
+        priority = str(o.get('priority') or 'med').lower()
+        req_ids = []
+        for r in (o.get('source_req_ids') or [])[:8]:
+            rid = _clip(r, 16).upper()
+            if re.fullmatch(r'REQ-\d{1,4}', rid):
+                req_ids.append(rid)
+        out.append({'title': title, 'description': _clip(o.get('description'), 500),
+                    'horizon': horizon if horizon in _OPP_HORIZONS else 'explore',
+                    'size': size if size in _OPP_SIZES else 'M',
+                    'priority': priority if priority in _OPP_PRIORITIES else 'med',
+                    'source_req_ids': req_ids})
+    return out
+
+
+def _coerce_mom(obj: dict) -> dict:
+    """Clamp/validate the 'mom' agent's structured fields (see
+    _MOM_FIELD) into the mom_json shape the Post-Workshop card renders."""
+    decisions = [d for d in (_clip(x, 300) for x in (obj.get('decisions') or [])[:10]) if d]
+    actions: list[dict] = []
+    for a in (obj.get('actions') or [])[:10]:
+        if not isinstance(a, dict):
+            continue
+        text = _clip(a.get('text'), 300)
+        if not text:
+            continue
+        actions.append({'owner': _clip(a.get('owner'), 80) or 'unassigned',
+                        'text': text, 'due': _clip(a.get('due'), 60)})
+    open_questions = [q for q in (_clip(x, 300) for x in (obj.get('open_questions') or [])[:8]) if q]
+    try:
+        confidence = max(0, min(100, int(obj.get('confidence'))))
+    except (TypeError, ValueError):
+        confidence = None
+    return {'decisions': decisions, 'actions': actions,
+            'open_questions': open_questions, 'confidence': confidence}
+
+
+def _mom_context(context: dict, workshop_id: Optional[int],
+                 selection: Optional[dict] = None) -> dict:
+    """'mom' input: imported transcripts at (focused) FULL text —
+    decisions, owners and deadlines live in the verbatim wording, a
+    distillation would paraphrase away exactly the attribution the
+    minutes must carry — plus cached distillations of the non-transcript
+    corpus for supporting context. Mirrors _requirements_context's
+    transcript handling with minutes-shaped focus facets."""
+    context = dict(context or {})
+    files: list[dict] = []
+    mom_facets = ['decisions and commitments',
+                  'action items, owners and deadlines',
+                  'open questions and next steps']
+    if selection:
+        sel_files, inputs = _selection_files(workshop_id, selection, facets=mom_facets)
+        if sel_files:
+            files.append({'name': 'note', 'text': _SELECTION_NOTE})
+            files.extend(sel_files)
+        context['files'] = files or context.get('files') or []
+        context['_selection_inputs'] = inputs
+        return context
+    if workshop_id:
+        try:
+            from app.services import prepare_docs
+            docs = prepare_docs.get_all_texts(workshop_id)
+            transcripts = [d for d in docs if _is_transcript(d.get('name', ''))]
+            others = [d for d in docs if not _is_transcript(d.get('name', ''))]
+            if transcripts:
+                per_tr = min(_MAX_FILE_CHARS, max(6000, _MAX_FILES_TOTAL // max(1, len(transcripts))))
+                for d in transcripts[:_MAX_RESEARCH_DOCS]:
+                    files.append({'name': f"transcript: {d['name']}",
+                                  'text': _focus_text(str(d.get('text') or ''), max_chars=per_tr,
+                                                      extra_facets=mom_facets)})
+            if others:
+                try:
+                    from app.services import workshop_context
+                    ws_ctx = workshop_context.ensure(workshop_id, others[:_MAX_RESEARCH_DOCS])
+                    if ws_ctx and ws_ctx['summaries']:
+                        files.extend({'name': f"supporting: {s['name']}", 'text': s['text']}
+                                     for s in ws_ctx['summaries'])
+                except Exception as e:
+                    log.info('[AGENT/MOM] workshop context unavailable (%s)', e.__class__.__name__)
+        except Exception as e:
+            log.info('[AGENT/MOM] prepare_docs unavailable (%s)', e.__class__.__name__)
+    if not files:
+        files = context.get('files') or [
+            {'name': 'note', 'text': 'No transcripts or session notes are available in this '
+                                     'workshop — say so in the minutes and produce nothing '
+                                     'speculative; return empty arrays.'}]
+    context['files'] = files
+    return context
+
+
 def _closed_corpus_context(context: dict, workshop_id: Optional[int],
                            question: Optional[str], scope: str = 'sources') -> dict:
     """'artifact_analyst' input, scope-controlled:
@@ -1899,6 +2143,27 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
         context = _engagement_context(context, workshop_id=workshop_id,
                                       include_capmap=(agent_id == 'brd'),
                                       selection=selection)
+    elif agent_id in ('backlog', 'opportunities'):
+        # Both compose from the captured requirements table + the latest
+        # capability map (epics/opportunities usually align to capability
+        # domains) + the corpus distillations — same input the brd reads.
+        context = _engagement_context(context, workshop_id=workshop_id,
+                                      include_capmap=True, selection=selection)
+        if agent_id == 'opportunities' and workshop_id:
+            # The existing register rides along so a re-run only ADDS —
+            # prompt-level braces to opportunities_service's dedup belt.
+            try:
+                from app.services import opportunities_service
+                existing = opportunities_service.list_opportunities(workshop_id)
+                if existing:
+                    lines = [f"{o['opp_id']}: {o['title']}" for o in existing]
+                    context['files'] = list(context.get('files') or []) + [
+                        {'name': 'EXISTING OPPORTUNITIES (already registered — do NOT repeat these)',
+                         'text': '\n'.join(lines)}]
+            except Exception as e:
+                log.info('[AGENT/OPPORTUNITIES] register unavailable (%s)', e.__class__.__name__)
+    elif agent_id == 'mom':
+        context = _mom_context(context, workshop_id=workshop_id, selection=selection)
 
     # Task text and extra-fields are normally the spec's own — deepresearch
     # is the one exception, swapping in the doc-type-specific task (see
@@ -1995,7 +2260,9 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     # document, plus three structured arrays on top.
     # 'brd' joins the 8000 tier: a full multi-section BRD referencing
     # every captured REQ-ID is this catalogue's longest flat document.
-    if agent_id in ('workflow', 'analyze', 'brd') or (agent_id == 'deepresearch' and wants_workflow):
+    # 'backlog' joins the 8000 tier: a full epic→feature→story tree with
+    # per-story acceptance criteria is comparable to the brd in size.
+    if agent_id in ('workflow', 'analyze', 'brd', 'backlog') or (agent_id == 'deepresearch' and wants_workflow):
         max_out = 8000
     elif extra_fields_text or agent_id == 'artifact_analyst':
         # artifact_analyst has no structured fields but its default output
@@ -2132,6 +2399,61 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
         draft['node']['meta'] = draft['node']['meta'] or \
             f'{len(domains)} domains · {n_caps} capabilities'
 
+    # 'backlog': the epic→feature→story tree (see _BACKLOG_FIELD) —
+    # persisted into the backlog tables (replace-on-regenerate, stable
+    # EPIC/FEAT/US ids assigned there); the draft carries the stored
+    # tree back so the board renders without a refetch.
+    backlog_counts: Optional[dict] = None
+    if agent_id == 'backlog':
+        epics = _coerce_backlog(obj.get('epics'))
+        if not epics:
+            raise RuntimeError('the model returned no usable backlog epics — try again')
+        tree: dict = {}
+        if workshop_id:
+            try:
+                from app.services import backlog_service
+                tree = backlog_service.replace_tree(workshop_id, epics)
+            except Exception as e:
+                log.info('[AGENT/BACKLOG] backlog persistence failed (%s)', e.__class__.__name__)
+        if not tree:
+            n_feat = sum(len(e['features']) for e in epics)
+            n_story = sum(len(f['stories']) for e in epics for f in e['features'])
+            tree = {'epics': epics, 'counts': {'epics': len(epics), 'features': n_feat,
+                                               'stories': n_story, 'stories_with_ac': 0}}
+        backlog_counts = tree['counts']
+        draft['backlog'] = tree
+        draft['node']['meta'] = draft['node']['meta'] or (
+            f"{backlog_counts['epics']} epics · {backlog_counts['features']} features · "
+            f"{backlog_counts['stories']} stories")
+
+    # 'opportunities': structured register rows (see _OPPORTUNITIES_FIELD)
+    # — add-with-dedup so the facilitator's triage survives re-runs; the
+    # draft carries back only what was actually ADDED.
+    if agent_id == 'opportunities':
+        coerced_opps = _coerce_opportunities(obj.get('opportunities'))
+        added_opps: list[dict] = []
+        if workshop_id:
+            try:
+                from app.services import opportunities_service
+                added_opps = opportunities_service.add_generated(workshop_id, coerced_opps)
+            except Exception as e:
+                log.info('[AGENT/OPPORTUNITIES] register persistence failed (%s)', e.__class__.__name__)
+        else:
+            added_opps = coerced_opps
+        draft['opportunities'] = added_opps
+        n_new = len(added_opps)
+        draft['node']['meta'] = draft['node']['meta'] or \
+            f'{n_new} new opportunit{"ies" if n_new != 1 else "y"}'
+
+    # 'mom': the structured minutes (see _MOM_FIELD) — persisted below as
+    # mom_json so the Post-Workshop card survives a reload.
+    mom_payload: Optional[dict] = None
+    if agent_id == 'mom':
+        mom_payload = _coerce_mom(obj)
+        draft['mom'] = mom_payload
+        draft['node']['meta'] = draft['node']['meta'] or (
+            f"{len(mom_payload['decisions'])} decisions · {len(mom_payload['actions'])} actions")
+
     # 'analyze': the routed gap list, the honest readiness scorecard, and
     # the research topics (see _ANALYSIS_FIELDS) — persisted below as
     # analysis_json so the scorecard modal survives a reload.
@@ -2228,6 +2550,19 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                         tags.append(f'{nreq} requirements')
                 except Exception:
                     pass
+            if agent_id == 'backlog' and backlog_counts:
+                category = 'Backlog'
+                tags.append(f"{backlog_counts['epics']} epics")
+                tags.append(f"{backlog_counts['stories']} stories")
+            if agent_id == 'opportunities':
+                category = 'Opportunities'
+                n_opps = len(draft.get('opportunities') or [])
+                tags.append(f'{n_opps} new')
+            if agent_id == 'mom':
+                category = 'Minutes'
+                if mom_payload and mom_payload.get('confidence') is not None:
+                    completion = mom_payload['confidence']
+                    tags.append(f"{mom_payload['confidence']}% confidence")
             diagram = draft.get('diagram')
             record = generated_docs.register(
                 workshop_id, title, body_html, agent_id=agent_id,
@@ -2239,7 +2574,8 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 next_steps=draft.get('next_steps') or None,
                 analysis_json=analysis_payload,
                 capmap_json=capmap_payload,
-                inputs_json=context.get('_selection_inputs') or None)
+                inputs_json=context.get('_selection_inputs') or None,
+                mom_json=mom_payload)
             if record:
                 draft['node']['docId'] = record['doc_id']
         except Exception as e:

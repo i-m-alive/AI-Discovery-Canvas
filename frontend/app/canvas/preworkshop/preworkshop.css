@@ -645,14 +645,22 @@
 .pw-drawio-frame { flex: 1; min-height: 0; width: 100%; border: none; display: block; }
 .pw-doc-text { padding: 20px 26px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; font-family: ui-monospace, Menlo, monospace; }
 
-/* Copilot (CopilotPanel.jsx) — slide-over from the right, available from
-   AppHeader on every phase (not just Pre-Workshop). */
+/* Copilot (CopilotPanel.jsx) — a floating card inset below the top bar
+   + phase tabs, NOT a full-height edge-to-edge drawer: rounded on all
+   four corners, shadowed all around, background left fully visible
+   (undimmed) behind it — matches the reference product's Copilot, which
+   reads as a docked assistant panel rather than a modal takeover. The
+   backdrop stays a full-screen click-catcher (click outside still
+   closes it) but is transparent, not tinted. */
 .cop-backdrop {
-  position: fixed; inset: 0; background: rgba(17, 24, 39, .38); z-index: 70;
-  display: flex; justify-content: flex-end; backdrop-filter: blur(1px);
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; justify-content: flex-end; align-items: stretch;
+  padding: 132px 20px 20px;   /* clears .pw-topbar (60px) + .phasetabs (~70px) */
+  background: transparent;
 }
 .cop-panel {
-  width: min(440px, 100vw); height: 100vh; background: #fff; box-shadow: -24px 0 60px rgba(24,39,64,.28);
+  width: min(420px, 100%); max-height: 100%; border-radius: 18px; overflow: hidden;
+  background: var(--panel, #fff); box-shadow: var(--shadow-lg, 0 24px 70px rgba(24,39,64,.35));
   display: flex; flex-direction: column;
 }
 .cop-head {

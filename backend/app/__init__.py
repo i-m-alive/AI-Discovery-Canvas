@@ -174,4 +174,9 @@ def create_app() -> Flask:
     export_routes.install(flask_app)
     log.info("[STARTUP] Export routes loaded")
 
+    # ---- Post-Workshop: backlog / opportunities / MoM / ADO sync ------
+    from app.routes import backlog as backlog_routes
+    backlog_routes.install(flask_app)
+    log.info("[STARTUP] Post-Workshop backlog routes loaded")
+
     return flask_app

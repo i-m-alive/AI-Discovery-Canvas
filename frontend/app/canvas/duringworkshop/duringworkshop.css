@@ -274,7 +274,7 @@ html[data-theme="dark"] .dw-board-toggle:hover { color: #fff; }
 .dw-cols > .pw-panel { min-width: 0; }
 .dw-cols .pw-panel-head { flex-wrap: wrap; row-gap: 8px; }
 @media (max-width: 1220px) { .dw-cols { grid-template-columns: 1fr; } }
-.dw-req-scroll, .dw-cap-scroll { max-height: 620px; overflow-y: auto; padding-right: 4px; }
+.dw-req-scroll, .dw-cap-scroll { max-height: 460px; overflow-y: auto; padding-right: 4px; }
 .dw-panel-pill { margin-left: 2px; }
 .dw-req-addlink {
   appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;

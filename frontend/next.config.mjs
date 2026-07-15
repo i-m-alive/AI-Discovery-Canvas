@@ -29,6 +29,8 @@ const nextConfig = {
       { source: '/api/settings/:path*', destination: `${backend}/api/settings/:path*` },
       { source: '/api/integrations/:path*', destination: `${backend}/api/integrations/:path*` },
       { source: '/api/export/:path*', destination: `${backend}/api/export/:path*` },
+      { source: '/api/backlog/:path*', destination: `${backend}/api/backlog/:path*` },
+      { source: '/api/opportunities/:path*', destination: `${backend}/api/opportunities/:path*` },
       { source: '/healthz', destination: `${backend}/healthz` },
       { source: '/readyz', destination: `${backend}/readyz` },
     ];
