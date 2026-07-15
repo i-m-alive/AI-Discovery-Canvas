@@ -12,10 +12,27 @@ Plus ``retrieve_context(...)`` which formats hits into a prompt-ready
 block so callers can prepend "only the most relevant chunks" instead of
 dumping whole corpora into the LLM context — the token-optimisation goal.
 
-Everything is best-effort: if FAISS/numpy/openai/the key aren't present,
-``is_enabled()`` is False and every call is a clean no-op (indexing
-returns 0, retrieval returns []), so the existing graph-context paths keep
-working untouched.
+Everything is best-effort: if FAISS/numpy/the active provider's key
+aren't present, ``is_enabled()`` is False and every call is a clean
+no-op (indexing returns 0, retrieval returns []), so the existing
+graph-context paths keep working untouched.
+
+PROVIDER DISPATCH: embeddings follow the SAME per-user LLM-provider
+choice as chat completions (app/services/llm_service.py) — picking
+Azure OpenAI switches embeddings to Azure's deployment too, picking
+Bedrock uses Titan. This is NOT a per-call stateless switch like chat,
+though: embeddings are persisted in a FAISS index that gets compared
+against ITSELF later, and two different embedding models produce
+INCOMPARABLE vector spaces (mixing them silently corrupts retrieval, or
+crashes on a dimension mismatch). So every namespace is provider-
+qualified (see ``_ns_name``) — Bedrock keeps the original unsuffixed
+file names (zero migration, all existing indexed data keeps working
+exactly as before), Azure gets its own ``__azure``-suffixed files.
+Consequence, stated plainly: switching your provider does not
+retroactively move already-indexed documents into the new namespace —
+your searches only see what's been (re-)indexed while that provider was
+active. Re-uploading/regenerating a document indexes it under whichever
+provider is active at that moment.
 """
 
 from __future__ import annotations
@@ -28,16 +45,46 @@ from app.services.rag.chunking import chunk_text, html_to_text
 log = logging.getLogger('app.rag.service')
 
 
-# Logical corpora. Keep these stable — they're the on-disk index names.
+# Logical corpora. Keep these stable — they're the on-disk index names
+# (for the Bedrock/default provider — see `_ns_name` for Azure's suffix).
 NS_DOCUMENTS = 'documents'   # generated docs + source/document summaries
 NS_PROJECTS  = 'projects'    # project name + description (fuzzy lookup)
 NS_ENTITIES  = 'entities'    # extracted entity/relationship statements
 
+_PROVIDER_SUFFIX = {'azure_openai': '__azure'}   # bedrock -> '' (unsuffixed, legacy-compatible)
 
-def is_enabled() -> bool:
-    """True when the full pipeline can run (vector store + embeddings +
-    a resolvable key)."""
-    return store.faiss_available() and embedder.is_available()
+
+def _active_provider() -> str:
+    from app.services import llm_service
+    return llm_service.resolve_provider()
+
+
+def _embedder_for(provider: str):
+    """The embedding module for a resolved provider id."""
+    if provider == 'azure_openai':
+        from app.services.rag import embedder_azure
+        return embedder_azure
+    return embedder
+
+
+def _dim_for(provider: str) -> int:
+    return config.AZURE_EMBED_DIM if provider == 'azure_openai' else config.EMBED_DIM
+
+
+def _ns_name(base: str, provider: str) -> str:
+    return base + _PROVIDER_SUFFIX.get(provider, '')
+
+
+def _ns(base: str, provider: str | None = None) -> "store.FaissNamespace":
+    p = provider or _active_provider()
+    return store.namespace(_ns_name(base, p), dim=_dim_for(p))
+
+
+def is_enabled(*, provider: str | None = None) -> bool:
+    """True when the full pipeline can run (vector store + the active
+    provider's embedding backend + a resolvable key)."""
+    p = provider or _active_provider()
+    return store.faiss_available() and _embedder_for(p).is_available()
 
 
 # ── Indexing ─────────────────────────────────────────────────────────
@@ -49,11 +96,12 @@ def index_document(*, doc_id: str, text: str,
     """Chunk, embed, and (re)index one document. Idempotent per ``doc_id``
     — prior chunks for the same id are replaced, so this doubles as the
     incremental-update path. Returns the number of chunks indexed."""
-    if not is_enabled() or not doc_id:
+    provider = _active_provider()
+    if not is_enabled(provider=provider) or not doc_id:
         return 0
     body = html_to_text(text) if is_html else (text or '')
     chunks = chunk_text(body)
-    ns = store.namespace(namespace)
+    ns = _ns(namespace, provider)
     if not chunks:
         # Empty/blank document → drop any stale vectors for it.
         ns.delete_doc(doc_id)
@@ -61,7 +109,7 @@ def index_document(*, doc_id: str, text: str,
         return 0
     meta = dict(metadata or {})
     try:
-        vectors = embedder.embed_texts(chunks, tag=tag)
+        vectors = _embedder_for(provider).embed_texts(chunks, tag=tag)
     except Exception as e:
         log.warning('%s embed failed for doc=%s (%s)', tag, doc_id, e)
         return 0
@@ -80,9 +128,10 @@ def index_documents(items: list[dict], *, namespace: str = NS_DOCUMENTS,
     """Bulk index. Each item: {id, text, metadata?, is_html?}. Embeds all
     chunks across all docs in one batched/parallel pass (so the rate
     limiter amortises), then writes per-doc. Returns total chunks."""
-    if not is_enabled() or not items:
+    provider = _active_provider()
+    if not is_enabled(provider=provider) or not items:
         return 0
-    ns = store.namespace(namespace)
+    ns = _ns(namespace, provider)
     # Flatten to chunks first so embedding is one big batched call.
     flat_texts: list[str] = []
     plan: list[tuple[str, dict, list[int]]] = []   # (doc_id, meta, row_indices)
@@ -103,7 +152,7 @@ def index_documents(items: list[dict], *, namespace: str = NS_DOCUMENTS,
         ns.persist()
         return 0
     try:
-        vectors = embedder.embed_texts(flat_texts, tag=tag)
+        vectors = _embedder_for(provider).embed_texts(flat_texts, tag=tag)
     except Exception as e:
         log.warning('%s bulk embed failed (%s)', tag, e)
         return 0
@@ -122,23 +171,34 @@ def index_documents(items: list[dict], *, namespace: str = NS_DOCUMENTS,
 
 
 def delete_document(doc_id: str, *, namespace: str = NS_DOCUMENTS) -> int:
+    """Deletes from EVERY provider's namespace variant, not just the
+    currently-active one — a document may have been indexed under
+    whichever provider was active at upload/generation time (or under
+    both, if the provider was switched since), and a stale copy left
+    behind in the "other" provider's index would surface once that
+    provider becomes active again."""
     if not store.faiss_available() or not doc_id:
         return 0
-    ns = store.namespace(namespace)
-    n = ns.delete_doc(doc_id)
-    ns.persist()
-    return n
+    total = 0
+    for name in {namespace, *(namespace + s for s in _PROVIDER_SUFFIX.values())}:
+        ns = store.namespace(name)
+        total += ns.delete_doc(doc_id)
+        ns.persist()
+    return total
 
 
 def list_doc_ids(prefix: str = '', *, namespace: str = NS_DOCUMENTS) -> list[str]:
-    """All doc_ids in a namespace, optionally restricted to those starting with
-    `prefix`. Read-only. Used to delete every disc of a source whose node id is
-    reused for multiple URLs."""
+    """All doc_ids across every provider's namespace variant, optionally
+    restricted to those starting with `prefix`. Read-only. Used to delete
+    every disc of a source whose node id is reused for multiple URLs."""
     if not store.faiss_available():
         return []
-    ns = store.namespace(namespace)
-    ns._ensure_loaded()
-    return [d for d in list(ns._doc_index.keys()) if not prefix or d.startswith(prefix)]
+    seen: set[str] = set()
+    for name in {namespace, *(namespace + s for s in _PROVIDER_SUFFIX.values())}:
+        ns = store.namespace(name)
+        ns._ensure_loaded()
+        seen.update(ns._doc_index.keys())
+    return [d for d in seen if not prefix or d.startswith(prefix)]
 
 
 # ── Retrieval ────────────────────────────────────────────────────────
@@ -169,14 +229,15 @@ def retrieve(query: str, *,
     """Semantic top-k. Returns hits: {score, chunk_id, doc_id, text, meta}.
     Scoped to a project/workflow when ids are supplied (org-level chunks
     stay visible). Never raises — returns [] on any failure."""
-    if not is_enabled() or not (query or '').strip():
+    provider = _active_provider()
+    if not is_enabled(provider=provider) or not (query or '').strip():
         return []
     try:
-        qv = embedder.embed_query(query, tag=tag)
+        qv = _embedder_for(provider).embed_query(query, tag=tag)
     except Exception as e:
         log.warning('%s query embed failed (%s)', tag, e)
         return []
-    ns = store.namespace(namespace)
+    ns = _ns(namespace, provider)
     return ns.search(
         qv,
         k or config.RETRIEVE_TOP_K,
@@ -229,7 +290,8 @@ def select_relevant(text: str, queries: list[str], *,
     disabled or the text is too small to be worth selecting — the caller
     then falls back to its own truncation.
     """
-    if not is_enabled() or not (text or '').strip() or not queries:
+    provider = _active_provider()
+    if not is_enabled(provider=provider) or not (text or '').strip() or not queries:
         return ''
     try:
         import numpy as np
@@ -239,9 +301,13 @@ def select_relevant(text: str, queries: list[str], *,
     chunks = _chunk(text)
     if len(chunks) < max(2, min_chunks_to_trigger):
         return ''
+    # Ephemeral, in-memory-only comparison (cvecs vs qvecs, never touching
+    # the persisted FAISS store) — safe on any provider as long as both
+    # sides of THIS call use the same embedder, which they do below.
+    emb = _embedder_for(provider)
     try:
-        cvecs = embedder.embed_texts(chunks, tag=tag)
-        qvecs = embedder.embed_texts([str(q) for q in queries], tag=tag)
+        cvecs = emb.embed_texts(chunks, tag=tag)
+        qvecs = emb.embed_texts([str(q) for q in queries], tag=tag)
     except Exception as e:
         log.warning('%s embed failed (%s)', tag, e)
         return ''
@@ -278,10 +344,15 @@ def select_relevant(text: str, queries: list[str], *,
 
 
 def stats() -> dict:
+    provider = _active_provider()
+    emb = _embedder_for(provider)
+    model, dim = (config.AZURE_EMBED_MODEL, config.AZURE_EMBED_DIM) if provider == 'azure_openai' \
+        else (config.EMBED_MODEL, config.EMBED_DIM)
     return {
-        'enabled':    is_enabled(),
-        'configured': config.is_configured(),
-        'model':      config.EMBED_MODEL,
-        'dim':        config.EMBED_DIM,
+        'provider':   provider,
+        'enabled':    is_enabled(provider=provider),
+        'configured': not emb.config_errors(),
+        'model':      model,
+        'dim':        dim,
         'namespaces': store.all_stats(),
     }

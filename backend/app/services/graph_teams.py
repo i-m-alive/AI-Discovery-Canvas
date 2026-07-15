@@ -666,12 +666,28 @@ def list_recent_meetings(owner_user_id: int, start: Optional[str] = None,
             continue
         meetings.append({
             'subject': subject,
-            'start': (ev.get('start') or {}).get('dateTime') or '',
-            'end': (ev.get('end') or {}).get('dateTime') or '',
+            'start': _graph_datetime_to_iso(ev.get('start')),
+            'end': _graph_datetime_to_iso(ev.get('end')),
             'join_url': join_url,
             'organizer': ((ev.get('organizer') or {}).get('emailAddress') or {}).get('address') or '',
         })
     return {'meetings': meetings}
+
+
+def _graph_datetime_to_iso(field: Optional[dict]) -> str:
+    """Graph's calendarView returns start/end as {dateTime, timeZone}
+    with dateTime carrying NO offset — this app never sends a `Prefer:
+    outlook.timezone` header, so timeZone is always 'UTC' by Graph's
+    default, but the missing 'Z' makes JS's `new Date(iso)` parse it as
+    local time instead of UTC, silently shifting the displayed meeting
+    time by the browser's own UTC offset. Append 'Z' so the frontend
+    parses it as UTC and converts it to the viewer's actual local time."""
+    field = field or {}
+    dt = field.get('dateTime') or ''
+    tz = (field.get('timeZone') or '').upper()
+    if dt and tz == 'UTC' and not dt.endswith('Z'):
+        return dt + 'Z'
+    return dt
 
 
 def check_meeting_availability(owner_user_id: int, join_url: str,

@@ -45,6 +45,11 @@ class User(Base):
     role:          Mapped[Optional[str]]  = mapped_column(String(128), nullable=True)
     tenant_id:     Mapped[Optional[str]]  = mapped_column(String(128), nullable=True)
 
+    # 'bedrock' | 'azure_openai' — which LLM backend this user picked in
+    # the header menu (app/services/llm_service.py resolves it per call).
+    # NULL = no explicit choice yet, fall back to the platform default.
+    llm_provider:  Mapped[Optional[str]]  = mapped_column(String(32), nullable=True)
+
     created_at:    Mapped[datetime]       = utc_now_column()
 
     __table_args__ = (

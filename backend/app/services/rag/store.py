@@ -238,11 +238,17 @@ _NAMESPACES: dict[str, FaissNamespace] = {}
 _REG_LOCK = threading.Lock()
 
 
-def namespace(name: str) -> FaissNamespace:
+def namespace(name: str, dim: int | None = None) -> FaissNamespace:
+    """`dim` only matters the first time `name` is created with no
+    existing on-disk index — see `FaissNamespace.__init__`/`_ensure_loaded`
+    (a persisted index always restores its own dim from the meta sidecar).
+    This lets a brand-new per-provider namespace (see rag/service.py's
+    `_ns_name`) start at the right width instead of defaulting to
+    Bedrock's `config.EMBED_DIM`."""
     with _REG_LOCK:
         ns = _NAMESPACES.get(name)
         if ns is None:
-            ns = FaissNamespace(name)
+            ns = FaissNamespace(name, dim=dim)
             _NAMESPACES[name] = ns
         return ns
 

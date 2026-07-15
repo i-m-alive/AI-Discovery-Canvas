@@ -77,3 +77,14 @@ def get_by_email(session: Session, email: str) -> Optional[User]:
 
 def get_by_id(session: Session, user_id: int) -> Optional[User]:
     return session.get(User, user_id)
+
+
+def set_llm_provider(session: Session, email: str, provider: Optional[str]) -> bool:
+    """Persist the user's LLM-backend choice ('bedrock' | 'azure_openai',
+    or None to clear back to the platform default). Returns False when no
+    such user row exists yet."""
+    user = get_by_email(session, email)
+    if user is None:
+        return False
+    user.llm_provider = provider
+    return True

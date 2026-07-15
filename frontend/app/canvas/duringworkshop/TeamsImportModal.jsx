@@ -16,6 +16,17 @@ import { getMsalInstance } from '../../lib/msalConfig';
 // a normal prepare-doc: status pills, RAG, context cache all included).
 
 const TEAMS_SCOPES = ['OnlineMeetings.Read', 'OnlineMeetingTranscript.Read.All', 'Calendars.Read'];
+const DAY_MS = 86400000;
+
+function defaultRange() {
+  const now = new Date();
+  return { start: new Date(now.getTime() - 30 * DAY_MS), end: new Date(now.getTime() + DAY_MS) };
+}
+
+function fmtRange(r) {
+  const o = { month: 'short', day: 'numeric' };
+  return `${r.start.toLocaleDateString(undefined, o)} – ${r.end.toLocaleDateString(undefined, o)}`;
+}
 
 function fmtWhen(iso) {
   if (!iso) return '';
@@ -42,13 +53,30 @@ export default function TeamsImportModal({ workshopId, onClose, onImported }) {
   const [avail, setAvail] = useState({});              // join_url -> {has_transcript}
   const [importing, setImporting] = useState(null);    // join_url in flight
   const [done, setDone] = useState({});                // join_url -> {ok, name, already}
+  const [range, setRangeState] = useState(defaultRange);
+  const [query, setQueryState] = useState('');
+  const [filterTranscript, setFilterTranscript] = useState(false);
   const disposed = useRef(false);
-  useEffect(() => () => { disposed.current = true; }, []);
+  const rangeRef = useRef(range);
+  const queryRef = useRef(query);
+  const searchTimer = useRef(null);
+  const connectedOnce = useRef(false);
+  useEffect(() => {
+    disposed.current = false;
+    return () => { disposed.current = true; };
+  }, []);
+
+  function setRange(r) { rangeRef.current = r; setRangeState(r); }
+  function setQuery(q) { queryRef.current = q; setQueryState(q); }
 
   const loadMeetings = useCallback(async () => {
+    connectedOnce.current = true;
     setPhase('loading');
     try {
-      const j = await apiGet('/api/integrations/teams/meetings');
+      const r = rangeRef.current;
+      const params = new URLSearchParams({ start: r.start.toISOString(), end: r.end.toISOString() });
+      if (queryRef.current) params.set('q', queryRef.current);
+      const j = await apiGet(`/api/integrations/teams/meetings?${params.toString()}`);
       if (disposed.current) return;
       if (!j || !j.ok) { setError((j && j.error) || 'could not load your calendar'); setPhase('error'); return; }
       const list = j.meetings || [];
@@ -111,6 +139,22 @@ export default function TeamsImportModal({ workshopId, onClose, onImported }) {
     return () => { cancelled = true; };
   }, [loadMeetings]);
 
+  function shiftWindow(days) {
+    const r = rangeRef.current;
+    setRange({ start: new Date(r.start.getTime() + days * DAY_MS), end: new Date(r.end.getTime() + days * DAY_MS) });
+    loadMeetings();
+  }
+
+  function onSearchChange(e) {
+    setQuery(e.target.value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(loadMeetings, 350);
+  }
+
+  const visibleMeetings = filterTranscript
+    ? meetings.filter((m) => avail[m.join_url] && avail[m.join_url].has_transcript)
+    : meetings;
+
   async function startDeviceFlow() {
     setError('');
     try {
@@ -165,6 +209,33 @@ export default function TeamsImportModal({ workshopId, onClose, onImported }) {
           <button className="pw-view-btn" onClick={onClose} title="Close"><Icon name="x" /></button>
         </div>
 
+        {connectedOnce.current && (phase === 'loading' || phase === 'list' || phase === 'error') && (
+          <div className="dw-teams-nav">
+            <button className="pw-view-btn" onClick={() => shiftWindow(-14)} disabled={phase === 'loading'} title="Earlier 2 weeks">
+              <Icon name="caretL" />
+            </button>
+            <span className="dw-teams-range">{fmtRange(range)}</span>
+            <button className="pw-view-btn" onClick={() => shiftWindow(14)} disabled={phase === 'loading'} title="Later 2 weeks">
+              <Icon name="caretR" />
+            </button>
+            <input
+              className="dw-teams-search"
+              type="text"
+              placeholder="Search by subject…"
+              value={query}
+              onChange={onSearchChange}
+              disabled={phase === 'loading'}
+            />
+            <button
+              className={`dw-teams-chip${filterTranscript ? ' on' : ''}`}
+              onClick={() => setFilterTranscript((v) => !v)}
+              disabled={phase === 'loading'}
+            >
+              Has transcript
+            </button>
+          </div>
+        )}
+
         {phase === 'checking' && <div className="pw-empty">Checking your Teams connection…</div>}
 
         {phase === 'connect' && (
@@ -195,17 +266,21 @@ export default function TeamsImportModal({ workshopId, onClose, onImported }) {
         )}
 
         {phase === 'list' && (
-          meetings.length === 0 ? (
-            <div className="pw-empty">No Teams meetings found in your recent calendar window.</div>
+          visibleMeetings.length === 0 ? (
+            <div className="pw-empty">
+              {filterTranscript
+                ? 'No meetings with a transcript in this window.'
+                : 'No Teams meetings found in this calendar window.'}
+            </div>
           ) : (
             <ul className="dw-teams-list">
-              {meetings.map((m) => {
+              {visibleMeetings.map((m) => {
                 const a = avail[m.join_url];
                 const hasTr = a ? !!a.has_transcript : null;
                 const st = done[m.join_url];
                 const dur = fmtDuration(m.start, m.end);
                 return (
-                  <li key={m.join_url} className="dw-teams-item">
+                  <li key={`${m.join_url}::${m.start}`} className="dw-teams-item">
                     <span className="pw-source-icon" style={{ background: '#efedfd', color: '#6d5ce8' }}>
                       <Icon name="clock" />
                     </span>

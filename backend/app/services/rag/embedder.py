@@ -160,6 +160,12 @@ _avail_cache: Optional[bool] = None
 _avail_lock = threading.Lock()
 
 
+def config_errors() -> list[str]:
+    """Public form of `_config_errors` — used by llm_service.providers_status()
+    to report Bedrock's embedding readiness alongside its chat readiness."""
+    return _config_errors()
+
+
 def is_available() -> bool:
     """Cheap readiness probe — does NOT raise and does NOT build the
     client. True means numpy + boto3 + a model id + resolvable AWS

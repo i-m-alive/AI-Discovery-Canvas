@@ -194,3 +194,27 @@ html.theme-anim *::after {
 .um-item-hint { margin-left: auto; font-size: 10px; color: var(--faint); font-weight: 600; }
 .um-item.danger:hover { background: var(--red-weak); color: var(--red); }
 .um-sep { height: 1px; background: var(--line); margin: 5px 4px; }
+
+/* AI-model picker rows inside the menu */
+.um-sec {
+  font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--faint); padding: 8px 12px 3px;
+}
+.um-note { font-size: 11.5px; color: var(--muted); padding: 6px 12px 8px; }
+.um-note-err { color: var(--red); }
+.um-radio { align-items: flex-start; }
+.um-radio:disabled { opacity: .5; cursor: default; }
+.um-radio:disabled:hover { background: none; color: var(--ink-2); }
+.um-radio.on { color: var(--accent); }
+.um-radio-dot {
+  width: 13px; height: 13px; border-radius: 50%; flex: none; margin-top: 2px;
+  border: 1.5px solid var(--line2); transition: border-color .13s ease, box-shadow .13s ease;
+}
+.um-radio-dot.on { border-color: var(--accent); box-shadow: inset 0 0 0 3.5px var(--accent); }
+.um-radio-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.um-radio-model {
+  font-size: 10px; font-weight: 500; color: var(--muted); font-family: ui-monospace, Menlo, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;
+}
+.um-radio.on .um-radio-model { color: var(--accent); opacity: .8; }
+.um-item .um-item-hint .ic svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

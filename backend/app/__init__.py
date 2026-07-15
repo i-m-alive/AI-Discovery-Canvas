@@ -142,6 +142,13 @@ def create_app() -> Flask:
     agents_routes.install(flask_app)
     log.info("[STARTUP] Agent backbone routes loaded")
 
+    # ---- User settings: LLM backend picker -----------------------------
+    # /api/settings/llm — per-user Bedrock vs Azure OpenAI choice, surfaced
+    # in the header avatar menu. See app/routes/settings.py.
+    from app.routes import settings as settings_routes
+    settings_routes.install(flask_app)
+    log.info("[STARTUP] Settings routes loaded")
+
     # ---- Projects & Workshops ------------------------------------------
     # /api/projects, /api/projects/<id>/workshops, /api/workshops/<id> —
     # the BA -> Projects -> Workshops hierarchy (app/postgres/). A Workshop

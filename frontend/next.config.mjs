@@ -26,6 +26,7 @@ const nextConfig = {
       { source: '/api/canvas/:path*', destination: `${backend}/api/canvas/:path*` },
       { source: '/api/projects/:path*', destination: `${backend}/api/projects/:path*` },
       { source: '/api/workshops/:path*', destination: `${backend}/api/workshops/:path*` },
+      { source: '/api/settings/:path*', destination: `${backend}/api/settings/:path*` },
       { source: '/api/integrations/:path*', destination: `${backend}/api/integrations/:path*` },
       { source: '/api/export/:path*', destination: `${backend}/api/export/:path*` },
       { source: '/healthz', destination: `${backend}/healthz` },

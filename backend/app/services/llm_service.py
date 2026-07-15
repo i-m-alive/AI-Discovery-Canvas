@@ -1,9 +1,21 @@
 """
-Centralized LLM service — AWS Bedrock.
+Centralized LLM service — AWS Bedrock, with a per-user Azure OpenAI
+alternative.
 
 This is the single entry point for every LLM call in the backend. Every
 agent (and the `/api/agents/ping` backbone-proof route) goes through
 `complete()`.
+
+PROVIDER DISPATCH: `complete()`/`complete_stream()` now resolve which
+backend serves each call — in priority order: an explicit `provider=`
+argument → the signed-in user's saved choice (users.llm_provider, set
+from the header avatar menu via /api/settings/llm, cached by
+app/services/llm_prefs.py) → the `LLM_PROVIDER` env default ('bedrock').
+The Bedrock implementation below is untouched; 'azure_openai' calls are
+delegated to app/services/llm_azure.py with identical semantics. Calls
+made OUTSIDE a request context (the background doc-indexing thread's
+graph extraction) have no user and use the env default. Embeddings/RAG
+are a separate service and stay on Bedrock Titan regardless.
 
 ADAPTATION NOTE (ai-discovery-canvas): this file originally called Azure
 OpenAI (ported from frd-generator). It has been REWRITTEN to call AWS
@@ -99,6 +111,75 @@ except Exception:  # pragma: no cover — best-effort fallback
 
 
 log = logging.getLogger("app.llm")
+
+
+# ── Provider selection ───────────────────────────────────────────────
+PROVIDER_BEDROCK = "bedrock"
+PROVIDER_AZURE   = "azure_openai"
+VALID_PROVIDERS  = (PROVIDER_BEDROCK, PROVIDER_AZURE)
+
+_env_default = os.environ.get("LLM_PROVIDER", "").strip().lower()
+DEFAULT_PROVIDER = _env_default if _env_default in VALID_PROVIDERS else PROVIDER_BEDROCK
+
+
+def _resolve_provider(explicit: Optional[str] = None) -> str:
+    """Which backend serves this call: explicit arg → the signed-in
+    user's saved preference (when we're inside a Flask request) → the
+    platform default. Never raises — any lookup hiccup falls back to
+    the default so an LLM call can't die on preference plumbing."""
+    p = (explicit or "").strip().lower()
+    if p in VALID_PROVIDERS:
+        return p
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            user = getattr(g, "current_user", None) or {}
+            email = user.get("email") or ""
+            if email:
+                from app.services import llm_prefs
+                pref = llm_prefs.get_for(email)
+                if pref in VALID_PROVIDERS:
+                    return pref
+    except Exception:  # outside Flask, or prefs lookup failed
+        pass
+    return DEFAULT_PROVIDER
+
+
+def resolve_provider(explicit: Optional[str] = None) -> str:
+    """Public form of `_resolve_provider` — the RAG package (embeddings)
+    resolves its backend through this so a user's ONE choice governs both
+    their chat model AND their embedding model, without reaching into a
+    "private" function across modules."""
+    return _resolve_provider(explicit)
+
+
+def providers_status() -> dict:
+    """Config state of every backend — feeds GET /api/settings/llm."""
+    from app.services import llm_azure
+    from app.services.rag import config as rag_config, embedder as bedrock_embedder
+    from app.services.rag import embedder_azure
+    bedrock_errors = check_configured()
+    azure_errors = llm_azure.check_configured()
+    bedrock_embed_errors = bedrock_embedder.config_errors()
+    azure_embed_errors = embedder_azure.config_errors()
+    return {
+        PROVIDER_BEDROCK: {
+            "label": "AWS Bedrock",
+            "model": BEDROCK_MODEL_ID or "",
+            "embedding_model": rag_config.EMBED_MODEL or "",
+            "configured": not bedrock_errors,
+            "embeddings_configured": not bedrock_embed_errors,
+            "errors": bedrock_errors,
+        },
+        PROVIDER_AZURE: {
+            "label": "Azure OpenAI",
+            "model": llm_azure.DEPLOYMENT or "",
+            "embedding_model": embedder_azure.MODEL or "",
+            "configured": not azure_errors,
+            "embeddings_configured": not azure_embed_errors,
+            "errors": azure_errors,
+        },
+    }
 
 
 # ── Configuration (env-driven) ───────────────────────────────────────
@@ -268,9 +349,10 @@ def complete(
     max_output_tokens: Optional[int] = None,
     model: Optional[str] = None,
     cache_system: bool = False,
+    provider: Optional[str] = None,
 ) -> str:
-    """Send a single user prompt to AWS Bedrock and return the response
-    text.
+    """Send a single user prompt to the resolved LLM backend and return
+    the response text.
 
     ``cache_system=True`` appends a Bedrock prompt-caching checkpoint
     (``cachePoint``) after the system block — for callers whose system
@@ -319,6 +401,18 @@ def complete(
     with _CALL_LOCK:
         _CALL_COUNT += 1
         call_id = _CALL_COUNT
+
+    if _resolve_provider(provider) == PROVIDER_AZURE:
+        from app.services import llm_azure
+        # Bedrock model ids/ARNs mean nothing to Azure. The one signal we
+        # keep: a router-model override maps to the (optional) cheap
+        # router deployment.
+        is_router = bool(ROUTER_MODEL_ID) and model == ROUTER_MODEL_ID
+        return llm_azure.complete(
+            prompt, image_path, timeout, tag=tag, system=system,
+            max_output_tokens=max_output_tokens,
+            deployment=llm_azure.pick_deployment(router=is_router),
+            call_id=call_id)
 
     req_timeout = timeout or DEFAULT_TIMEOUT
     max_out = max_output_tokens or MAX_OUTPUT_TOKENS
@@ -456,6 +550,7 @@ def complete_stream(
     max_output_tokens: Optional[int] = None,
     model: Optional[str] = None,
     cache_system: bool = False,
+    provider: Optional[str] = None,
 ):
     """Streaming variant of ``complete`` — yields text deltas as the model
     produces them (Bedrock ``converse_stream``). Same truncation, rate
@@ -468,6 +563,16 @@ def complete_stream(
     with _CALL_LOCK:
         _CALL_COUNT += 1
         call_id = _CALL_COUNT
+
+    if _resolve_provider(provider) == PROVIDER_AZURE:
+        from app.services import llm_azure
+        is_router = bool(ROUTER_MODEL_ID) and model == ROUTER_MODEL_ID
+        yield from llm_azure.complete_stream(
+            prompt, tag=tag, system=system,
+            max_output_tokens=max_output_tokens,
+            deployment=llm_azure.pick_deployment(router=is_router),
+            call_id=call_id)
+        return
 
     max_out = max_output_tokens or MAX_OUTPUT_TOKENS
     max_in = max(1024, MAX_CONTEXT_TOKENS - max_out)

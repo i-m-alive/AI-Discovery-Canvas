@@ -65,6 +65,30 @@ EMBED_MAX_INPUT_TOKENS = _int('BEDROCK_EMBED_MAX_INPUT_TOKENS', 8000)
 
 EMBED_MAX_RETRIES = _int('BEDROCK_EMBED_MAX_RETRIES', 6)
 
+# ── Azure OpenAI embedding model (app/services/rag/embedder_azure.py) ─
+# The per-user LLM-provider switch (app/services/llm_service.py) governs
+# embeddings too: picking Azure OpenAI for chat also switches embeddings
+# to this deployment. Kept as a SEPARATE FAISS namespace from Bedrock's
+# (see service.py's `_ns_name`) — different embedding models produce
+# incomparable vector spaces, so mixing them in one index would silently
+# corrupt (or, if dimensions differ, crash) retrieval. Same Azure OpenAI
+# resource/key as the chat deployment (AZURE_OPENAI_API_KEY) unless a
+# dedicated AZURE_EMBEDDING_API_KEY is set.
+AZURE_EMBED_ENDPOINT     = os.environ.get('AZURE_EMBEDDING_ENDPOINT', '').strip().rstrip('/')
+AZURE_EMBED_MODEL        = os.environ.get('AZURE_EMBEDDING_DEPLOYMENT', '').strip()
+AZURE_EMBED_API_VERSION  = os.environ.get('AZURE_EMBEDDING_API_VERSION', '2024-02-01').strip()
+# text-embedding-3-large's native output width. Azure/OpenAI's `dimensions`
+# request param can shrink this (e.g. to 1024) if you set this env var
+# lower — the model supports Matryoshka truncation down to 256.
+AZURE_EMBED_DIM          = _int('AZURE_EMBEDDING_DIM', 3072)
+AZURE_EMBED_MAX_RPM      = _int('AZURE_EMBED_MAX_RPM', 120)
+AZURE_EMBED_MAX_TPM      = _int('AZURE_EMBED_MAX_TPM', 350_000)
+AZURE_EMBED_MAX_RETRIES  = _int('AZURE_EMBED_MAX_RETRIES', 6)
+# Azure's embeddings endpoint takes a batch of inputs per call (unlike
+# Bedrock's one-at-a-time invoke_model) — this many chunks per request.
+AZURE_EMBED_BATCH_SIZE   = _int('AZURE_EMBED_BATCH_SIZE', 16)
+AZURE_EMBED_MAX_WORKERS  = _int('AZURE_EMBED_MAX_WORKERS', min(8, (os.cpu_count() or 4)))
+
 # ── Semantic chunking ────────────────────────────────────────────────
 CHUNK_TARGET_TOKENS  = _int('RAG_CHUNK_TOKENS', 512)
 CHUNK_OVERLAP_TOKENS = _int('RAG_CHUNK_OVERLAP', 64)

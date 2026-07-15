@@ -15,8 +15,11 @@
 }
 .app-shell * { box-sizing: border-box; }
 /* Full button reset — with color-scheme:dark the UA default chrome is a
-   gray box, so never let it bleed through; .btn etc. re-declare theirs. */
-.app-shell button { font: inherit; cursor: pointer; appearance: none; background: none; border: none; color: inherit; }
+   gray box, so never let it bleed through; .btn etc. re-declare theirs.
+   Deliberately NO `color: inherit` here: this (0,1,1) selector would
+   outrank single-class rules like .um-item (0,1,0), and a menu nested in
+   the white-text topbar would inherit white-on-white. */
+.app-shell button { font: inherit; cursor: pointer; appearance: none; background: none; border: none; }
 .app-shell .ic { display: inline-flex; align-items: center; justify-content: center; }
 .app-shell .ic svg { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
