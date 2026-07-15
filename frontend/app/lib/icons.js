@@ -34,6 +34,8 @@ const PATHS = {
   refresh: '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/>',
   grid: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
   bulb: '<path d="M12 3a6 6 0 0 1 3.6 10.8c-.7.55-1.1 1.25-1.1 2.2h-5c0-.95-.4-1.65-1.1-2.2A6 6 0 0 1 12 3z"/><path d="M9.8 19h4.4M10.6 21.2h2.8"/>',
+  chart: '<path d="M4 19.5h16"/><path d="M5.5 16l4.2-5.2 3 3 5.3-6.8"/>',
+  shield: '<path d="M12 3l7 2.8v5.4c0 4.3-2.9 7.3-7 8.8-4.1-1.5-7-4.5-7-8.8V5.8z"/>',
   layers: '<path d="M12 3.5l8.5 4.5L12 12.5 3.5 8z"/><path d="M3.5 12.5L12 17l8.5-4.5"/><path d="M3.5 16.5L12 21l8.5-4.5"/>',
 };
 

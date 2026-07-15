@@ -31,6 +31,7 @@ const nextConfig = {
       { source: '/api/export/:path*', destination: `${backend}/api/export/:path*` },
       { source: '/api/backlog/:path*', destination: `${backend}/api/backlog/:path*` },
       { source: '/api/opportunities/:path*', destination: `${backend}/api/opportunities/:path*` },
+      { source: '/api/proposal/:path*', destination: `${backend}/api/proposal/:path*` },
       { source: '/healthz', destination: `${backend}/healthz` },
       { source: '/readyz', destination: `${backend}/readyz` },
     ];

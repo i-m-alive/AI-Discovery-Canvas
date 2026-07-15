@@ -1,0 +1,163 @@
+/* Proposal & Planning dashboard — builds on preworkshop.css's pw-*
+   language; everything new is pp-*. Chart series colors are palette-
+   validated pairs (dataviz six-checks): light #6d5ce8/#b3781a on white,
+   dark #8b7cf0/#b98432 on the dark panel. */
+
+:root {
+  --pp-value: #6d5ce8;
+  --pp-cost: #b3781a;
+}
+html[data-theme="dark"] {
+  --pp-value: #8b7cf0;
+  --pp-cost: #b98432;
+}
+
+/* ── Generator subtitle: engagement-length input ──────────────────── */
+.pp-weeks {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: 12px;
+  font-weight: 650; color: #4b5064; white-space: nowrap;
+}
+.pp-weeks input {
+  width: 58px; border: 1px solid #e3e2ee; border-radius: 7px; padding: 4px 7px;
+  font: inherit; font-size: 12px; background: #fff; text-align: center;
+}
+.pp-panel-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.pp-panel-actions a.pw-view-btn { text-decoration: none; }
+
+/* ── Charts (shared SVG anatomy) ──────────────────────────────────── */
+.pp-chart-wrap { display: flex; flex-direction: column; gap: 6px; }
+.pp-roi-svg, .pp-risk-svg { width: 100%; height: auto; display: block; }
+.pp-grid { stroke: #edf0f5; stroke-width: 1; }
+.pp-grid-mid { stroke: #dfe3ec; stroke-width: 1; stroke-dasharray: 4 3; }
+.pp-axis { stroke: #d5dae4; stroke-width: 1; }
+.pp-axis-txt { font-size: 10px; fill: #8a91a8; }
+.pp-axis-lbl { font-size: 10.5px; font-weight: 650; fill: #6a7188; }
+.pp-crosshair { stroke: #c9c4ee; stroke-width: 1; stroke-dasharray: 3 3; }
+
+.pp-line-value { fill: none; stroke: var(--pp-value); stroke-width: 2; stroke-linejoin: round; }
+.pp-line-cost { fill: none; stroke: var(--pp-cost); stroke-width: 2; stroke-linejoin: round; }
+.pp-dot-value { fill: var(--pp-value); stroke: #fff; stroke-width: 2; }
+.pp-dot-cost { fill: var(--pp-cost); stroke: #fff; stroke-width: 2; }
+.pp-grad-top { stop-color: var(--pp-value); stop-opacity: .22; }
+.pp-grad-bot { stop-color: var(--pp-value); stop-opacity: .02; }
+/* direct end labels wear text ink, not the series color — a colored
+   mark sits next to them (dataviz: text wears text tokens) */
+.pp-lbl-value, .pp-lbl-cost { font-size: 11px; font-weight: 700; fill: #4b5064; }
+
+.pp-tip-bg { fill: #fff; stroke: #e3e2ee; filter: drop-shadow(0 3px 8px rgba(24, 39, 64, .14)); }
+.pp-tip-title { font-size: 10.5px; font-weight: 750; fill: #23263a; }
+.pp-tip-txt { font-size: 10.5px; fill: #4b5064; }
+
+.pp-legend { display: flex; align-items: center; gap: 14px; font-size: 11.5px; color: #4b5064; }
+.pp-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.pp-swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.pp-swatch-value { background: var(--pp-value); }
+.pp-swatch-cost { background: var(--pp-cost); }
+.pp-legend-unit { margin-left: auto; color: #8a91a8; font-size: 11px; }
+
+.pp-risk-dot { fill: var(--pp-value); fill-opacity: .82; stroke: #fff; stroke-width: 2; }
+.pp-risk-lbl { font-size: 10px; font-weight: 650; fill: #59607a; }
+.pp-basis { font-size: 11.5px; color: #8a91a8; font-style: italic; margin-top: 6px; }
+
+/* ── SOW milestone timeline ───────────────────────────────────────── */
+.pp-timeline-wrap { overflow-x: auto; padding: 6px 2px; }
+.pp-timeline { display: flex; align-items: flex-start; min-width: 560px; }
+.pp-ms { position: relative; flex: 1; min-width: 110px; display: flex; flex-direction: column; align-items: center; }
+.pp-ms-track { display: flex; align-items: center; width: 100%; }
+.pp-ms-line { flex: 1; height: 2px; background: #ddd7fa; }
+.pp-ms-node {
+  flex: none; width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid var(--pp-value); background: #fff; color: var(--pp-value);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pp-ms-node svg { width: 15px; height: 15px; }
+.pp-ms-body {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 7px 6px 2px; text-align: center; border-radius: 9px; max-width: 100%;
+}
+.pp-ms-body:hover { background: #f6f5fc; }
+.pp-ms-week { font-size: 11px; font-weight: 800; color: var(--pp-value); }
+.pp-ms-title { font-size: 12px; color: #363b50; line-height: 1.35; }
+.pp-ms-del { visibility: hidden; position: absolute; top: 0; right: 6px; }
+.pp-ms:hover .pp-ms-del { visibility: visible; }
+.pp-ms-edit { display: flex; flex-direction: column; gap: 5px; padding: 7px 4px 2px; width: 100%; }
+.pp-ms-edit input {
+  border: 1px solid #e3e2ee; border-radius: 7px; padding: 5px 7px;
+  font: inherit; font-size: 12px; background: #fff; width: 100%;
+}
+.pp-ms-edit-row { display: flex; gap: 5px; justify-content: center; }
+.pp-ms-edit-row .btn { padding: 4px 10px; font-size: 11.5px; }
+
+/* ── Value drivers ────────────────────────────────────────────────── */
+.pp-driver-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.pp-driver-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; }
+.pp-driver-name { font-size: 12.5px; font-weight: 600; color: #363b50; }
+.pp-driver-pct { font-size: 12.5px; font-weight: 750; color: #23263a; }
+.pp-driver-bar { height: 7px; border-radius: 999px; background: #eef0f6; overflow: hidden; }
+.pp-driver-bar i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--pp-value), #8b7cf0);
+}
+
+/* ── Team table ───────────────────────────────────────────────────── */
+.pp-team-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pp-team-table th {
+  text-align: left; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: #8a91a8; padding: 6px 8px; border-bottom: 1px solid #edecf5;
+}
+.pp-team-table td { padding: 9px 8px; border-bottom: 1px solid #f1f0f8; color: #363b50; }
+.pp-team-table tr:last-child td { border-bottom: none; }
+.pp-team-role { font-weight: 650; color: #23263a; }
+.pp-team-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; border-radius: 999px; font-size: 11px; font-weight: 750;
+  background: #efedfd; color: #5645c9; padding: 0 7px;
+}
+.pp-team-alloc { font-weight: 650; }
+.pp-team-tools { text-align: right; white-space: nowrap; }
+.pp-team-tools .pw-view-btn { visibility: hidden; padding: 3px 6px; }
+.pp-team-table tr:hover .pw-view-btn { visibility: visible; }
+.pp-team-input {
+  width: 58px; border: 1px solid #e3e2ee; border-radius: 7px; padding: 4px 7px;
+  font: inherit; font-size: 12px; background: #fff;
+}
+
+/* ── Layout ───────────────────────────────────────────────────────── */
+.pp-sow { margin-bottom: 18px; }
+.pp-cols-roi { grid-template-columns: 1.6fr 1fr; }
+@media (max-width: 1100px) { .pp-cols-roi { grid-template-columns: 1fr; } }
+
+/* ── Dark theme ───────────────────────────────────────────────────── */
+html[data-theme="dark"] .pp-weeks { color: var(--ink-2); }
+html[data-theme="dark"] .pp-weeks input,
+html[data-theme="dark"] .pp-ms-edit input,
+html[data-theme="dark"] .pp-team-input { background: var(--panel-2); border-color: var(--line2); color: var(--ink); }
+html[data-theme="dark"] .pp-grid { stroke: var(--line); }
+html[data-theme="dark"] .pp-grid-mid { stroke: var(--line2); }
+html[data-theme="dark"] .pp-axis { stroke: var(--line2); }
+html[data-theme="dark"] .pp-axis-txt { fill: var(--muted); }
+html[data-theme="dark"] .pp-axis-lbl { fill: var(--ink-2); }
+html[data-theme="dark"] .pp-dot-value,
+html[data-theme="dark"] .pp-dot-cost { stroke: var(--panel); }
+html[data-theme="dark"] .pp-lbl-value,
+html[data-theme="dark"] .pp-lbl-cost { fill: var(--ink-2); }
+html[data-theme="dark"] .pp-tip-bg { fill: var(--panel-2); stroke: var(--line2); }
+html[data-theme="dark"] .pp-tip-title { fill: var(--ink); }
+html[data-theme="dark"] .pp-tip-txt { fill: var(--ink-2); }
+html[data-theme="dark"] .pp-legend { color: var(--ink-2); }
+html[data-theme="dark"] .pp-legend-unit { color: var(--muted); }
+html[data-theme="dark"] .pp-risk-dot { stroke: var(--panel); }
+html[data-theme="dark"] .pp-risk-lbl { fill: var(--ink-2); }
+html[data-theme="dark"] .pp-basis { color: var(--muted); }
+html[data-theme="dark"] .pp-ms-node { background: var(--panel); }
+html[data-theme="dark"] .pp-ms-line { background: var(--line2); }
+html[data-theme="dark"] .pp-ms-body:hover { background: var(--accent-weak); }
+html[data-theme="dark"] .pp-ms-title { color: var(--ink-2); }
+html[data-theme="dark"] .pp-driver-name { color: var(--ink-2); }
+html[data-theme="dark"] .pp-driver-pct { color: var(--ink); }
+html[data-theme="dark"] .pp-driver-bar { background: var(--panel-2); }
+html[data-theme="dark"] .pp-team-table th { border-color: var(--line); }
+html[data-theme="dark"] .pp-team-table td { border-color: var(--line); color: var(--ink-2); }
+html[data-theme="dark"] .pp-team-role { color: var(--ink); }
+html[data-theme="dark"] .pp-team-count { background: var(--accent-weak); color: var(--pw-purple); }

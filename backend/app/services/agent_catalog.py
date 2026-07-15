@@ -37,6 +37,7 @@ not a generation task; the frontend handles it as UI state.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Optional
 
@@ -204,6 +205,51 @@ _MOM_FIELD = (
     'are complete and correctly attributed given the sources actually available (transcripts '
     'present and clearly attributed = high; sparse notes only = low, never a charitable '
     'default).'
+)
+
+# ── Proposal & Planning structured contracts ──────────────────────────
+# Phase-4 payloads (sow/roi/risk/team) all persist into the single
+# generated_docs.proposal_json column — see that model's comment for
+# the shapes. Every numeric estimate is grounded-or-null by contract:
+# the UI renders "—" rather than fabricated certainty.
+_SOW_FIELD = (
+    'Also include "engagement_weeks": the integer engagement length in weeks (from EXTRA '
+    'INPUT; default 20 if unstated). Also include "milestones": an array of 3-8 objects '
+    '{"week": integer (delivery week, ascending, the last at or near engagement_weeks), '
+    '"title": "short milestone name"} — milestones must align to the epics/scope actually in '
+    'the material (mobilization first, value-realization review last is the usual shape, but '
+    'derive the middle from THIS engagement\'s backlog, never a generic template).'
+)
+
+_ROI_FIELD = (
+    'Also include "roi": an object {"horizon_years": 3, "net_value": number|null (net value '
+    'over the horizon in MILLIONS, e.g. 4.6), "net_value_label": "£4.6M"-style short string '
+    'using the currency symbol given in the task, "payback_months": integer|null, '
+    '"series": [{"period": "Year 1", "cumulative_value": number, "cumulative_cost": number}] '
+    '(one entry per year of the horizon, in millions, cumulative), '
+    '"drivers": [{"name": "e.g. Overtime reduction", "pct": integer}] (3-6 drivers of the '
+    'return, pct sums to ~100), "basis": "one line naming the client facts/numbers this '
+    'estimate stands on"} — HONESTY RULE: derive drivers and magnitudes from the material '
+    '(time saved, error/penalty reduction, faster processing); if the material gives too '
+    'little signal for a magnitude, set net_value/payback_months to null and say in "basis" '
+    'what data would firm them up. Every figure is an estimate and the basis line is '
+    'mandatory.'
+)
+
+_RISK_FIELD = (
+    'Also include "items": an array of 3-8 objects {"label": "short risk/benefit item name", '
+    '"benefit": integer 0-100 (weighted benefit of addressing it), "risk": integer 0-100 '
+    '(delivery & adoption risk), "note": "one line of evidence from the material"} — each '
+    'item must be a real, named concern or lever from THIS engagement (data quality, '
+    'validation overhead, process variance...), scored honestly from the evidence, never '
+    'generic risk-register filler.'
+)
+
+_TEAM_FIELD = (
+    'Also include "roles": an array of 4-8 objects {"role": "e.g. Solution Architect", '
+    '"count": integer 1-6, "allocation_pct": integer 10-100 (average allocation over the '
+    'engagement), "why": "one line tying the role to THIS scope"} — size the squad from the '
+    'actual backlog breadth and technical shape of the engagement, not a standard pyramid.'
 )
 
 
@@ -678,42 +724,59 @@ AGENT_SPECS: dict[str, dict] = {
         ),
     },
     # ---- Proposal & Planning ----
+    # All four persist structured payloads into generated_docs.
+    # proposal_json (one column, shape per agent — see that model) and a
+    # prose body_html for the document viewer / Word export. Context:
+    # _proposal_context — requirements + capability map + the Post-
+    # Workshop backlog tree + accepted opportunities + corpus.
     'sow': {
         'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'doc-text', 'doc': True,
         'name': 'Draft SOW',
+        'extra_fields': _SOW_FIELD,
         'task': (
-            'Draft a Statement of Work for this engagement: objective, scope (in/out), '
-            'milestones with rough timing across the stated engagement length, validation/'
-            'compliance activities if regulated, and assumptions. The EXTRA INPUT gives the '
-            'engagement length — structure milestones to fit it.'
+            'Draft a STATEMENT OF WORK for this engagement. body_html: <b>Objective</b>; '
+            '<b>Scope</b> (in/out, from what the material actually establishes — the backlog '
+            'epics are the in-scope anchor); <b>Milestones</b> (one line each, matching the '
+            'structured array); <b>Validation &amp; compliance activities</b> if regulated; '
+            '<b>Assumptions</b>. The EXTRA INPUT gives the engagement length — structure the '
+            'milestones to fit it. The structured "milestones" array is what the timeline '
+            'renders — it must match the prose. node_label "Statement of Work".'
         ),
     },
     'roi': {
-        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'dollar', 'doc': False,
-        'name': 'Calculate ROI',
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'dollar', 'doc': True,
+        'name': 'ROI & value estimate',
+        'extra_fields': _ROI_FIELD,
         'task': (
-            'Estimate the return on this engagement over the horizon given in EXTRA INPUT. '
-            'Derive drivers from the context (time saved, error/penalty reduction, faster '
-            'processing); state a headline multiple like "≈ 3.4×" ONLY if the context gives '
-            'enough signal, otherwise give a qualitative range and say what data would firm it '
-            'up. Label everything as an estimate. node_label like "ROI ≈ N×" or "ROI estimate".'
+            'Estimate the RETURN on this engagement over a 3-year horizon. body_html: '
+            '<b>Value summary</b> (the headline and payback in words, labeled as an '
+            'estimate), <b>Value drivers</b> (one line per driver with its mechanism), '
+            '<b>Basis &amp; caveats</b> (what the numbers stand on, what would firm them '
+            'up). The structured "roi" object is what the chart and stat tiles render — it '
+            'must match the prose. node_label like "ROI estimate".'
         ),
     },
     'risk': {
-        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'scale', 'doc': False,
-        'name': 'Benefit ⇄ risk',
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'scale', 'doc': True,
+        'name': 'Benefit–risk analysis',
+        'extra_fields': _RISK_FIELD,
         'task': (
-            'Weigh the benefits of proceeding against the delivery risks, grounded in the '
-            'context. body_html: "<b>Benefits</b>" list then "<b>Risks</b>" list, 3-4 items '
-            'each, then a one-line balanced verdict. node_meta "balanced".'
+            'Weigh the BENEFITS of proceeding against the delivery and adoption RISKS, '
+            'grounded in the material. body_html: one short paragraph per scored item — what '
+            'it is, why it scores where it does, and the mitigation — then a one-line '
+            'balanced verdict. The structured "items" array is what the benefit-risk scatter '
+            'renders — it must match the prose. node_meta "balanced".'
         ),
     },
     'team': {
-        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'users', 'doc': False,
-        'name': 'Suggest team',
+        'zone': 'Proposal & Planning', 'folder': 'Proposal', 'icon': 'users', 'doc': True,
+        'name': 'Suggested team',
+        'extra_fields': _TEAM_FIELD,
         'task': (
-            'Recommend a delivery team for this engagement: roles (with count), why each is '
-            'needed for THIS scope, and an estimated duration. Typically 4-6 roles. '
+            'Recommend the DELIVERY TEAM for this engagement. body_html: one line per role — '
+            'who, how many, allocation, and why THIS scope needs them — then a one-line note '
+            'on ramp-up/sequencing if the material implies one. The structured "roles" array '
+            'is what the team table renders — it must match the prose. '
             'node_label like "Suggested Team (N)".'
         ),
     },
@@ -1884,6 +1947,152 @@ def _mom_context(context: dict, workshop_id: Optional[int],
     return context
 
 
+def _int_or_none(v, lo: int, hi: int):
+    """Clamped int, or None for absent/unusable — the Proposal panels
+    render '—' for None rather than a fabricated number."""
+    try:
+        return max(lo, min(hi, int(round(float(v)))))
+    except (TypeError, ValueError):
+        return None
+
+
+def _num_or_none(v, lo: float, hi: float):
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return None
+    if n != n:   # NaN
+        return None
+    return max(lo, min(hi, round(n, 2)))
+
+
+def _coerce_sow(obj: dict) -> Optional[dict]:
+    """Clamp/validate the SOW structured fields (see _SOW_FIELD) into
+    the proposal_json shape the milestone timeline renders."""
+    weeks = _int_or_none(obj.get('engagement_weeks'), 2, 104) or 20
+    milestones = []
+    for m in (obj.get('milestones') or [])[:8]:
+        if not isinstance(m, dict):
+            continue
+        title = _clip(m.get('title'), 120)
+        week = _int_or_none(m.get('week'), 1, 104)
+        if title and week is not None:
+            milestones.append({'week': week, 'title': title})
+    milestones.sort(key=lambda m: m['week'])
+    if not milestones:
+        return None
+    return {'engagement_weeks': weeks, 'milestones': milestones}
+
+
+def _coerce_roi(obj: dict, currency: str) -> Optional[dict]:
+    """Clamp/validate the 'roi' object (see _ROI_FIELD). Numbers are
+    grounded-or-null by contract; series/drivers are clamped, drivers
+    are kept even when the headline is null (mechanisms without
+    magnitudes are still useful)."""
+    roi = obj.get('roi') if isinstance(obj.get('roi'), dict) else {}
+    horizon = _int_or_none(roi.get('horizon_years'), 1, 10) or 3
+    series = []
+    for p in (roi.get('series') or [])[:horizon]:
+        if not isinstance(p, dict):
+            continue
+        period = _clip(p.get('period'), 20)
+        value = _num_or_none(p.get('cumulative_value'), 0, 100000)
+        cost = _num_or_none(p.get('cumulative_cost'), 0, 100000)
+        if period and value is not None and cost is not None:
+            series.append({'period': period, 'cumulative_value': value, 'cumulative_cost': cost})
+    drivers = []
+    for d in (roi.get('drivers') or [])[:6]:
+        if not isinstance(d, dict):
+            continue
+        name = _clip(d.get('name'), 60)
+        pct = _int_or_none(d.get('pct'), 1, 100)
+        if name and pct is not None:
+            drivers.append({'name': name, 'pct': pct})
+    basis = _clip(roi.get('basis'), 300)
+    if not (series or drivers or basis):
+        return None
+    return {'currency': currency, 'horizon_years': horizon,
+            'net_value': _num_or_none(roi.get('net_value'), -100000, 100000),
+            'net_value_label': _clip(roi.get('net_value_label'), 20),
+            'payback_months': _int_or_none(roi.get('payback_months'), 1, 120),
+            'series': series, 'drivers': drivers, 'basis': basis}
+
+
+def _coerce_risk(obj: dict) -> Optional[dict]:
+    """Clamp/validate the scored benefit-risk items (see _RISK_FIELD)."""
+    items = []
+    for it in (obj.get('items') or [])[:8]:
+        if not isinstance(it, dict):
+            continue
+        label = _clip(it.get('label'), 80)
+        benefit = _int_or_none(it.get('benefit'), 0, 100)
+        risk = _int_or_none(it.get('risk'), 0, 100)
+        if label and benefit is not None and risk is not None:
+            items.append({'label': label, 'benefit': benefit, 'risk': risk,
+                          'note': _clip(it.get('note'), 200)})
+    return {'items': items} if items else None
+
+
+def _coerce_team(obj: dict) -> Optional[dict]:
+    """Clamp/validate the team roles (see _TEAM_FIELD)."""
+    roles = []
+    for r in (obj.get('roles') or [])[:8]:
+        if not isinstance(r, dict):
+            continue
+        role = _clip(r.get('role'), 80)
+        count = _int_or_none(r.get('count'), 1, 6)
+        alloc = _int_or_none(r.get('allocation_pct'), 5, 100)
+        if role and count is not None and alloc is not None:
+            roles.append({'role': role, 'count': count, 'allocation_pct': alloc,
+                          'why': _clip(r.get('why'), 200)})
+    return {'roles': roles} if roles else None
+
+
+def _proposal_context(context: dict, workshop_id: Optional[int],
+                      selection: Optional[dict] = None) -> dict:
+    """'sow'/'roi'/'risk'/'team' input — the whole validated-scope chain
+    the earlier phases produced: the captured requirements table, the
+    latest capability map, the Post-Workshop backlog tree (milestones
+    align to epics; team sizing reads scope breadth), the accepted
+    opportunities, and the corpus distillations. A Synthesis-Canvas
+    selection overrides the corpus part only — the structured state
+    always rides along, same rule as _engagement_context."""
+    context = _engagement_context(context, workshop_id=workshop_id,
+                                  include_capmap=True, selection=selection)
+    if not workshop_id:
+        return context
+    files = list(context.get('files') or [])
+    try:
+        from app.services import backlog_service
+        tree = backlog_service.get_tree(workshop_id)
+        if tree['counts']['epics']:
+            lines = []
+            for e in tree['epics']:
+                feats = ', '.join(f"{f['title']} ({len(f['stories'])} stories)"
+                                  for f in e['features'])
+                lines.append(f"{e['epic_id']} {e['title']}: {feats}")
+            c = tree['counts']
+            lines.append(f"TOTALS: {c['epics']} epics, {c['features']} features, "
+                         f"{c['stories']} stories")
+            files.append({'name': 'PRODUCT BACKLOG (validated scope — milestones and team '
+                                  'sizing derive from this)', 'text': '\n'.join(lines)})
+    except Exception as e:
+        log.info('[AGENT/PROPOSAL] backlog unavailable (%s)', e.__class__.__name__)
+    try:
+        from app.services import opportunities_service
+        opps = [o for o in opportunities_service.list_opportunities(workshop_id)
+                if o['status'] == 'accepted']
+        if opps:
+            files.append({'name': 'ACCEPTED FUTURE OPPORTUNITIES (may enter scope)',
+                          'text': '\n'.join(f"{o['opp_id']} {o['title']} "
+                                            f"(horizon {o['horizon']}, size {o['size']}, "
+                                            f"{o['priority']} priority)" for o in opps)})
+    except Exception as e:
+        log.info('[AGENT/PROPOSAL] opportunities unavailable (%s)', e.__class__.__name__)
+    context['files'] = files
+    return context
+
+
 def _closed_corpus_context(context: dict, workshop_id: Optional[int],
                            question: Optional[str], scope: str = 'sources') -> dict:
     """'artifact_analyst' input, scope-controlled:
@@ -2164,6 +2373,10 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 log.info('[AGENT/OPPORTUNITIES] register unavailable (%s)', e.__class__.__name__)
     elif agent_id == 'mom':
         context = _mom_context(context, workshop_id=workshop_id, selection=selection)
+    elif agent_id in ('sow', 'roi', 'risk', 'team'):
+        # Phase 4 composes from the whole validated-scope chain:
+        # requirements + capmap + backlog tree + accepted opportunities.
+        context = _proposal_context(context, workshop_id=workshop_id, selection=selection)
 
     # Task text and extra-fields are normally the spec's own — deepresearch
     # is the one exception, swapping in the doc-type-specific task (see
@@ -2185,6 +2398,12 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
             'each to its document via source_label and source_quote. Never return an empty '
             'requirements array merely because no transcript is present.'
         )
+    if agent_id == 'roi':
+        # The currency the client thinks in — PROPOSAL_CURRENCY env
+        # (default £, matching the reference design); the coercer stamps
+        # the same symbol into the persisted payload.
+        currency = (os.environ.get('PROPOSAL_CURRENCY') or '£').strip() or '£'
+        task_text += f' Use the currency symbol "{currency}" for every monetary figure.'
     if agent_id == 'artifact_analyst' and scope == 'all':
         task_text += (
             ' SCOPE NOTE: this corpus ALSO includes generated documents (our own prior AI '
@@ -2262,7 +2481,10 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
     # every captured REQ-ID is this catalogue's longest flat document.
     # 'backlog' joins the 8000 tier: a full epic→feature→story tree with
     # per-story acceptance criteria is comparable to the brd in size.
-    if agent_id in ('workflow', 'analyze', 'brd', 'backlog') or (agent_id == 'deepresearch' and wants_workflow):
+    # 'sow'/'roi' join it too: a multi-section SOW document + milestone
+    # array (resp. a 3-section value narrative + the full roi object).
+    if agent_id in ('workflow', 'analyze', 'brd', 'backlog', 'sow', 'roi') \
+            or (agent_id == 'deepresearch' and wants_workflow):
         max_out = 8000
     elif extra_fields_text or agent_id == 'artifact_analyst':
         # artifact_analyst has no structured fields but its default output
@@ -2454,6 +2676,41 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
         draft['node']['meta'] = draft['node']['meta'] or (
             f"{len(mom_payload['decisions'])} decisions · {len(mom_payload['actions'])} actions")
 
+    # 'sow'/'roi'/'risk'/'team': the Proposal & Planning structured
+    # payloads — persisted below as proposal_json so the phase-4 panels
+    # (milestone timeline, ROI chart + drivers, benefit-risk scatter,
+    # team table) survive a reload. A missing/unusable structured part
+    # fails the draft: the panels are the point of these agents.
+    proposal_payload: Optional[dict] = None
+    if agent_id in ('sow', 'roi', 'risk', 'team'):
+        if agent_id == 'sow':
+            proposal_payload = _coerce_sow(obj)
+            fail_msg = 'the model returned no usable milestones — try again'
+        elif agent_id == 'roi':
+            cur = (os.environ.get('PROPOSAL_CURRENCY') or '£').strip() or '£'
+            proposal_payload = _coerce_roi(obj, cur)
+            fail_msg = 'the model returned no usable ROI model — try again'
+        elif agent_id == 'risk':
+            proposal_payload = _coerce_risk(obj)
+            fail_msg = 'the model returned no usable benefit-risk items — try again'
+        else:
+            proposal_payload = _coerce_team(obj)
+            fail_msg = 'the model returned no usable team roles — try again'
+        if proposal_payload is None:
+            raise RuntimeError(fail_msg)
+        draft['proposal'] = proposal_payload
+        if not draft['node']['meta']:
+            if agent_id == 'sow':
+                draft['node']['meta'] = (f"{len(proposal_payload['milestones'])} milestones · "
+                                         f"{proposal_payload['engagement_weeks']} weeks")
+            elif agent_id == 'roi':
+                draft['node']['meta'] = proposal_payload.get('net_value_label') or 'estimate'
+            elif agent_id == 'risk':
+                draft['node']['meta'] = f"{len(proposal_payload['items'])} items scored"
+            else:
+                n_people = sum(r['count'] for r in proposal_payload['roles'])
+                draft['node']['meta'] = f'{n_people} people · {len(proposal_payload["roles"])} roles'
+
     # 'analyze': the routed gap list, the honest readiness scorecard, and
     # the research topics (see _ANALYSIS_FIELDS) — persisted below as
     # analysis_json so the scorecard modal survives a reload.
@@ -2563,6 +2820,16 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 if mom_payload and mom_payload.get('confidence') is not None:
                     completion = mom_payload['confidence']
                     tags.append(f"{mom_payload['confidence']}% confidence")
+            if agent_id in ('sow', 'roi', 'risk', 'team') and proposal_payload:
+                category = {'sow': 'SOW', 'roi': 'ROI', 'risk': 'Risk', 'team': 'Team'}[agent_id]
+                if agent_id == 'sow':
+                    tags.append(f"{len(proposal_payload['milestones'])} milestones")
+                elif agent_id == 'roi' and proposal_payload.get('net_value_label'):
+                    tags.append(f"net {proposal_payload['net_value_label']}")
+                elif agent_id == 'risk':
+                    tags.append(f"{len(proposal_payload['items'])} items")
+                elif agent_id == 'team':
+                    tags.append(f"{sum(r['count'] for r in proposal_payload['roles'])} people")
             diagram = draft.get('diagram')
             record = generated_docs.register(
                 workshop_id, title, body_html, agent_id=agent_id,
@@ -2575,7 +2842,7 @@ def run_agent(agent_id: str, context: dict, extra: Optional[str] = None,
                 analysis_json=analysis_payload,
                 capmap_json=capmap_payload,
                 inputs_json=context.get('_selection_inputs') or None,
-                mom_json=mom_payload)
+                mom_json=mom_payload, proposal_json=proposal_payload)
             if record:
                 draft['node']['docId'] = record['doc_id']
         except Exception as e:

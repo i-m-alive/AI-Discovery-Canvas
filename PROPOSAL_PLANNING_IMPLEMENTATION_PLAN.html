@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Proposal &amp; Planning Phase — Implementation Plan</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --panel:#ffffff; --ink:#1c2030; --ink2:#4a5164; --muted:#7b8296;
+    --line:#e4e8ee; --accent:#6d5ce8; --accent-weak:#efedfd;
+    --green:#2f8f5b; --green-weak:#eaf6f0;
+    --amber:#c9881f; --amber-weak:#faf1e1;
+    --red:#c0463b; --red-weak:#fbecea;
+    --code-bg:#f1f0fa; --shadow:0 2px 10px rgba(24,39,64,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14151f; --panel:#1b1c29; --ink:#eef0f6; --ink2:#c3c7d6; --muted:#8c93a8;
+      --line:#2c2e40; --accent:#9b8cf5; --accent-weak:#2a2650;
+      --green:#4fbf85; --green-weak:#173327;
+      --amber:#e0ac4c; --amber-weak:#3a2f16;
+      --red:#e07b6f; --red-weak:#3a1e1c;
+      --code-bg:#232437; --shadow:0 2px 14px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14151f; --panel:#1b1c29; --ink:#eef0f6; --ink2:#c3c7d6; --muted:#8c93a8;
+    --line:#2c2e40; --accent:#9b8cf5; --accent-weak:#2a2650;
+    --green:#4fbf85; --green-weak:#173327;
+    --amber:#e0ac4c; --amber-weak:#3a2f16;
+    --red:#e07b6f; --red-weak:#3a1e1c;
+    --code-bg:#232437; --shadow:0 2px 14px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f7fb; --panel:#ffffff; --ink:#1c2030; --ink2:#4a5164; --muted:#7b8296;
+    --line:#e4e8ee; --accent:#6d5ce8; --accent-weak:#efedfd;
+    --green:#2f8f5b; --green-weak:#eaf6f0;
+    --amber:#c9881f; --amber-weak:#faf1e1;
+    --red:#c0463b; --red-weak:#fbecea;
+    --code-bg:#f1f0fa; --shadow:0 2px 10px rgba(24,39,64,.06);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    line-height:1.55; font-size:14.5px;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:28px 24px 80px}
+  header.hero{
+    background:linear-gradient(135deg,var(--accent) 0%,#5645c9 100%); color:#fff;
+    border-radius:16px; padding:30px 32px; margin-bottom:22px; box-shadow:var(--shadow);
+  }
+  header.hero h1{margin:0 0 6px; font-size:24px}
+  header.hero p{margin:0; opacity:.92; font-size:13.5px; max-width:780px}
+  header.hero .tag{
+    display:inline-block; background:rgba(255,255,255,.18); border-radius:999px;
+    padding:3px 11px; font-size:11px; font-weight:700; letter-spacing:.03em; margin-bottom:10px;
+  }
+  nav.toc{
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:26px; position:sticky; top:0;
+    background:var(--bg); padding:10px 0; z-index:5; border-bottom:1px solid var(--line);
+  }
+  nav.toc a{
+    font-size:11.5px; font-weight:600; color:var(--ink2); text-decoration:none;
+    border:1px solid var(--line); border-radius:999px; padding:5px 11px; background:var(--panel);
+    white-space:nowrap;
+  }
+  nav.toc a:hover{border-color:var(--accent); color:var(--accent)}
+  section{margin-bottom:34px}
+  h2{font-size:18px; margin:0 0 4px; display:flex; align-items:center; gap:8px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+    border-radius:7px; background:var(--accent-weak); color:var(--accent); font-size:12px; font-weight:800;
+  }
+  .lede{color:var(--muted); font-size:13px; margin:0 0 16px; max-width:840px}
+  h3{font-size:14.5px; margin:20px 0 8px; color:var(--ink)}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+    box-shadow:var(--shadow); margin-bottom:14px;
+  }
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:820px){.grid2{grid-template-columns:1fr}}
+  .qcard h4{margin:0 0 6px; font-size:13.5px; display:flex; gap:8px; align-items:flex-start}
+  .qcard .qn{
+    flex:none; width:20px; height:20px; border-radius:6px; background:var(--accent); color:#fff;
+    font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; margin-top:1px;
+  }
+  .qcard p{margin:0; font-size:13px; color:var(--ink2)}
+  table{width:100%; border-collapse:collapse; font-size:12.8px}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  .pill{
+    display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:700;
+    border-radius:999px; padding:3px 9px; white-space:nowrap;
+  }
+  .pill-exists{color:var(--green); background:var(--green-weak)}
+  .pill-partial{color:var(--amber); background:var(--amber-weak)}
+  .pill-new{color:var(--red); background:var(--red-weak)}
+  .pill-reuse{color:var(--accent); background:var(--accent-weak)}
+  code, .mono{
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; background:var(--code-bg);
+    border-radius:5px; padding:1px 6px;
+  }
+  pre{
+    background:var(--code-bg); border-radius:10px; padding:14px 16px; overflow-x:auto;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.6; margin:8px 0;
+  }
+  ul{margin:6px 0; padding-left:20px}
+  li{margin:4px 0}
+  .callout{
+    border-left:3px solid var(--accent); background:var(--accent-weak); border-radius:0 10px 10px 0;
+    padding:12px 16px; font-size:13px; margin:10px 0;
+  }
+  .callout.warn{border-color:var(--amber); background:var(--amber-weak)}
+  .callout strong{display:block; margin-bottom:3px; font-size:12px; text-transform:uppercase; letter-spacing:.02em}
+  .phase-roadmap{border-left:2px solid var(--line); margin-left:10px; padding-left:22px}
+  .phase-step{position:relative; padding-bottom:22px}
+  .phase-step:last-child{padding-bottom:0}
+  .phase-step::before{
+    content:''; position:absolute; left:-27px; top:3px; width:11px; height:11px; border-radius:50%;
+    background:var(--accent); border:2px solid var(--panel); box-shadow:0 0 0 2px var(--accent);
+  }
+  .phase-step h4{margin:0 0 4px; font-size:14px}
+  .phase-step .eff{
+    display:inline-block; margin-left:8px; font-size:10px; font-weight:700; padding:1px 8px; border-radius:999px;
+  }
+  .eff-s{background:var(--green-weak); color:var(--green)}
+  .eff-m{background:var(--amber-weak); color:var(--amber)}
+  .eff-l{background:var(--red-weak); color:var(--red)}
+  .stat-tiles{display:flex; gap:10px; flex-wrap:wrap; margin:10px 0}
+  .stat-tile{
+    border:1px solid var(--line); border-radius:12px; padding:10px 16px; min-width:100px; text-align:center;
+    background:var(--panel);
+  }
+  .stat-tile b{display:block; font-size:20px; color:var(--accent)}
+  .stat-tile span{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em}
+  footer{color:var(--muted); font-size:11.5px; text-align:center; padding-top:24px; border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="tag">ENGAGEMENT · PHASE 4 OF 4</span>
+    <h1>Proposal &amp; Planning — Implementation Plan</h1>
+    <p>SOW · ROI · Risk · Team. The final phase converts the validated scope (requirements → capability map →
+      product backlog) into a client-ready proposal: a milestone-timed Statement of Work, a 3-year ROI model with
+      value drivers, a benefit–risk analysis, and a recommended delivery team. This plan inventories exactly what
+      already exists after the Post-Workshop build versus what's net-new.</p>
+  </header>
+
+  <nav class="toc">
+    <a href="#answers">Your six items, answered</a>
+    <a href="#state">Current state</a>
+    <a href="#ia">Page layout</a>
+    <a href="#data">Data model</a>
+    <a href="#pipeline">Generation pipeline</a>
+    <a href="#charts">Charts (no new deps)</a>
+    <a href="#api">API surface</a>
+    <a href="#roadmap">Build roadmap</a>
+    <a href="#decisions">Decisions needed</a>
+  </nav>
+
+  <section id="answers">
+    <h2><span class="num">1</span>Your six items, answered directly</h2>
+    <div class="grid2">
+      <div class="card qcard">
+        <h4><span class="qn">1</span>Source Artifacts panel (left side)</h4>
+        <p><span class="pill pill-reuse">Reuse as-is</span> Same <code>ArtifactExplorer.jsx</code> — it already has
+          a "Proposal &amp; Planning" zone bucket wired in. Mount with
+          <code>activePhase="Proposal &amp; Planning"</code>, and follow the new upload convention: the upload form
+          now sends a <code>phase</code> field (added alongside the <code>prepare_docs.phase</code> column), so this
+          dashboard's uploads tag themselves <code>Proposal &amp; Planning</code>.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">2</span>Statement of Work — Milestones</h4>
+        <p><span class="pill pill-partial">Partial</span> A real <code>sow</code> agent exists and is persisted
+          (doc: True, Word-exportable), but it's prose only — no structured milestone list a timeline can render.
+          Needs: structured <code>milestones: [{week, title}]</code> output + the horizontal flag-timeline component.
+          The milestones should derive from the <b>backlog epics</b> built in Post-Workshop — that linkage is the
+          whole point of the phase ordering.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">3</span>ROI &amp; Value Estimate</h4>
+        <p><span class="pill pill-partial">Partial</span> A <code>roi</code> agent exists but is a throwaway prose
+          card (doc: False, nothing persisted). Needs: structured output (headline net value, payback months,
+          cumulative value vs delivery cost series over 3 years), persistence, and an SVG area/line chart. The
+          existing task prompt's honesty rule ("state a multiple ONLY if the context gives enough signal") carries
+          over — every number is a labeled estimate.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">4</span>Value Drivers</h4>
+        <p><span class="pill pill-new">Net-new (but same run)</span> Not a separate generator — value drivers
+          ("Overtime reduction 42%…") are part of the ROI model's output: <code>drivers: [{name, pct}]</code>
+          rendered as a horizontal-bar list beside the chart. One agent run produces both panels.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">5</span>Benefit–Risk Analysis</h4>
+        <p><span class="pill pill-partial">Partial</span> A <code>risk</code> agent exists but outputs two prose
+          bullet lists (doc: False). The reference design is a <b>scatter plot</b> (benefit 0–100 vs risk 0–100 per
+          named item, "top-left = prioritize"). Needs: scored structured output
+          <code>items: [{label, benefit, risk, note}]</code>, persistence, and an SVG scatter component.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">6</span>Suggested Team Composition</h4>
+        <p><span class="pill pill-partial">Partial</span> A <code>team</code> agent exists (prose roles list,
+          doc: False). Needs: structured <code>roles: [{role, count, allocation_pct, why}]</code>, persistence, and
+          the Role / Count / Allocation table with inline edits before the proposal goes out.</p>
+      </div>
+      <div class="card qcard">
+        <h4><span class="qn">+</span>Hero stat tiles (£4.6M · 14 mo · 9 · 5)</h4>
+        <p><span class="pill pill-reuse">Reuse CSS</span> The <code>.pw-stats</code> tile row from the other
+          dashboards, fed by the persisted structured payloads: 3-yr net value + payback from the ROI model, team
+          size from the team model, milestone count from the SOW model.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="state">
+    <h2><span class="num">2</span>Current state — exists vs net-new</h2>
+    <p class="lede">Audited against the repo as of today (post the Post-Workshop build, which added several pieces
+      this phase reuses directly).</p>
+
+    <h3>Backend</h3>
+    <table>
+      <tr><th>Piece</th><th>Status</th><th>Notes</th></tr>
+      <tr>
+        <td>Agents <code>sow</code> / <code>roi</code> / <code>risk</code> / <code>team</code></td>
+        <td><span class="pill pill-partial">Exist, prose-only</span></td>
+        <td>All four are registered in <code>agent_catalog.py</code> (zone "Proposal &amp; Planning", folder
+          "Proposal") with real task prompts. <code>sow</code> is doc: True; <code>roi</code>/<code>risk</code>/
+          <code>team</code> are doc: False — nothing persisted, no structured fields on any of them. Each needs an
+          <code>extra_fields</code> contract + coercer + persistence, exactly the reshape pattern proven on
+          <code>opportunities</code>/<code>mom</code>.</td>
+      </tr>
+      <tr>
+        <td>Structured-JSON persistence pattern</td>
+        <td><span class="pill pill-reuse">Reuse</span></td>
+        <td>The typed-JSON-column pattern (<code>capmap_json</code>, <code>mom_json</code>) plus the additive-column
+          migration mechanism in <code>bootstrap_postgres</code> (<code>_ADDITIVE_COLUMNS</code>) — add one
+          <code>proposal_json</code> entry and it migrates itself on boot.</td>
+      </tr>
+      <tr>
+        <td>Backlog / requirements / capmap / opportunities as generation input</td>
+        <td><span class="pill pill-exists">Exists</span></td>
+        <td>The whole point of phase 4: <code>backlog_service.get_tree()</code>,
+          <code>requirements.as_context_text()</code>, <code>generated_docs.latest_capmap()</code>,
+          <code>opportunities_service.list_opportunities()</code> all exist — a new
+          <code>_proposal_context</code> composes them into the agents' input.</td>
+      </tr>
+      <tr>
+        <td>Generation route</td>
+        <td><span class="pill pill-reuse">Reuse</span></td>
+        <td>Everything runs through the existing <code>POST /api/agents/run</code> — no new generation route.</td>
+      </tr>
+      <tr>
+        <td>Read/edit routes for proposal panels</td>
+        <td><span class="pill pill-new">Net-new</span></td>
+        <td>New <code>routes/proposal.py</code>: one GET returning the latest persisted payload per proposal agent,
+          one PATCH for inline edits (milestones, team table). Small file, mirrors <code>routes/backlog.py</code>.</td>
+      </tr>
+      <tr>
+        <td>Word export of the SOW</td>
+        <td><span class="pill pill-exists">Exists</span></td>
+        <td><code>sow</code> is already doc: True → the existing <code>/api/agents/document/&lt;id&gt;/word</code>
+          route exports it. Flipping <code>roi</code>/<code>risk</code>/<code>team</code> to doc: True makes all four
+          appear on the Proposal Artifacts grid and export the same way.</td>
+      </tr>
+    </table>
+
+    <h3>Frontend</h3>
+    <table>
+      <tr><th>Piece</th><th>Status</th><th>Notes</th></tr>
+      <tr>
+        <td>Phase routing</td>
+        <td><span class="pill pill-new">One branch</span></td>
+        <td><code>phase === 'project'</code> currently falls through to the old canvas. Add the
+          <code>ProposalPlanningDashboard</code> branch + board-view toggle in
+          <code>[workshopId]/page.js</code> (exact pattern used for <code>synthesize</code>), flip
+          <code>dashboard: true</code> on the <code>project</code> entry in <code>PhaseTabs.jsx</code>.</td>
+      </tr>
+      <tr>
+        <td>Source Artifacts panel</td>
+        <td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>ArtifactExplorer</code>, <code>activePhase="Proposal &amp; Planning"</code> (bucket already
+          exists); uploads send <code>phase: 'Proposal &amp; Planning'</code> per the new convention.</td>
+      </tr>
+      <tr>
+        <td>Generator canvas</td>
+        <td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>SynthesisCanvas</code> already takes <code>generators</code>/<code>title</code>/<code>emptyOk</code>
+          props (refactored during the Post-Workshop build) — pass
+          <code>[{id:'sow'},{id:'roi'},{id:'risk'},{id:'team'}]</code> and phase-appropriate copy. Empty canvas is a
+          valid run: the backlog/requirements/capmap ride along server-side.</td>
+      </tr>
+      <tr>
+        <td>Stat tiles / Draft pills / Artifacts grid / DocumentViewer / delete modal</td>
+        <td><span class="pill pill-reuse">Reuse as-is</span></td>
+        <td><code>.pw-stats</code> row, <code>.pw-pill-*</code>, <code>ArtifactsGrid zone="Proposal &amp;
+          Planning"</code>, shared viewers — zero changes.</td>
+      </tr>
+      <tr>
+        <td>Milestone timeline component</td>
+        <td><span class="pill pill-new">Net-new</span></td>
+        <td>Horizontal flag-node timeline (Wk 2 → Wk 20) — plain flex/SVG, editable labels.</td>
+      </tr>
+      <tr>
+        <td>ROI area chart + Value Drivers bars</td>
+        <td><span class="pill pill-new">Net-new</span></td>
+        <td>Inline SVG components — <b>no charting library exists in the repo and none should be added</b> (see
+          §Charts). Value-driver bars are simple divs.</td>
+      </tr>
+      <tr>
+        <td>Benefit–Risk scatter</td>
+        <td><span class="pill pill-new">Net-new</span></td>
+        <td>Inline SVG scatter with quadrant gridlines + point labels + "top-left = prioritize" footnote.</td>
+      </tr>
+      <tr>
+        <td>Team composition table</td>
+        <td><span class="pill pill-new">Net-new</span></td>
+        <td>Role / Count / Allocation rows with inline edit (count chips, allocation %), matching the reference.</td>
+      </tr>
+      <tr>
+        <td>Next.js proxy rewrite for <code>/api/proposal/*</code></td>
+        <td><span class="pill pill-new">Do not forget</span></td>
+        <td>The dev proxy only forwards enumerated prefixes — the missing rewrite was exactly what made the MoM card
+          silently empty in Post-Workshop. Add <code>/api/proposal/:path*</code> to
+          <code>next.config.mjs</code> in the same commit as the routes, and restart the frontend dev server.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="ia">
+    <h2><span class="num">3</span>Target page layout</h2>
+    <div class="card">
+      <div class="stat-tiles">
+        <div class="stat-tile"><b>£4.6M</b><span>3-yr net value</span></div>
+        <div class="stat-tile"><b>14 mo</b><span>Payback</span></div>
+        <div class="stat-tile"><b>9</b><span>Team size</span></div>
+        <div class="stat-tile"><b>5</b><span>Milestones</span></div>
+      </div>
+      <ul>
+        <li><strong>Left rail</strong> — <code>ArtifactExplorer</code>, Proposal &amp; Planning zone.</li>
+        <li><strong>Hero</strong> — "Proposal &amp; Delivery Planning" + the four stat tiles above (each shows "—"
+          until its source artifact exists) + Board-view toggle.</li>
+        <li><strong>Proposal Generator</strong> — <code>SynthesisCanvas</code> with the four output chips
+          (SOW · ROI · Risk · Team) and an <b>engagement-length input</b> (e.g. "20 weeks") that feeds the SOW
+          milestone spacing and the ROI horizon as the run's <code>extra</code>.</li>
+        <li><strong>Statement of Work — Milestones</strong> (full width) — Draft pill, flag timeline from
+          <code>sow</code>'s structured milestones, "Open full SOW" → DocumentViewer, "Export Word" → existing
+          route. Milestone labels/weeks editable inline.</li>
+        <li><strong>ROI &amp; Value Estimate</strong> (left ⅔) — SVG area chart, cumulative value vs delivery cost
+          over 3 years, "Net +£4.6M" pill; <strong>Value Drivers</strong> (right ⅓) — horizontal percent bars.
+          Both from one <code>roi</code> run.</li>
+        <li><strong>Benefit–Risk Analysis</strong> (left) — SVG scatter, one point per scored item;
+          <strong>Suggested Team Composition</strong> (right) — Role/Count/Allocation table, editable.</li>
+        <li><strong>Proposal Artifacts</strong> — <code>ArtifactsGrid zone="Proposal &amp; Planning"</code> (SOW /
+          ROI / RISK / TEAM cards, Draft pills, Word export).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="data">
+    <h2><span class="num">4</span>Data model — one additive column, no new tables</h2>
+    <p class="lede">Unlike the backlog (per-item edits + per-item sync state → normalized tables), all four proposal
+      artifacts are whole-document payloads regenerated as a unit and lightly edited in place — exactly the
+      <code>capmap_json</code>/<code>mom_json</code> shape. One generic column keeps it to a single migration line;
+      each generated_docs row is produced by exactly one agent, so the payload shape is unambiguous per row.</p>
+    <pre>generated_docs.proposal_json  JSONB   — shape keyed by the producing agent:
+
+'sow':  { engagement_weeks: 20,
+          milestones: [{week: 2, title: "Mobilization & discovery sign-off"}, …] }
+
+'roi':  { currency: "£", horizon_years: 3,
+          net_value: 4.6, net_value_label: "£4.6M", payback_months: 14,
+          series: [{period: "Year 1", cumulative_value: 0.9, cumulative_cost: 1.1}, …],
+          drivers: [{name: "Overtime reduction", pct: 42}, …],
+          basis: "one line on what the estimate is grounded in" }
+
+'risk': { items: [{label: "Legacy scheduling data quality",
+                   benefit: 62, risk: 78, note: "…"}, …] }
+
+'team': { roles: [{role: "Engagement Lead / BA", count: 1,
+                   allocation_pct: 50, why: "…"}, …] }</pre>
+    <div class="callout">
+      <strong>Migration</strong>
+      One line added to <code>bootstrap_postgres</code>'s <code>_ADDITIVE_COLUMNS</code>:
+      <code>('generated_docs', 'proposal_json', 'JSONB')</code> — idempotent, runs on backend restart. Plus a
+      <code>proposal_json</code> kwarg threaded through <code>generated_docs.register()</code> →
+      <code>repo.create()</code> and a <code>latest_proposal(workshop_id, agent_id)</code> reader (same shape as
+      <code>latest_mom</code>), and a <code>has_proposal</code> flag in <code>list_docs</code>.
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <h2><span class="num">5</span>Generation pipeline</h2>
+    <p class="lede">Four reshapes of the proven pattern — structured contract → coercer → persistence — plus one new
+      shared context builder. No new LLM plumbing.</p>
+    <div class="grid2">
+      <div class="card">
+        <h4>New shared context: <code>_proposal_context</code></h4>
+        <ul>
+          <li>Captured requirements table (as text, like <code>_engagement_context</code>).</li>
+          <li>Latest capability map (maturity/opportunity per capability — feeds ROI drivers and risk items).</li>
+          <li><b>The backlog tree</b> — epics/features/story counts formatted as text; milestones align to epics,
+            team sizing reads scope breadth.</li>
+          <li>Accepted opportunities from the register (phase-1 items may enter scope).</li>
+          <li>Corpus distillations + canvas selection override, same as every other phase.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4><code>sow</code> — reshape</h4>
+        <ul>
+          <li><code>_SOW_FIELD</code>: milestones array (3–8 items, week numbers fitted to the engagement length
+            from EXTRA INPUT, defaulting to ~20 weeks).</li>
+          <li>Coercer clamps weeks to 1–104, titles to 120 chars, sorts by week.</li>
+          <li>Persist to <code>proposal_json</code>; keep prose body_html (the full SOW document) unchanged.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4><code>roi</code> — reshape (biggest one)</h4>
+        <ul>
+          <li><code>_ROI_FIELD</code>: net value + label, payback months, per-year cumulative series, 3–6 drivers
+            summing ≈100%, and a mandatory <code>basis</code> line naming the client facts the estimate stands on.</li>
+          <li>Honesty rule carried over from the existing task: sparse context → wide-range or null numbers with the
+            basis saying what data would firm them up. The UI renders "—" tiles rather than fabricated certainty.</li>
+          <li>doc: False → True; category "ROI".</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4><code>risk</code> + <code>team</code> — reshape</h4>
+        <ul>
+          <li><code>_RISK_FIELD</code>: 3–8 scored items (benefit/risk 0–100, evidence note each). Scores must trace
+            to material facts, not generic risk-register filler.</li>
+          <li><code>_TEAM_FIELD</code>: 4–8 roles with count, allocation %, one-line why tied to THIS scope.</li>
+          <li>Both doc: False → True so they persist, appear on the grid, and export.</li>
+          <li>Both join <code>run_agent</code>'s context branch: <code>elif agent_id in ('sow','roi','risk','team'):
+            context = _proposal_context(…)</code>; <code>sow</code>/<code>roi</code> join the 8000-token output tier.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="charts">
+    <h2><span class="num">6</span>Charts — inline SVG, zero dependencies</h2>
+    <div class="card">
+      <p>The repo has no charting library and shouldn't gain one for three small charts. Each is a
+        self-contained React component rendering plain SVG, themed via the existing CSS variables so dark mode
+        works for free:</p>
+      <ul>
+        <li><code>RoiChart.jsx</code> — two polylines + one gradient-filled area (cumulative value vs delivery
+          cost), x = periods, y auto-scaled, dotted crossover gridlines, legend dots. ~80 lines.</li>
+        <li><code>RiskScatter.jsx</code> — 0–100 × 0–100 plot, quadrant gridlines at 50, labeled circles,
+          "Top-left = high benefit, low risk (prioritize)" footnote. ~70 lines.</li>
+        <li><code>MilestoneTimeline.jsx</code> — evenly-spaced flag nodes on a connector line, week label + title
+          under each; horizontal scroll inside the panel when narrow. ~50 lines.</li>
+        <li>Value-driver bars need no SVG — a div-based percent bar per driver.</li>
+      </ul>
+      <p class="lede" style="margin-top:8px">Precedent: <code>DiagramCanvas.jsx</code> already renders the During-Workshop
+        process flows natively — hand-rolled visuals are this codebase's established approach.</p>
+    </div>
+  </section>
+
+  <section id="api">
+    <h2><span class="num">7</span>New API surface — <code>routes/proposal.py</code></h2>
+    <table>
+      <tr><th>Endpoint</th><th>Purpose</th></tr>
+      <tr><td class="mono">GET /api/proposal?workshop_id=</td>
+        <td>One read for the whole page: <code>{sow, roi, risk, team}</code> — the latest persisted
+          <code>proposal_json</code> (+ doc_id, created_at) per agent, or null each. Drives every panel and all four
+          stat tiles.</td></tr>
+      <tr><td class="mono">PATCH /api/proposal/&lt;doc_id&gt;</td>
+        <td>Inline edits before the proposal goes out — milestone week/title, team count/allocation. Validates
+          against the owning agent's shape, updates <code>proposal_json</code> on that row.</td></tr>
+      <tr><td class="mono">POST /api/agents/run {agent_id: 'sow'|'roi'|'risk'|'team'}</td>
+        <td>Existing route — generation unchanged.</td></tr>
+      <tr><td class="mono">GET /api/agents/document/&lt;id&gt;/word</td>
+        <td>Existing route — SOW (and now ROI/risk/team) Word export.</td></tr>
+    </table>
+    <div class="callout warn">
+      <strong>Proxy rewrite — same-commit rule</strong>
+      Add <code>{ source: '/api/proposal/:path*', destination: … }</code> to <code>next.config.mjs</code> together
+      with the routes, and restart both dev servers. This exact omission is what made the Post-Workshop MoM card
+      silently empty.
+    </div>
+  </section>
+
+  <section id="roadmap">
+    <h2><span class="num">8</span>Build roadmap</h2>
+    <div class="phase-roadmap">
+      <div class="phase-step">
+        <h4>A. Foundation <span class="eff eff-s">S</span></h4>
+        <p><code>ProposalPlanningDashboard.jsx</code> skeleton: routing branch + board toggle in
+          <code>page.js</code>, <code>dashboard: true</code> in PhaseTabs, ArtifactExplorer + hero + stat tiles
+          (showing "—") + <code>SynthesisCanvas</code> with the four chips + engagement-length input +
+          ArtifactsGrid. Proxy rewrite + <code>proposal_json</code> column + <code>routes/proposal.py</code> GET.</p>
+      </div>
+      <div class="phase-step">
+        <h4>B. SOW — Milestones <span class="eff eff-m">M</span></h4>
+        <p><code>_SOW_FIELD</code> + coercer + persistence; <code>_proposal_context</code> (built here, shared by
+          all four); <code>MilestoneTimeline.jsx</code> + panel with inline edit (PATCH), open-doc and Word-export
+          actions.</p>
+      </div>
+      <div class="phase-step">
+        <h4>C. ROI &amp; Value Drivers <span class="eff eff-l">L</span></h4>
+        <p><code>_ROI_FIELD</code> + coercer (the strictest one — series/driver clamping, null-tolerant numbers) +
+          doc flip; <code>RoiChart.jsx</code>, driver bars, net-value pill, stat tiles go live.</p>
+      </div>
+      <div class="phase-step">
+        <h4>D. Benefit–Risk + Team <span class="eff eff-m">M</span></h4>
+        <p><code>_RISK_FIELD</code>/<code>_TEAM_FIELD</code> + coercers + doc flips; <code>RiskScatter.jsx</code>;
+          team table with inline count/allocation edits (PATCH).</p>
+      </div>
+      <div class="phase-step">
+        <h4>E. Polish <span class="eff eff-s">S</span></h4>
+        <p>Dark-theme pass on the three SVG components, empty states per panel, <code>proposalplanning.css</code>
+          (pp-* prefix), Copilot zone label already flows from PhaseTabs.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2><span class="num">9</span>Decisions needed from you</h2>
+    <div class="card">
+      <ul>
+        <li><strong>Currency:</strong> the reference shows £. Hardcode £, or make it an env/setting
+          (<code>PROPOSAL_CURRENCY</code>) the ROI prompt and UI both read? (Recommended: setting, default £.)</li>
+        <li><strong>Engagement length input:</strong> a small "weeks" field on the generator panel passed as
+          <code>extra</code> (recommended — the sow/roi prompts already expect it there), or a persisted per-workshop
+          setting?</li>
+        <li><strong>ROI honesty vs demo polish:</strong> when the corpus gives weak cost/value signal the model is
+          told to return null numbers and the tiles show "—". Acceptable, or should it always produce a
+          clearly-labeled illustrative model for client-demo purposes?</li>
+        <li><strong>Editing depth:</strong> plan covers inline edits for milestones and the team table. Should
+          ROI numbers and risk scores also be hand-editable, or stay generate-only for v1?</li>
+        <li><strong>SOW export branding:</strong> the Word export uses the generic document template today — is a
+          proposal-specific header/branding pass in scope for this phase or later?</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    Planning document — no code changes made. Generated from a live audit of this repository (including the
+    completed Post-Workshop build this phase reuses) plus the two reference screenshots provided.
+  </footer>
+</div>
+</body>
+</html>

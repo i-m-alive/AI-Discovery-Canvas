@@ -57,7 +57,7 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
             diagram_xml: str | None = None, diagram_json: list | None = None,
             next_steps: list | None = None, analysis_json: dict | None = None,
             capmap_json: dict | None = None, inputs_json: list | None = None,
-            mom_json: dict | None = None) -> dict:
+            mom_json: dict | None = None, proposal_json: dict | None = None) -> dict:
     """Store the draft's sanitised body_html in the object store, record
     metadata in Postgres, return the record. Returns an empty dict if
     Postgres isn't reachable — the caller (agent_catalog.run_agent)
@@ -81,7 +81,7 @@ def register(workshop_id: int, name: str, html: str, agent_id: str = '', *,
                           category=category or None, tags=tags or [],
                           diagram_xml=diagram_xml, diagram_json=diagram_json, next_steps=next_steps,
                           analysis_json=analysis_json, capmap_json=capmap_json, inputs_json=inputs_json,
-                          mom_json=mom_json)
+                          mom_json=mom_json, proposal_json=proposal_json)
         record = {'doc_id': row.doc_id, 'name': row.name, 'agent_id': row.agent_id, 'chars': row.chars,
                   'status': row.status, 'completion_pct': row.completion_pct, 'author': row.author,
                   'description': row.description, 'category': row.category, 'tags': row.tags,
@@ -116,7 +116,7 @@ def list_docs(workshop_id: int) -> list[dict]:
                  'created_at': int(d.created_at.timestamp()),
                  'has_diagram': bool(d.diagram_xml), 'next_steps': d.next_steps or [],
                  'has_analysis': bool(d.analysis_json), 'has_capmap': bool(d.capmap_json),
-                 'has_mom': bool(d.mom_json),
+                 'has_mom': bool(d.mom_json), 'has_proposal': bool(d.proposal_json),
                  'zone': zones.get(d.agent_id, ''), 'inputs': d.inputs_json or []}
                 for d in rows]
 
@@ -174,6 +174,39 @@ def latest_mom(workshop_id: int) -> dict | None:
         d = rows[-1]   # list_for_workshop orders by created_at asc
         return {'doc_id': d.doc_id, 'name': d.name,
                 'created_at': int(d.created_at.timestamp()), **dict(d.mom_json)}
+
+
+def latest_proposal(workshop_id: int, agent_id: str) -> dict | None:
+    """The newest persisted Proposal & Planning payload for one agent
+    ('sow' | 'roi' | 'risk' | 'team') — {doc_id, name, created_at,
+    **proposal_json} or None. The Proposal dashboard reads all four."""
+    with session_scope() as s:
+        if s is None:
+            return None
+        rows = [d for d in repo.list_for_workshop(s, workshop_id)
+                if d.agent_id == agent_id and d.proposal_json]
+        if not rows:
+            return None
+        d = rows[-1]   # list_for_workshop orders by created_at asc
+        return {'doc_id': d.doc_id, 'name': d.name,
+                'created_at': int(d.created_at.timestamp()), **dict(d.proposal_json)}
+
+
+def update_proposal_json(workshop_id: int, doc_id: str, payload: dict) -> dict | None:
+    """Replace one doc's proposal_json (the Proposal dashboard's inline
+    edits — milestone weeks/titles, team counts/allocations). The caller
+    (routes/proposal.py) validates the shape against the owning agent
+    before this runs. Returns the stored payload, or None if the doc
+    isn't in this workshop / has no proposal payload to edit."""
+    with session_scope() as s:
+        if s is None:
+            return None
+        row = repo.get(s, doc_id)
+        if row is None or row.workshop_id != workshop_id or not row.proposal_json:
+            return None
+        row.proposal_json = payload
+        s.flush()
+        return dict(row.proposal_json)
 
 
 def count_capmaps(workshop_id: int) -> int:

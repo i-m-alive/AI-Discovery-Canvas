@@ -10,10 +10,12 @@ import PhaseTabs, { PHASES } from '../PhaseTabs';
 import PreWorkshopDashboard from '../preworkshop/PreWorkshopDashboard';
 import DuringWorkshopDashboard from '../duringworkshop/DuringWorkshopDashboard';
 import PostWorkshopDashboard from '../postworkshop/PostWorkshopDashboard';
+import ProposalPlanningDashboard from '../proposalplanning/ProposalPlanningDashboard';
 import { Icon } from '../../lib/icons';
 import '../preworkshop/preworkshop.css';
 import '../duringworkshop/duringworkshop.css';
 import '../postworkshop/postworkshop.css';
+import '../proposalplanning/proposalplanning.css';
 
 // A Workshop IS the canvas board (see app/routes/projects.py +
 // app/routes/canvas.py) — this page resolves :workshopId to its owning
@@ -35,6 +37,7 @@ export default function CanvasWorkshopPage({ params }) {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [runBoardView, setRunBoardView] = useState(false);
   const [synthBoardView, setSynthBoardView] = useState(false);
+  const [projectBoardView, setProjectBoardView] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -101,6 +104,12 @@ export default function CanvasWorkshopPage({ params }) {
           workshopId={Number(workshopId)}
           onBoardView={() => setSynthBoardView(true)}
         />
+      ) : phase === 'project' && !projectBoardView ? (
+        <ProposalPlanningDashboard
+          user={user}
+          workshopId={Number(workshopId)}
+          onBoardView={() => setProjectBoardView(true)}
+        />
       ) : (
         <div className="pw-canvas-wrap">
           {phase === 'run' && (
@@ -112,6 +121,12 @@ export default function CanvasWorkshopPage({ params }) {
           {phase === 'synthesize' && (
             <button className="dw-back-dash" onClick={() => setSynthBoardView(false)}
               title="Back to the Post-Workshop dashboard">
+              <Icon name="list" />Dashboard view
+            </button>
+          )}
+          {phase === 'project' && (
+            <button className="dw-back-dash" onClick={() => setProjectBoardView(false)}
+              title="Back to the Proposal & Planning dashboard">
               <Icon name="list" />Dashboard view
             </button>
           )}

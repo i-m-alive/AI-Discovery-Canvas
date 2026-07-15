@@ -71,6 +71,16 @@ class GeneratedDoc(Base):
     # reload exactly like capmap_json does for the heat map (body_html
     # carries the same content as prose for the generic doc viewer).
     mom_json:       Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
+    # Proposal & Planning structured payloads — ONE generic column for
+    # the four phase-4 agents (each row is produced by exactly one
+    # agent, so the shape is unambiguous per row):
+    #   sow:  {engagement_weeks, milestones: [{week, title}]}
+    #   roi:  {currency, horizon_years, net_value, net_value_label,
+    #          payback_months, series: [{period, cumulative_value,
+    #          cumulative_cost}], drivers: [{name, pct}], basis}
+    #   risk: {items: [{label, benefit, risk, note}]}
+    #   team: {roles: [{role, count, allocation_pct, why}]}
+    proposal_json:  Mapped[Optional[dict]] = mapped_column(JSONBColumn, nullable=True)
 
     __table_args__ = (
         Index('ix_generated_docs_workshop', 'workshop_id'),

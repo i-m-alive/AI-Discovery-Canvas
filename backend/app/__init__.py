@@ -179,4 +179,9 @@ def create_app() -> Flask:
     backlog_routes.install(flask_app)
     log.info("[STARTUP] Post-Workshop backlog routes loaded")
 
+    # ---- Proposal & Planning: SOW / ROI / risk / team ------------------
+    from app.routes import proposal as proposal_routes
+    proposal_routes.install(flask_app)
+    log.info("[STARTUP] Proposal & Planning routes loaded")
+
     return flask_app

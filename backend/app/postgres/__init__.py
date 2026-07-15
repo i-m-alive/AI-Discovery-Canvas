@@ -85,8 +85,9 @@ def bootstrap_postgres() -> None:
     # project deliberately has no Alembic; see module docstring). One
     # line per additive column, idempotent via IF NOT EXISTS.
     _ADDITIVE_COLUMNS = (
-        ('generated_docs', 'mom_json', 'JSONB'),   # Post-Workshop Minutes of Meeting
-        ('prepare_docs', 'phase', 'VARCHAR(24)'),  # which phase's Artifact Explorer group a source belongs under
+        ('generated_docs', 'mom_json', 'JSONB'),       # Post-Workshop Minutes of Meeting
+        ('prepare_docs', 'phase', 'VARCHAR(24)'),      # which phase's Artifact Explorer group a source belongs under
+        ('generated_docs', 'proposal_json', 'JSONB'),  # Proposal & Planning (sow/roi/risk/team payloads)
     )
     try:
         from sqlalchemy import text as sa_text
