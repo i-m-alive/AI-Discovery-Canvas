@@ -43,7 +43,7 @@ def _file_key(workshop_id: int, doc_id: str) -> str:
 
 
 def register(workshop_id: int, name: str, text: str, uploaded_by: str = '',
-            file_bytes: bytes | None = None) -> dict:
+            file_bytes: bytes | None = None, phase: str | None = None) -> dict:
     """Store the full text in the object store, record metadata in
     Postgres, return the record (WITHOUT the text — callers that need it
     call get_text). Returns an empty dict if Postgres isn't reachable —
@@ -62,10 +62,11 @@ def register(workshop_id: int, name: str, text: str, uploaded_by: str = '',
             log.warning('[PREPARE_DOCS] Postgres unavailable — %s not registered', name)
             return {}
         row = repo.create(s, doc_id=doc_id, workshop_id=workshop_id, name=(name or 'document')[:200],
-                          chars=len(text or ''), uploaded_by=uploaded_by or '')
+                          chars=len(text or ''), uploaded_by=uploaded_by or '',
+                          phase=(phase or '')[:24] or None)
         record = {'doc_id': row.doc_id, 'name': row.name, 'chars': row.chars,
                   'uploaded_by': row.uploaded_by, 'uploaded_at': int(row.uploaded_at.timestamp()),
-                  'status': row.status, 'status_detail': row.status_detail}
+                  'status': row.status, 'status_detail': row.status_detail, 'phase': row.phase}
     log.info('[PREPARE_DOCS] registered %s (%s, %d chars) on workshop=%s',
              record.get('name'), doc_id, record.get('chars', 0), workshop_id)
     return record
@@ -78,7 +79,7 @@ def list_docs(workshop_id: int) -> list[dict]:
         rows = repo.list_for_workshop(s, workshop_id)
         return [{'doc_id': d.doc_id, 'name': d.name, 'chars': d.chars,
                  'uploaded_by': d.uploaded_by, 'uploaded_at': int(d.uploaded_at.timestamp()),
-                 'status': d.status, 'status_detail': d.status_detail}
+                 'status': d.status, 'status_detail': d.status_detail, 'phase': d.phase}
                 for d in rows]
 
 

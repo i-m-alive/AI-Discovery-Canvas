@@ -726,7 +726,11 @@ export function initCanvasApp(root, opts = {}) {
       }
       toast('Extracting ' + f.name + '…');
       try {
+        // Always lands as a Prepare-zone node below (REGION('prepare')),
+        // regardless of curLens — tag the same phase so the Artifact
+        // Explorer sidebar files it under the matching group.
         const fd = new FormData(); fd.append('file', f); fd.append('workshop_id', WORKSHOP_ID);
+        fd.append('phase', REGION('prepare').label);
         const r = await fetch('/api/agents/upload', { method: 'POST', credentials: 'same-origin', body: fd });
         const j = await r.json();
         if (disposed) return;

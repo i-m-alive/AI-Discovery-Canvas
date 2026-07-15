@@ -45,8 +45,31 @@ const RESEARCH_STEP_LABELS = {
 // Copilot has no canvas node to place one on (that would need a bridge
 // into canvasApp.js's own board state, not built yet), so those render
 // inline as a plain draft with an honest note that nothing was saved.
+// Drag-to-resize: the panel sits flush against .cop-backdrop's right
+// padding (20px — see preworkshop.css), so its left edge tracks
+// `window.innerWidth - 20 - clientX` while dragging. Width persists in
+// localStorage (same pattern ArtifactExplorer uses for its expand state).
+const COP_WIDTH_KEY = 'aidc-copilot-width';
+const COP_MIN_WIDTH = 360;
+const COP_BACKDROP_PAD = 20;
+
+function clampCopWidth(w) {
+  const max = Math.min(900, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 80);
+  return Math.max(COP_MIN_WIDTH, Math.min(w, max));
+}
+
+function loadCopWidth() {
+  try {
+    const n = parseInt(window.localStorage.getItem(COP_WIDTH_KEY), 10);
+    if (Number.isFinite(n)) return clampCopWidth(n);
+  } catch { /* fresh default below */ }
+  return 420;
+}
+
 export default function CopilotPanel({ open, onClose, workshopId, zone, contextName }) {
   const [messages, setMessages] = useState([]);
+  const [panelWidth, setPanelWidth] = useState(() => (typeof window === 'undefined' ? 420 : loadCopWidth()));
+  const widthRef = useRef(panelWidth);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [runningId, setRunningId] = useState(null); // index of the dispatch message currently running
@@ -264,9 +287,26 @@ export default function CopilotPanel({ open, onClose, workshopId, zone, contextN
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
+  function startResize(e) {
+    e.preventDefault();
+    const onMove = (ev) => {
+      const w = clampCopWidth(window.innerWidth - COP_BACKDROP_PAD - ev.clientX);
+      widthRef.current = w;
+      setPanelWidth(w);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      try { window.localStorage.setItem(COP_WIDTH_KEY, String(widthRef.current)); } catch { /* private mode etc. */ }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   return (
     <div className="cop-backdrop" onClick={onClose}>
-      <div className="cop-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="cop-panel" style={{ width: panelWidth }} onClick={(e) => e.stopPropagation()}>
+        <div className="cop-resize-handle" onMouseDown={startResize} title="Drag to resize" />
         <div className="cop-head">
           <span className="cop-ic"><Icon name="sparkles" /><span className="cop-online" /></span>
           <div>

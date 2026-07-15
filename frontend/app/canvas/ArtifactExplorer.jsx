@@ -6,20 +6,25 @@ import { Icon } from '../lib/icons';
 import { STATUS_LABEL, agentIcon, fileType, isTranscript } from './artifactMeta';
 
 // The left-hand Artifact Explorer — the engagement's table of contents.
-// Two-level collapsible tree over everything the workshop holds:
+// Two-level collapsible tree, one top-level group per phase, each holding
+// only the Sources (uploads + imported transcripts) actually
+// uploaded/imported during that phase (see prepare_docs.phase, stamped
+// by whichever dashboard's upload/import call sent it) plus that phase's
+// own generated artifacts, grouped by category:
 //
-//   SOURCES              (uploads + imported transcripts, phase-agnostic)
-//     Transcripts / Documents
-//   PRE-WORKSHOP         (generated artifacts, grouped by category)
+//   PRE-WORKSHOP
+//     Transcripts / Documents (this phase's Sources only) · generated categories
 //   DURING WORKSHOP
-//   POST-WORKSHOP        (dimmed while empty — a roadmap cue, not noise)
+//   POST-WORKSHOP        (dimmed only when it has neither sources nor
+//                          generated artifacts — a roadmap cue, not noise)
 //   PROPOSAL & PLANNING
 //
-// Outer grouping = the producing agent's `zone` (already on every
-// generated-doc row); inner grouping = its `category`. Zero backend
-// work — this is a pure re-projection of the two lists both dashboards
-// already fetch. Expansion state persists per workshop in localStorage;
-// the active phase starts expanded.
+// Legacy prepare_docs rows from before the phase column existed have no
+// phase and fall back to Pre-Workshop, same fallback generated_docs.zone
+// rows already use. Outer grouping = the producing agent's `zone`
+// (already on every generated-doc row); inner grouping = its `category`.
+// Expansion state persists per workshop in localStorage; the active
+// phase starts expanded.
 
 const PHASES = [
   { key: 'Pre-Workshop', dot: '#2f8f5b' },
@@ -33,7 +38,7 @@ function loadExpanded(workshopId, activePhase) {
     const raw = window.localStorage.getItem(`aidc-explorer-${workshopId}`);
     if (raw) return JSON.parse(raw);
   } catch { /* fresh default below */ }
-  return { sources: true, [activePhase]: true };
+  return { [activePhase]: true };
 }
 
 // Drag payload MIME type — matched by SynthesisCanvas's dropzone.
@@ -50,7 +55,7 @@ export default function ArtifactExplorer({
   onAddToCanvas,          // (item {kind, doc_id, name, agent_id?}) -> Synthesis Canvas
 }) {
   const [expanded, setExpanded] = useState(() =>
-    typeof window === 'undefined' ? { sources: true, [activePhase]: true }
+    typeof window === 'undefined' ? { [activePhase]: true }
       : loadExpanded(workshopId, activePhase));
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState(false);
@@ -72,10 +77,19 @@ export default function ArtifactExplorer({
     return !!expanded[key];
   }
 
-  // ── source grouping ─────────────────────────────────────────────────
-  const srcTranscripts = docs.filter((d) => isTranscript(d.name) && matches(d.name));
-  const srcDocuments = docs.filter((d) => !isTranscript(d.name) && matches(d.name));
-  const srcCount = srcTranscripts.length + srcDocuments.length;
+  // ── source grouping: phase -> [docs] ─────────────────────────────────
+  // Each source is tagged with the phase it was uploaded/imported under
+  // (see prepare_docs.phase); rows from before that column existed have
+  // no phase and fall back to Pre-Workshop, same as legacy zone-less
+  // generated docs below.
+  const docsByPhase = useMemo(() => {
+    const out = Object.fromEntries(PHASES.map((p) => [p.key, []]));
+    docs.forEach((d) => {
+      const phase = out[d.phase] ? d.phase : 'Pre-Workshop';
+      out[phase].push(d);
+    });
+    return out;
+  }, [docs]);
 
   // ── generated grouping: zone -> category -> items ───────────────────
   const byPhase = useMemo(() => {
@@ -225,18 +239,30 @@ export default function ArtifactExplorer({
       </div>
 
       <div className="ax-tree">
-        {/* Sources — pinned first: they're the inputs every phase shares */}
-        {(!filtering || srcCount > 0) && (
-          <div className="ax-group">
-            <button className="ax-group-hd" onClick={() => toggle('sources')} aria-expanded={isOpen('sources')}>
-              <span className={'ax-chev' + (isOpen('sources') ? ' open' : '')}>▸</span>
-              <span className="ax-dot" style={{ background: '#8a91a8' }} />
-              Sources<span className="ax-count">{srcCount}</span>
-            </button>
-            {isOpen('sources') && (
-              srcCount === 0 ? (
-                <div className="ax-empty">No sources yet — upload a document or import a transcript.</div>
-              ) : (
+        {/* Each phase group nests its own Sources (docs uploaded/imported
+            during that phase) first, then its generated artifacts. */}
+        {PHASES.map((p) => {
+          const cats = byPhase[p.key];
+          const catNames = Object.keys(cats).sort();
+          const visible = catNames.map((c) => [c, cats[c].filter((a) => matches(a.name))])
+            .filter(([, items]) => items.length > 0);
+          const total = visible.reduce((n, [, items]) => n + items.length, 0);
+          const phaseDocs = docsByPhase[p.key] || [];
+          const srcTranscripts = phaseDocs.filter((d) => isTranscript(d.name) && matches(d.name));
+          const srcDocuments = phaseDocs.filter((d) => !isTranscript(d.name) && matches(d.name));
+          const srcCount = srcTranscripts.length + srcDocuments.length;
+          if (filtering && total === 0 && srcCount === 0) return null;
+          const empty = catNames.length === 0 && srcCount === 0;
+          return (
+            <div key={p.key} className={'ax-group' + (empty ? ' ax-dim' : '')}>
+              <button className="ax-group-hd" onClick={() => !empty && toggle(p.key)}
+                aria-expanded={isOpen(p.key)} disabled={empty}
+                title={empty ? `Nothing here yet` : undefined}>
+                <span className={'ax-chev' + (isOpen(p.key) && !empty ? ' open' : '')}>▸</span>
+                <span className="ax-dot" style={{ background: p.dot }} />
+                {p.key}<span className="ax-count">{filtering ? total + srcCount : catNames.reduce((n, c) => n + cats[c].length, 0) + srcCount}</span>
+              </button>
+              {!empty && isOpen(p.key) && (
                 <>
                   <SubGroup label="Transcripts" items={srcTranscripts}>
                     {srcTranscripts.map((d) => <SourceRow key={d.doc_id} d={d} />)}
@@ -244,34 +270,13 @@ export default function ArtifactExplorer({
                   <SubGroup label="Documents" items={srcDocuments}>
                     {srcDocuments.map((d) => <SourceRow key={d.doc_id} d={d} />)}
                   </SubGroup>
+                  {visible.map(([cat, items]) => (
+                    <SubGroup key={cat} label={cat} items={items}>
+                      {items.map((a) => <ArtifactRow key={a.doc_id} a={a} />)}
+                    </SubGroup>
+                  ))}
                 </>
-              )
-            )}
-          </div>
-        )}
-
-        {PHASES.map((p) => {
-          const cats = byPhase[p.key];
-          const catNames = Object.keys(cats).sort();
-          const visible = catNames.map((c) => [c, cats[c].filter((a) => matches(a.name))])
-            .filter(([, items]) => items.length > 0);
-          const total = visible.reduce((n, [, items]) => n + items.length, 0);
-          if (filtering && total === 0) return null;
-          const empty = catNames.length === 0;
-          return (
-            <div key={p.key} className={'ax-group' + (empty ? ' ax-dim' : '')}>
-              <button className="ax-group-hd" onClick={() => !empty && toggle(p.key)}
-                aria-expanded={isOpen(p.key)} disabled={empty}
-                title={empty ? `Nothing generated in ${p.key} yet` : undefined}>
-                <span className={'ax-chev' + (isOpen(p.key) && !empty ? ' open' : '')}>▸</span>
-                <span className="ax-dot" style={{ background: p.dot }} />
-                {p.key}<span className="ax-count">{filtering ? total : catNames.reduce((n, c) => n + cats[c].length, 0)}</span>
-              </button>
-              {!empty && isOpen(p.key) && visible.map(([cat, items]) => (
-                <SubGroup key={cat} label={cat} items={items}>
-                  {items.map((a) => <ArtifactRow key={a.doc_id} a={a} />)}
-                </SubGroup>
-              ))}
+              )}
             </div>
           );
         })}

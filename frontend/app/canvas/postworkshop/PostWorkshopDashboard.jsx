@@ -134,6 +134,7 @@ export default function PostWorkshopDashboard({ user, workshopId, onBoardView })
     const fd = new FormData();
     fd.append('workshop_id', String(workshopId));
     fd.append('file', file);
+    fd.append('phase', 'Post-Workshop');
     setError('');
     try {
       const res = await fetch('/api/agents/upload', { method: 'POST', credentials: 'same-origin', body: fd });
@@ -273,10 +274,10 @@ export default function PostWorkshopDashboard({ user, workshopId, onBoardView })
             )}
           </div>
           <div className="pw-stats">
-            <div className="pw-stat"><div className="pw-stat-num">{counts.epics ?? '—'}</div><div className="pw-stat-lbl">Epics</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{counts.features ?? '—'}</div><div className="pw-stat-lbl">Features</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{counts.stories ?? '—'}</div><div className="pw-stat-lbl">Stories</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{opps.length}</div><div className="pw-stat-lbl">Opportunities</div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="layers" /></span><div className="pw-stat-body"><div className="pw-stat-num">{counts.epics ?? '—'}</div><div className="pw-stat-lbl">Epics</div></div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="grid" /></span><div className="pw-stat-body"><div className="pw-stat-num">{counts.features ?? '—'}</div><div className="pw-stat-lbl">Features</div></div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="list" /></span><div className="pw-stat-body"><div className="pw-stat-num">{counts.stories ?? '—'}</div><div className="pw-stat-lbl">Stories</div></div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="target" /></span><div className="pw-stat-body"><div className="pw-stat-num">{opps.length}</div><div className="pw-stat-lbl">Opportunities</div></div></div>
           </div>
         </header>
 
@@ -399,20 +400,32 @@ function BacklogBoard({ workshopId, backlog, onChanged, generating, onGenerate, 
 }
 
 function EpicCard({ epic, workshopId, onChanged, onRemove }) {
+  const [open, setOpen] = useState(true);
+  const features = epic.features || [];
+  const stories = features.flatMap((f) => f.stories || []);
+  const withAc = stories.filter((s) => (s.acceptance_criteria || []).length > 0).length;
   return (
-    <div className="pb-epic">
-      <div className="pb-epic-hd">
+    <div className={'pb-epic' + (open ? '' : ' collapsed')}>
+      <div className="pb-epic-hd" onClick={() => setOpen((v) => !v)} role="button" tabIndex={0}
+        aria-expanded={open} title={open ? 'Collapse epic' : 'Expand epic'}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v); } }}>
+        <span className={'pb-epic-chev' + (open ? ' open' : '')}>▸</span>
         <span className="pb-epic-ic"><Icon name="layers" /></span>
         <div className="pb-epic-ttl">
           <div className="pb-eyebrow">EPIC · {epic.epic_id}</div>
           <div className="pb-epic-name" title={epic.description || undefined}>{epic.title}</div>
         </div>
+        {stories.length > 0 && (
+          <span className="pb-epic-progress" title={`${withAc} of ${stories.length} stories have acceptance criteria`}>
+            {features.length} feature{features.length === 1 ? '' : 's'} · {stories.length} stor{stories.length === 1 ? 'y' : 'ies'} · {Math.round((withAc / stories.length) * 100)}% AC
+          </span>
+        )}
         <button className="pw-view-btn pw-del-btn pb-del" title="Delete this epic (and its features/stories)"
-          onClick={() => onRemove('epic', epic.id)}>
+          onClick={(e) => { e.stopPropagation(); onRemove('epic', epic.id); }}>
           <Icon name="trash" />
         </button>
       </div>
-      {(epic.features || []).map((f) => (
+      {open && features.map((f) => (
         <FeatureCard key={f.id} feature={f} workshopId={workshopId}
           onChanged={onChanged} onRemove={onRemove} />
       ))}
@@ -506,7 +519,7 @@ function StoryRow({ story, workshopId, onChanged, onRemove }) {
   }
 
   return (
-    <li className={'pb-story' + (open ? ' open' : '')}>
+    <li className={'pb-story' + (open ? ' open' : '') + (ac.length ? '' : ' pb-story-noac')}>
       <button className="pb-story-main" onClick={() => setOpen((v) => !v)}
         title={ac.length ? (open ? 'Hide acceptance criteria' : 'Show acceptance criteria') : 'No acceptance criteria yet'}>
         <span className="pb-story-dot" />

@@ -14,9 +14,9 @@ from app.postgres.models.prepare_doc import PrepareDoc
 
 
 def create(session: Session, *, doc_id: str, workshop_id: int, name: str,
-          chars: int, uploaded_by: str = '') -> PrepareDoc:
+          chars: int, uploaded_by: str = '', phase: Optional[str] = None) -> PrepareDoc:
     row = PrepareDoc(doc_id=doc_id, workshop_id=workshop_id, name=name,
-                     chars=chars, uploaded_by=uploaded_by, status='queued')
+                     chars=chars, uploaded_by=uploaded_by, status='queued', phase=phase)
     session.add(row)
     session.flush()
     return row

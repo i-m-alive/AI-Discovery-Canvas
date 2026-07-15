@@ -182,6 +182,7 @@ export default function TeamsImportModal({ workshopId, onClose, onImported }) {
       const j = await apiPost('/api/agents/import-transcript', {
         workshop_id: workshopId, join_url: mtg.join_url,
         organizer: mtg.organizer || undefined, subject: mtg.subject || undefined,
+        phase: 'During Workshop',
       });
       if (disposed.current) return;
       if (!j || !j.ok) {

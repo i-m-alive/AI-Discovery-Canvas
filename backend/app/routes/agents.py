@@ -411,7 +411,7 @@ def upload():
     user = current_user() or {}
     record = prepare_docs.register(workshop_id, f.filename, text,
                                    uploaded_by=user.get('name') or user.get('email') or '',
-                                   file_bytes=data)
+                                   file_bytes=data, phase=request.form.get('phase') or None)
     if not record:
         return jsonify({'ok': False, 'error': 'could not register the document (database unavailable)'}), 200
 
@@ -521,7 +521,7 @@ def import_transcript():
     user = current_user() or {}
     record = prepare_docs.register(workshop_id, name, text,
                                    uploaded_by=user.get('name') or user.get('email') or '',
-                                   file_bytes=text.encode('utf-8'))
+                                   file_bytes=text.encode('utf-8'), phase=body.get('phase') or None)
     if not record:
         return jsonify({'ok': False, 'error': 'could not register the transcript (database unavailable)'}), 200
     log.info('[AGENTS/IMPORT-TRANSCRIPT] %s -> %d chars (%d lines) on workshop=%s',

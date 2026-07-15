@@ -86,6 +86,7 @@ def bootstrap_postgres() -> None:
     # line per additive column, idempotent via IF NOT EXISTS.
     _ADDITIVE_COLUMNS = (
         ('generated_docs', 'mom_json', 'JSONB'),   # Post-Workshop Minutes of Meeting
+        ('prepare_docs', 'phase', 'VARCHAR(24)'),  # which phase's Artifact Explorer group a source belongs under
     )
     try:
         from sqlalchemy import text as sa_text

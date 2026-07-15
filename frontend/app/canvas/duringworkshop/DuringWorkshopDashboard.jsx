@@ -118,6 +118,7 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
     const fd = new FormData();
     fd.append('workshop_id', String(workshopId));
     fd.append('file', file);
+    fd.append('phase', 'During Workshop');
     setError('');
     try {
       const res = await fetch('/api/agents/upload', { method: 'POST', credentials: 'same-origin', body: fd });
@@ -275,10 +276,10 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
             )}
           </div>
           <div className="pw-stats">
-            <div className="pw-stat"><div className="pw-stat-num">{stats ? stats.transcripts : transcripts.length}</div><div className="pw-stat-lbl">Transcripts imported</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{stats ? stats.requirements : reqs.length}</div><div className="pw-stat-lbl">Requirements captured</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{stats ? stats.capabilities : '—'}</div><div className="pw-stat-lbl">Capabilities mapped</div></div>
-            <div className="pw-stat"><div className="pw-stat-num">{stats ? stats.artifacts : artifacts.length}</div><div className="pw-stat-lbl">Artifacts live</div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="users" /></span><div className="pw-stat-body"><div className="pw-stat-num">{stats ? stats.transcripts : transcripts.length}</div><div className="pw-stat-lbl">Transcripts imported</div></div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="list" /></span><div className="pw-stat-body"><div className="pw-stat-num">{stats ? stats.requirements : reqs.length}</div><div className="pw-stat-lbl">Requirements captured</div></div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="target" /></span><div className="pw-stat-body"><div className="pw-stat-num">{stats ? stats.capabilities : '—'}</div><div className="pw-stat-lbl">Capabilities mapped</div></div></div>
+            <div className="pw-stat"><span className="pw-stat-ic"><Icon name="sparkles" /></span><div className="pw-stat-body"><div className="pw-stat-num">{stats ? stats.artifacts : artifacts.length}</div><div className="pw-stat-lbl">Artifacts live</div></div></div>
           </div>
         </header>
 

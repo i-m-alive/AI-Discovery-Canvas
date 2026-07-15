@@ -19,9 +19,17 @@
   gap: 14px; align-items: start;
 }
 .pb-epic {
-  border: 1px solid #e7e6f2; border-radius: 13px; background: #fbfbfe; padding: 13px 14px;
+  border: 1px solid #e7e6f2; border-left: 3px solid #6d5ce8; border-radius: 13px;
+  background: #fbfbfe; padding: 13px 14px; transition: box-shadow .15s, border-color .15s;
 }
-.pb-epic-hd { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.pb-epic:hover { box-shadow: var(--shadow-sm, 0 2px 8px rgba(24, 39, 64, .06)); border-color: #ddd7fa; }
+.pb-epic-hd { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; cursor: pointer; }
+.pb-epic.collapsed .pb-epic-hd { margin-bottom: 0; }
+.pb-epic-chev {
+  flex: none; margin-top: 6px; font-size: 10px; color: #8a91a8;
+  transition: transform .15s;
+}
+.pb-epic-chev.open { transform: rotate(90deg); }
 .pb-epic-ic {
   width: 30px; height: 30px; border-radius: 9px; flex: none;
   background: #efedfd; color: #6d5ce8;
@@ -34,6 +42,10 @@
   text-transform: uppercase;
 }
 .pb-epic-name { font-size: 14px; font-weight: 700; color: #23263a; }
+.pb-epic-progress {
+  flex: none; align-self: center; font-size: 10.5px; font-weight: 650; color: #6d5ce8;
+  background: #efedfd; border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+}
 .pb-del { visibility: hidden; flex: none; }
 .pb-epic:hover > .pb-epic-hd .pb-del,
 .pb-feature:hover > .pb-feature-hd .pb-del { visibility: visible; }
@@ -61,6 +73,8 @@
   flex: none; width: 12px; height: 12px; margin-top: 3px; border-radius: 50%;
   border: 1.8px solid #6d5ce8; background: transparent;
 }
+.pb-story-noac .pb-story-dot { border-style: dashed; border-color: #c7cbd8; }
+.pb-story-noac .pb-story-text { color: #8a91a8; }
 .pb-story-text { flex: 1; min-width: 0; }
 .pb-story-tools {
   position: absolute; top: 4px; right: 4px; display: none; gap: 2px;
@@ -193,15 +207,20 @@
 /* ── Dark theme ───────────────────────────────────────────────────── */
 html[data-theme="dark"] .pb-sync-banner { background: var(--panel); border-color: var(--line); }
 html[data-theme="dark"] .pb-sync-txt { color: var(--ink-2); }
-html[data-theme="dark"] .pb-epic { background: var(--panel-2); border-color: var(--line); }
+html[data-theme="dark"] .pb-epic { background: var(--panel-2); border-color: var(--line); border-left-color: var(--pw-purple); }
+html[data-theme="dark"] .pb-epic:hover { border-color: var(--line2); }
 html[data-theme="dark"] .pb-epic-ic { background: var(--accent-weak); color: var(--pw-purple); }
 html[data-theme="dark"] .pb-epic-name { color: var(--ink); }
+html[data-theme="dark"] .pb-epic-chev { color: var(--ink-2); }
+html[data-theme="dark"] .pb-epic-progress { background: var(--accent-weak); color: var(--pw-purple); }
 html[data-theme="dark"] .pb-feature { background: var(--panel); border-color: var(--line2); }
 html[data-theme="dark"] .pb-feature-pill { background: var(--accent-weak); border-color: var(--line2); color: var(--pw-purple); }
 html[data-theme="dark"] .pb-feature-name { color: var(--ink); }
 html[data-theme="dark"] .pb-story-main { color: var(--ink-2); }
 html[data-theme="dark"] .pb-story:hover { background: var(--accent-weak); }
 html[data-theme="dark"] .pb-story-tools .pw-view-btn { background: var(--panel); }
+html[data-theme="dark"] .pb-story-noac .pb-story-dot { border-color: var(--line2); }
+html[data-theme="dark"] .pb-story-noac .pb-story-text { color: var(--ink-2); }
 html[data-theme="dark"] .pb-gwt { background: var(--panel-2); border-left-color: var(--pw-purple); color: var(--ink-2); }
 html[data-theme="dark"] .pb-gwt b { color: var(--pw-purple); }
 html[data-theme="dark"] .pb-ac-edit input { background: var(--panel-2); border-color: var(--line2); color: var(--ink); }

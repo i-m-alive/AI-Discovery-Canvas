@@ -46,6 +46,14 @@ class PrepareDoc(Base):
     status_detail: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     indexed_at:    Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Which phase's Artifact Explorer group this source belongs under —
+    # one of the ArtifactExplorer PHASES keys ('Pre-Workshop', 'During
+    # Workshop', 'Post-Workshop', 'Proposal & Planning'). Nullable: rows
+    # from before this column existed have no phase and default to
+    # 'Pre-Workshop' client-side, same fallback generated_docs.zone rows
+    # already use.
+    phase: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+
     __table_args__ = (
         Index('ix_prepare_docs_workshop', 'workshop_id'),
     )

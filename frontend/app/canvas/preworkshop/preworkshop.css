@@ -161,15 +161,25 @@
    Catalogue is the hero's other flex child, filling the right side at
    matching height (align-items: stretch above). */
 .pw-hero-main { display: flex; flex-direction: column; justify-content: center; gap: 18px; flex: 1 1 420px; min-width: 320px; }
-.pw-hero-txt h1 { font-size: 21px; margin: 0 0 8px; }
-.pw-hero-txt p { font-size: 13.5px; color: var(--muted, #6b7280); max-width: 460px; margin: 0; line-height: 1.55; }
+.pw-hero-txt h1 { font-size: 21px; font-weight: 750; letter-spacing: -.01em; margin: 0 0 8px; }
+.pw-hero-txt p { font-size: 13.5px; color: var(--muted, #6b7280); max-width: 460px; margin: 0; line-height: 1.6; }
 .pw-stats { display: flex; gap: 12px; flex-wrap: wrap; }
 .pw-stat {
-  background: #fff; border: 1px solid var(--line, #e4e8ee); border-radius: 12px;
-  padding: 14px 20px; text-align: center; min-width: 120px;
+  display: flex; align-items: center; gap: 11px;
+  background: linear-gradient(180deg, #fbfaff 0%, #fff 100%);
+  border: 1px solid var(--line, #e4e8ee); border-radius: 12px;
+  padding: 12px 18px; min-width: 132px; transition: box-shadow .15s, border-color .15s;
 }
-.pw-stat-num { font-size: 24px; font-weight: 800; color: var(--pw-purple, #6d5ce8); }
-.pw-stat-lbl { font-size: 10.5px; color: var(--muted, #6b7280); text-transform: uppercase; letter-spacing: .03em; margin-top: 3px; }
+.pw-stat:hover { box-shadow: var(--shadow-sm, 0 2px 8px rgba(24, 39, 64, .06)); border-color: var(--pw-purple-weak, #ddd7fa); }
+.pw-stat-ic {
+  flex: none; width: 32px; height: 32px; border-radius: 9px;
+  background: var(--pw-purple-weak, #efedfd); color: var(--pw-purple, #6d5ce8);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pw-stat-ic svg { width: 16px; height: 16px; }
+.pw-stat-body { min-width: 0; }
+.pw-stat-num { font-size: 22px; font-weight: 800; line-height: 1.1; color: var(--pw-purple, #6d5ce8); }
+.pw-stat-lbl { font-size: 10.5px; color: var(--muted, #6b7280); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; white-space: nowrap; }
 
 /* Agent Catalogue — the hero's right column (matches .pw-hero-main's
    height via the row's align-items: stretch): one button per
@@ -659,10 +669,20 @@
   background: transparent;
 }
 .cop-panel {
+  position: relative;
   width: min(420px, 100%); max-height: 100%; border-radius: 18px; overflow: hidden;
   background: var(--panel, #fff); box-shadow: var(--shadow-lg, 0 24px 70px rgba(24,39,64,.35));
   display: flex; flex-direction: column;
 }
+.cop-resize-handle {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 8px; z-index: 2;
+  cursor: ew-resize; background: transparent;
+}
+.cop-resize-handle::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 3px;
+  border-radius: 2px; background: transparent; transition: background .15s;
+}
+.cop-resize-handle:hover::after { background: var(--pw-purple-weak, #ddd7fa); }
 .cop-head {
   display: flex; align-items: flex-start; gap: 10px; padding: 16px 16px 15px 18px;
   border-bottom: 1px solid var(--line, #e4e8ee);
@@ -861,6 +881,9 @@ html[data-theme="dark"] .pw-sources,
 html[data-theme="dark"] .pw-collapse-btn,
 html[data-theme="dark"] .pw-artifact-card,
 html[data-theme="dark"] .pw-artifact-row { background: var(--panel); }
+html[data-theme="dark"] .pw-stat { background: var(--panel); }
+html[data-theme="dark"] .pw-stat:hover { border-color: var(--line2); }
+html[data-theme="dark"] .pw-stat-ic { background: var(--accent-weak); color: var(--pw-purple); }
 html[data-theme="dark"] .pw-catalogue-btn { background: var(--panel-2); }
 html[data-theme="dark"] .pw-catalogue-btn:hover { background: var(--panel-3); box-shadow: 0 6px 14px rgba(0, 0, 0, .3); }
 html[data-theme="dark"] .pw-catalogue-btn-ic { background: var(--panel-3); box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }

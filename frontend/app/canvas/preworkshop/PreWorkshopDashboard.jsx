@@ -167,6 +167,7 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
     const fd = new FormData();
     fd.append('workshop_id', String(workshopId));
     fd.append('file', file);
+    fd.append('phase', 'Pre-Workshop');
     setError('');
     try {
       const res = await fetch('/api/agents/upload', { method: 'POST', credentials: 'same-origin', body: fd });
@@ -351,10 +352,10 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
                 research. The research agent reasons from the ingested artifacts — not generic queries.</p>
             </div>
             <div className="pw-stats">
-              <div className="pw-stat"><div className="pw-stat-num">{docs.length}</div><div className="pw-stat-lbl">Sources ingested</div></div>
-              <div className="pw-stat"><div className="pw-stat-num">{webCount}</div><div className="pw-stat-lbl">Web sources</div></div>
-              <div className="pw-stat"><div className="pw-stat-num">{confidence != null ? confidence + '%' : '—'}</div><div className="pw-stat-lbl">Research confidence</div></div>
-              <div className="pw-stat"><div className="pw-stat-num">{artifacts.length}</div><div className="pw-stat-lbl">Draft artifacts</div></div>
+              <div className="pw-stat"><span className="pw-stat-ic"><Icon name="doc-text" /></span><div className="pw-stat-body"><div className="pw-stat-num">{docs.length}</div><div className="pw-stat-lbl">Sources ingested</div></div></div>
+              <div className="pw-stat"><span className="pw-stat-ic"><Icon name="globe" /></span><div className="pw-stat-body"><div className="pw-stat-num">{webCount}</div><div className="pw-stat-lbl">Web sources</div></div></div>
+              <div className="pw-stat"><span className="pw-stat-ic"><Icon name="target" /></span><div className="pw-stat-body"><div className="pw-stat-num">{confidence != null ? confidence + '%' : '—'}</div><div className="pw-stat-lbl">Research confidence</div></div></div>
+              <div className="pw-stat"><span className="pw-stat-ic"><Icon name="sparkles" /></span><div className="pw-stat-body"><div className="pw-stat-num">{artifacts.length}</div><div className="pw-stat-lbl">Draft artifacts</div></div></div>
             </div>
           </div>
           <AgentCatalogue selected={selectedAgent} onSelect={setSelectedAgent} />
