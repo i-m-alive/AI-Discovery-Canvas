@@ -90,7 +90,7 @@ export default function ArtifactExplorer({
   async function openDiagram(a) {
     try {
       const d = await apiGet(`/api/agents/document/${a.doc_id}/diagram?workshop_id=${workshopId}`);
-      if (d && d.ok && onOpenDiagram) onOpenDiagram({ xml: d.xml, title: a.name });
+      if (d && d.ok && onOpenDiagram) onOpenDiagram({ xml: d.xml, diagrams: d.diagrams, title: a.name });
     } catch { /* no diagram, or transient */ }
   }
   async function openAnalysis(a) {

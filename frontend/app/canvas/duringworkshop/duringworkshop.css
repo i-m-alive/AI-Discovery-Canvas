@@ -110,6 +110,8 @@
   animation: pw-pop .22s cubic-bezier(.2, .9, .3, 1.2) both;
 }
 .dw-capmap-modal { width: min(860px, 96vw); }
+.dw-diagram-modal { width: min(1240px, 96vw); max-height: 90vh; display: flex; }
+.dw-diagram-modal .dwc { flex: 1; min-width: 0; }
 .dw-teams-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
 .dw-teams-head > div { flex: 1; min-width: 0; }
 .dw-teams-connect { padding: 6px 2px 4px; font-size: 13.5px; color: #444a5c; }

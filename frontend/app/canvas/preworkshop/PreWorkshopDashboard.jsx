@@ -6,8 +6,8 @@ import { Icon } from '../../lib/icons';
 import { STATUS_LABEL, downloadDrawio, fileType, timeAgo } from '../artifactMeta';
 import ArtifactExplorer from '../ArtifactExplorer';
 import AnalysisModal from './AnalysisModal';
+import DiagramModal from './DiagramModal';
 import DocumentViewer from './DocumentViewer';
-import DrawioViewer from './DrawioViewer';
 import '../../shared.css';
 
 const RESEARCH_STEP_ORDER = ['ingest', 'extract', 'queries', 'search', 'synthesize'];
@@ -18,55 +18,15 @@ const ANALYSIS_STEP_LABELS = {
   synth: 'Synthesize analysis', readiness: 'Score readiness',
 };
 
-export function timeAgo(unixSeconds) {
-  if (!unixSeconds) return '';
-  const diff = Math.max(0, Date.now() / 1000 - unixSeconds);
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-  return `${Math.floor(diff / 86400)} d ago`;
-}
-
-function extOf(name) {
-  const m = /\.([a-z0-9]+)$/i.exec(name || '');
-  return m ? m[1].toLowerCase() : '';
-}
-
-// One badge label + icon + accent color per file type — "proper icons
-// for each component" extends to per-file-type recognition too, not
-// just section headers.
-const FILE_TYPE = {
-  pdf: { label: 'PDF', icon: 'doc-text', bg: '#fbecea', fg: '#c0463b' },
-  docx: { label: 'DOCX', icon: 'doc-text', bg: '#eaf2fb', fg: '#2f6fb3' },
-  doc: { label: 'DOC', icon: 'doc-text', bg: '#eaf2fb', fg: '#2f6fb3' },
-  xlsx: { label: 'XLSX', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
-  xls: { label: 'XLS', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
-  csv: { label: 'CSV', icon: 'list', bg: '#eaf6f0', fg: '#2f8f5b' },
-  pptx: { label: 'PPTX', icon: 'flow', bg: '#faf1e1', fg: '#c9881f' },
-  ppt: { label: 'PPT', icon: 'flow', bg: '#faf1e1', fg: '#c9881f' },
-  txt: { label: 'TXT', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' },
-  md: { label: 'MD', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' },
-  html: { label: 'HTML', icon: 'doc-text', bg: '#efedfd', fg: '#6d5ce8' },
-  zip: { label: 'ZIP', icon: 'folder', bg: '#efedfd', fg: '#6d5ce8' },
-};
-export function fileType(name) {
-  // Imported meeting transcripts (named 'Teams — {subject}' by the
-  // import-transcript route, mirroring the backend's _is_transcript)
-  // get their own source-type identity, not a generic FILE badge.
-  if (/^teams\s*—|^teams\s*--|\.vtt$|transcript/i.test(name || '')) {
-    return { label: 'TRANSCRIPT', icon: 'users', bg: '#efedfd', fg: '#6d5ce8' };
-  }
-  const ext = extOf(name);
-  return FILE_TYPE[ext] || { label: ext ? ext.toUpperCase() : 'FILE', icon: 'doc-text', bg: '#eef1f5', fg: '#6b7280' };
-}
+// timeAgo / fileType / STATUS_LABEL / downloadDrawio live in
+// ../artifactMeta (shared with the ArtifactExplorer and the During-
+// Workshop dashboard) — the merge briefly re-declared them here, which
+// is a duplicate-declaration build error; the imports above are the
+// single source of truth.
 
 // One consistent header for every agent panel below the hero catalogue:
 // icon + name + description, an eye button that reveals a plain-language
-// explainer (what it does / reads / produces), then the agent's own
-// One consistent card per sidebar agent: icon + name, an eye button that
-// reveals a plain-language explainer (what it does / reads / produces —
-// for anyone who doesn't know the agent yet), then the agent's own
-// controls as children.
+// explainer (what it does / reads / produces).
 function AgentPanelHead({ icon, title, sub, showInfo, onToggleInfo }) {
   return (
     <div className="pw-panel-head">
@@ -443,7 +403,8 @@ export default function PreWorkshopDashboard({ user, workshopId }) {
         <DocumentViewer workshopId={workshopId} docId={viewerDocId} onClose={() => setViewerDocId(null)} />
       )}
       {viewerDiagram && (
-        <DrawioViewer xml={viewerDiagram.xml} title={viewerDiagram.title} onClose={() => setViewerDiagram(null)} />
+        <DiagramModal xml={viewerDiagram.xml} diagrams={viewerDiagram.diagrams}
+          title={viewerDiagram.title} onClose={() => setViewerDiagram(null)} />
       )}
       {analysisModal && (
         <AnalysisModal
@@ -678,7 +639,7 @@ function ResearchPanel({
               </div>
               {run.diagram && (
                 <div className="pw-diagram-actions">
-                  <button className="btn solid" onClick={() => onViewDiagram({ xml: run.diagram.xml, title: 'Workflow — from this research' })}>
+                  <button className="btn solid" onClick={() => onViewDiagram({ xml: run.diagram.xml, diagrams: run.diagram.diagrams, title: 'Workflow — from this research' })}>
                     <Icon name="flow" />View diagram
                   </button>
                   <button className="btn" onClick={() => downloadDrawio(run.diagram, 'research-workflow')}>
@@ -872,7 +833,7 @@ function BuildWorkflowWorkspace({ agentPrompt, onAgentPromptChange, onRunWorkflo
         <div className="pw-chain-agent-result">
           <div className="pw-chain-agent-result-ttl"><Icon name="check-circle" />{workflowResult.title}</div>
           {workflowResult.diagram && (
-            <button className="pw-view-btn" onClick={() => onViewDiagram({ xml: workflowResult.diagram.xml, title: workflowResult.title })}>
+            <button className="pw-view-btn" onClick={() => onViewDiagram({ xml: workflowResult.diagram.xml, diagrams: workflowResult.diagram.diagrams, title: workflowResult.title })}>
               <Icon name="flow" />View diagram
             </button>
           )}
@@ -971,7 +932,7 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
   async function viewDiagram(a) {
     try {
       const data = await apiGet(`/api/agents/document/${a.doc_id}/diagram?workshop_id=${workshopId}`);
-      if (data && data.ok) onViewDiagram({ xml: data.xml, title: a.name });
+      if (data && data.ok) onViewDiagram({ xml: data.xml, diagrams: data.diagrams, title: a.name });
     } catch { /* no diagram, or transient — the button just does nothing */ }
   }
 
@@ -1076,36 +1037,6 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
               : (a.agent_id === 'analyze' || a.agent_id === 'capmap') ? 'target' : 'search';
             const actions = (
               <>
-          {visibleArtifacts.map((a) => (
-            <div className="pw-artifact-card" key={`gen-${a.doc_id}`}>
-              <div className="pw-artifact-top">
-                <span className="pw-ic pw-ic-accent">
-                  <Icon name={(a.agent_id === 'workflow' || a.agent_id === 'drawflow') ? 'flow'
-                    : (a.agent_id === 'summarize_docs' || a.agent_id === 'artifact_analyst' || a.agent_id === 'brd') ? 'doc-text'
-                    : (a.agent_id === 'analyze' || a.agent_id === 'capmap') ? 'target' : 'search'} />
-                </span>
-                <span className={`pw-pill pw-pill-${a.status}`}>{a.status === 'final' ? 'Final' : a.status === 'in_review' ? 'In review' : 'Draft'}</span>
-              </div>
-              <div className="pw-artifact-cat">{(a.category || a.agent_id || '').toUpperCase()}</div>
-              <div className="pw-artifact-name">{a.name}</div>
-              {a.description && <div className="pw-artifact-desc">{a.description}</div>}
-              <div className="pw-artifact-tags">
-                {(a.tags || []).map((t) => <span key={t} className="pw-tag">{t}</span>)}
-                {(a.inputs || []).length > 0 && (
-                  <span className="pw-tag pw-tag-inputs"
-                    title={'Built from: ' + a.inputs.map((i) => i.name).join(', ')}>
-                    from {a.inputs.length} input{a.inputs.length === 1 ? '' : 's'}
-                  </span>
-                )}
-              </div>
-              <div className="pw-artifact-foot">
-                <span>{a.author || 'BA Copilot'} · {timeAgo(a.created_at)}</span>
-                <span className="pw-progress">
-                  <span className="pw-progress-track"><span className="pw-progress-fill" style={{ width: `${a.completion_pct || 0}%` }} /></span>
-                  {a.completion_pct || 0}%
-                </span>
-              </div>
-              <div className="pw-artifact-actions">
                 <button className="pw-view-btn" onClick={() => onView(a.doc_id)} title="View document"><Icon name="search" />View</button>
                 {a.has_diagram && (
                   <button className="pw-view-btn" onClick={() => viewDiagram(a)} title="View workflow diagram">
@@ -1142,6 +1073,12 @@ export function ArtifactsGrid({ docs, artifacts, onView, workshopId, onViewDiagr
                 {a.description && <div className="pw-artifact-desc">{a.description}</div>}
                 <div className="pw-artifact-tags">
                   {(a.tags || []).map((t) => <span key={t} className="pw-tag">{t}</span>)}
+                  {(a.inputs || []).length > 0 && (
+                    <span className="pw-tag pw-tag-inputs"
+                      title={'Built from: ' + a.inputs.map((i) => i.name).join(', ')}>
+                      from {a.inputs.length} input{a.inputs.length === 1 ? '' : 's'}
+                    </span>
+                  )}
                 </div>
                 <div className="pw-artifact-foot">
                   <span>{a.author || 'BA Copilot'} · {timeAgo(a.created_at)}</span>

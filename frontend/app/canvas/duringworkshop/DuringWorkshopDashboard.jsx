@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
 import { Icon } from '../../lib/icons';
+import DiagramModal from '../preworkshop/DiagramModal';
 import DocumentViewer from '../preworkshop/DocumentViewer';
-import DrawioViewer from '../preworkshop/DrawioViewer';
 import { ArtifactsGrid, ConfirmDeleteModal } from '../preworkshop/PreWorkshopDashboard';
 import { isTranscript, timeAgo } from '../artifactMeta';
 import ArtifactExplorer from '../ArtifactExplorer';
@@ -34,7 +34,10 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
   const runningGen = pipeline ? (pipeline.find((s) => s.status === 'running') || {}).id || null : null;
 
   const [viewerDocId, setViewerDocId] = useState(null);
-  const [editDiagram, setEditDiagram] = useState(null);    // {xml,title} -> DrawioViewer
+  // {xml, diagrams?, title} — with diagram JSON it opens the native
+  // viewer (DiagramModal), XML-only (DiagramSection's "Edit in draw.io")
+  // falls straight through to the draw.io editor.
+  const [editDiagram, setEditDiagram] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [capmapModal, setCapmapModal] = useState(null);    // capmap payload for an artifact card
@@ -324,7 +327,8 @@ export default function DuringWorkshopDashboard({ user, workshopId, onBoardView 
         <DocumentViewer workshopId={workshopId} docId={viewerDocId} onClose={() => setViewerDocId(null)} />
       )}
       {editDiagram && (
-        <DrawioViewer xml={editDiagram.xml} title={editDiagram.title} onClose={() => setEditDiagram(null)} />
+        <DiagramModal xml={editDiagram.xml} diagrams={editDiagram.diagrams}
+          title={editDiagram.title} onClose={() => setEditDiagram(null)} />
       )}
       {capmapModal && (
         <div className="pw-modal-backdrop" onClick={() => setCapmapModal(null)}>
